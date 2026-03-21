@@ -5,6 +5,7 @@ using Timberborn.BuilderPrioritySystem;
 using Timberborn.Buildings;
 using Timberborn.Cutting;
 using Timberborn.EntitySystem;
+using Timberborn.Forestry;
 using Timberborn.GameCycleSystem;
 using Timberborn.GameDistricts;
 using Timberborn.Goods;
@@ -31,6 +32,7 @@ namespace Timberbot
         private readonly IDayNightCycle _dayNightCycle;
         private readonly SpeedManager _speedManager;
         private readonly EntityRegistry _entityRegistry;
+        private readonly TreeCuttingArea _treeCuttingArea;
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -40,7 +42,8 @@ namespace Timberbot
             WeatherService weatherService,
             IDayNightCycle dayNightCycle,
             SpeedManager speedManager,
-            EntityRegistry entityRegistry)
+            EntityRegistry entityRegistry,
+            TreeCuttingArea treeCuttingArea)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -49,6 +52,7 @@ namespace Timberbot
             _dayNightCycle = dayNightCycle;
             _speedManager = speedManager;
             _entityRegistry = entityRegistry;
+            _treeCuttingArea = treeCuttingArea;
         }
 
         public void Load()
@@ -273,8 +277,7 @@ namespace Timberbot
                 var entry = new Dictionary<string, object>
                 {
                     ["id"] = go.GetInstanceID(),
-                    ["name"] = go.name,
-                    ["marked"] = cuttable.Enabled
+                    ["name"] = go.name
                 };
 
                 if (bo != null)
@@ -283,6 +286,7 @@ namespace Timberbot
                     entry["x"] = coords.x;
                     entry["y"] = coords.y;
                     entry["z"] = coords.z;
+                    entry["marked"] = _treeCuttingArea.IsInCuttingArea(coords);
                 }
 
                 if (living != null)
@@ -398,17 +402,26 @@ namespace Timberbot
             if (ec == null)
                 return new { error = "tree not found", id = treeId };
 
-            var cuttable = ec.GetComponent<Cuttable>();
-            if (cuttable == null)
-                return new { error = "not cuttable", id = treeId };
+            var bo = ec.GetComponent<BlockObject>();
+            if (bo == null)
+                return new { error = "no block object", id = treeId };
 
-            cuttable.Enabled = marked;
+            var coords = bo.Coordinates;
+            var coordList = new List<Vector3Int> { coords };
+
+            if (marked)
+                _treeCuttingArea.AddCoordinates(coordList);
+            else
+                _treeCuttingArea.RemoveCoordinates(coordList);
 
             return new
             {
                 id = treeId,
                 name = ec.GameObject.name,
-                marked = cuttable.Enabled
+                marked = _treeCuttingArea.IsInCuttingArea(coords),
+                x = coords.x,
+                y = coords.y,
+                z = coords.z
             };
         }
 

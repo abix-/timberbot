@@ -81,8 +81,14 @@
     <Reference Include="Timberborn.BuilderPrioritySystem" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.BuilderPrioritySystem.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.Demolishing" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.Demolishing.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.Cutting" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.Cutting.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Forestry" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.Forestry.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.NaturalResourcesLifecycle" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.NaturalResourcesLifecycle.dll</HintPath>
