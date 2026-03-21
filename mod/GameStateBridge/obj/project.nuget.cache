@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "akAe/6V1xJo=",
+  "success": true,
+  "projectFilePath": "C:\\code\\timberborn\\mod\\GameStateBridge\\GameStateBridge.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Abix\\.nuget\\packages\\bepinex.assemblypublicizer.msbuild\\0.4.2\\bepinex.assemblypublicizer.msbuild.0.4.2.nupkg.sha512"
+  ],
+  "logs": []
+}

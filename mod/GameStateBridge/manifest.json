@@ -1,0 +1,7 @@
+{
+  "Name": "GameStateBridge",
+  "Version": "0.1.0",
+  "Id": "claude.GameStateBridge",
+  "MinimumGameVersion": "0.7.0.0",
+  "Description": "HTTP API exposing game state for external co-pilots"
+}

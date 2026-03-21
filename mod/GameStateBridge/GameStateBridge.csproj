@@ -3,11 +3,9 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>GameStateBridge</AssemblyName>
-    <Description>HTTP API exposing Timberborn game state for external co-pilots</Description>
     <Version>0.1.0</Version>
     <LangVersion>9.0</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -15,87 +13,60 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="netstandard"/>
+    <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.2" PrivateAssets="all"/>
+  </ItemGroup>
 
-    <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all"/>
-    <PackageReference Include="BepInEx.Core" Version="5.*"/>
-    <PackageReference Include="BepInEx.PluginInfoProps" Version="1.*"/>
-
-    <!-- Game DLLs via symlink to Managed folder -->
-    <Reference Include="Bindito.Core">
+  <ItemGroup>
+    <!-- Publicized game DLLs (internal types made accessible) -->
+    <Reference Include="Bindito.Core" Publicize="true">
       <HintPath>$(GameManagedDir)\Bindito.Core.dll</HintPath>
     </Reference>
-    <Reference Include="Bindito.Unity">
-      <HintPath>$(GameManagedDir)\Bindito.Unity.dll</HintPath>
-    </Reference>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>$(GameManagedDir)\Newtonsoft.Json.dll</HintPath>
-    </Reference>
-    <Reference Include="Timberborn.Buildings">
-      <HintPath>$(GameManagedDir)\Timberborn.Buildings.dll</HintPath>
-    </Reference>
-    <Reference Include="Timberborn.BaseComponentSystem">
+    <Reference Include="Timberborn.BaseComponentSystem" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.BaseComponentSystem.dll</HintPath>
     </Reference>
-    <Reference Include="Timberborn.Common">
+    <Reference Include="Timberborn.Common" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.Common.dll</HintPath>
     </Reference>
-    <Reference Include="Timberborn.EntitySystem">
+    <Reference Include="Timberborn.EntitySystem" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.EntitySystem.dll</HintPath>
     </Reference>
-    <Reference Include="Timberborn.GameDistricts">
+    <Reference Include="Timberborn.GameCycleSystem" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.GameCycleSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.GameDistricts" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.GameDistricts.dll</HintPath>
     </Reference>
-    <Reference Include="Timberborn.Goods">
+    <Reference Include="Timberborn.Goods" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.Goods.dll</HintPath>
     </Reference>
-    <Reference Include="Timberborn.HazardousWeatherSystem">
+    <Reference Include="Timberborn.HazardousWeatherSystem" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.HazardousWeatherSystem.dll</HintPath>
     </Reference>
-    <Reference Include="Timberborn.MasterScene">
-      <HintPath>$(GameManagedDir)\Timberborn.MasterScene.dll</HintPath>
-    </Reference>
-    <Reference Include="Timberborn.Population">
-      <HintPath>$(GameManagedDir)\Timberborn.Population.dll</HintPath>
-    </Reference>
-    <Reference Include="Timberborn.PopulationStatisticsSystem">
-      <HintPath>$(GameManagedDir)\Timberborn.PopulationStatisticsSystem.dll</HintPath>
-    </Reference>
-    <Reference Include="Timberborn.ResourceCountingSystem">
+    <Reference Include="Timberborn.ResourceCountingSystem" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.ResourceCountingSystem.dll</HintPath>
     </Reference>
-    <Reference Include="Timberborn.SingletonSystem">
+    <Reference Include="Timberborn.SingletonSystem" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.SingletonSystem.dll</HintPath>
     </Reference>
-    <Reference Include="Timberborn.TimeSystem">
+    <Reference Include="Timberborn.TickSystem" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.TickSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.TimeSystem" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.TimeSystem.dll</HintPath>
     </Reference>
-    <Reference Include="Timberborn.WeatherSystem">
+    <Reference Include="Timberborn.WeatherSystem" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.WeatherSystem.dll</HintPath>
     </Reference>
-    <Reference Include="Timberborn.WaterSystem">
-      <HintPath>$(GameManagedDir)\Timberborn.WaterSystem.dll</HintPath>
+    <Reference Include="Timberborn.WorldPersistence" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.WorldPersistence.dll</HintPath>
     </Reference>
-    <Reference Include="Timberborn.Bootstrapper">
-      <HintPath>$(GameManagedDir)\Timberborn.Bootstrapper.dll</HintPath>
-    </Reference>
-    <Reference Include="Timberborn.Automation">
-      <HintPath>$(GameManagedDir)\Timberborn.Automation.dll</HintPath>
-    </Reference>
-    <Reference Include="Timberborn.AutomationBuildings">
-      <HintPath>$(GameManagedDir)\Timberborn.AutomationBuildings.dll</HintPath>
-    </Reference>
-    <Reference Include="Timberborn.Persistence">
+    <Reference Include="Timberborn.Persistence" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.Persistence.dll</HintPath>
     </Reference>
-    <Reference Include="Timberborn.FactionSystem">
-      <HintPath>$(GameManagedDir)\Timberborn.FactionSystem.dll</HintPath>
-    </Reference>
-    <Reference Include="Timberborn.FactionSystemGame">
-      <HintPath>$(GameManagedDir)\Timberborn.FactionSystemGame.dll</HintPath>
-    </Reference>
-    <Reference Include="Timberborn.BuildingStatuses">
-      <HintPath>$(GameManagedDir)\Timberborn.BuildingStatuses.dll</HintPath>
+
+    <!-- Non-publicized -->
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(GameManagedDir)\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine">
       <HintPath>$(GameManagedDir)\UnityEngine.dll</HintPath>

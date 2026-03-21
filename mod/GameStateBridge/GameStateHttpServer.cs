@@ -1,20 +1,16 @@
 using System;
 using System.Collections.Concurrent;
-using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
+using UnityEngine;
 
 namespace GameStateBridge
 {
-    /// <summary>
-    /// Lightweight HTTP server exposing game state as JSON.
-    /// Listener runs on a background thread; game data is collected on the main
-    /// thread via a request queue (same pattern as Bevy BRP drain_remote_queues).
-    /// </summary>
     class GameStateHttpServer
     {
+        private readonly GameStateBridgeService _service;
         private readonly HttpListener _listener;
         private readonly Thread _listenerThread;
         private readonly ConcurrentQueue<PendingRequest> _pending = new ConcurrentQueue<PendingRequest>();
@@ -26,31 +22,27 @@ namespace GameStateBridge
             public string Route;
         }
 
-        public GameStateHttpServer(int port)
+        public GameStateHttpServer(int port, GameStateBridgeService service)
         {
+            _service = service;
             _listener = new HttpListener();
-            _listener.Prefixes.Add($"http://+:{port}/");
 
             try
             {
+                _listener.Prefixes.Add($"http://+:{port}/");
                 _listener.Start();
-                _running = true;
-                _listenerThread = new Thread(ListenLoop) { IsBackground = true, Name = "GSB-HTTP" };
-                _listenerThread.Start();
-                Plugin.Log.LogInfo($"HTTP server listening on port {port}");
             }
-            catch (HttpListenerException ex)
+            catch (HttpListenerException)
             {
-                // If port binding fails (no admin), fall back to localhost only
-                Plugin.Log.LogWarning($"Failed to bind +:{port}, trying localhost: {ex.Message}");
+                Debug.Log($"[GameStateBridge] port +:{port} failed, falling back to localhost");
                 _listener = new HttpListener();
                 _listener.Prefixes.Add($"http://localhost:{port}/");
                 _listener.Start();
-                _running = true;
-                _listenerThread = new Thread(ListenLoop) { IsBackground = true, Name = "GSB-HTTP" };
-                _listenerThread.Start();
-                Plugin.Log.LogInfo($"HTTP server listening on localhost:{port}");
             }
+
+            _running = true;
+            _listenerThread = new Thread(ListenLoop) { IsBackground = true, Name = "GSB-HTTP" };
+            _listenerThread.Start();
         }
 
         public void Stop()
@@ -59,10 +51,6 @@ namespace GameStateBridge
             try { _listener?.Stop(); } catch { }
         }
 
-        /// <summary>
-        /// Called from Plugin.Update() on the main Unity thread.
-        /// Drains pending HTTP requests and responds with game data.
-        /// </summary>
         public void DrainRequests()
         {
             int processed = 0;
@@ -98,14 +86,12 @@ namespace GameStateBridge
 
                 var path = ctx.Request.Url.AbsolutePath.TrimEnd('/').ToLowerInvariant();
 
-                // Health check can respond immediately (no game state needed)
                 if (path == "/api/ping")
                 {
-                    Respond(ctx, 200, new { status = "ok", ready = GameState.IsReady });
+                    Respond(ctx, 200, new { status = "ok", ready = true });
                     continue;
                 }
 
-                // Everything else needs main thread -- queue it
                 _pending.Enqueue(new PendingRequest { Context = ctx, Route = path });
             }
         }
@@ -115,17 +101,17 @@ namespace GameStateBridge
             switch (path)
             {
                 case "/api/summary":
-                    return GameState.CollectSummary();
+                    return _service.CollectSummary();
                 case "/api/resources":
-                    return GameState.CollectResources();
+                    return _service.CollectResources();
                 case "/api/population":
-                    return GameState.CollectPopulation();
+                    return _service.CollectPopulation();
                 case "/api/time":
-                    return GameState.CollectTime();
+                    return _service.CollectTime();
                 case "/api/weather":
-                    return GameState.CollectWeather();
+                    return _service.CollectWeather();
                 case "/api/districts":
-                    return GameState.CollectDistricts();
+                    return _service.CollectDistricts();
                 default:
                     return new
                     {
@@ -150,7 +136,6 @@ namespace GameStateBridge
             {
                 var json = JsonConvert.SerializeObject(data, Formatting.Indented);
                 var bytes = Encoding.UTF8.GetBytes(json);
-
                 ctx.Response.StatusCode = statusCode;
                 ctx.Response.ContentType = "application/json";
                 ctx.Response.ContentLength64 = bytes.Length;
@@ -160,7 +145,7 @@ namespace GameStateBridge
             }
             catch (Exception ex)
             {
-                Plugin.Log.LogWarning($"Failed to send response: {ex.Message}");
+                Debug.LogWarning($"[GameStateBridge] response failed: {ex.Message}");
             }
         }
     }
