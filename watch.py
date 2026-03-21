@@ -1,4 +1,4 @@
-"""Timberborn live dashboard -- polls GameStateBridge and prints colorful status."""
+"""Timberborn live dashboard -- polls Timberbot and prints colorful status."""
 import sys
 import time
 import requests
@@ -119,7 +119,7 @@ def main():
     # check connection
     ping = fetch("/api/ping")
     if not ping:
-        print(f"  {RED}cannot reach GameStateBridge on port 8085{RST}")
+        print(f"  {RED}cannot reach Timberbot on port 8085{RST}")
         print(f"  {DIM}start Timberborn with the mod loaded{RST}\n")
         sys.exit(1)
 

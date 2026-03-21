@@ -1,4 +1,4 @@
-"""Interactive REPL for co-piloting Timberborn."""
+"""Interactive REPL for Timberbot interactive REPL."""
 import json
 import shlex
 import sys
@@ -18,13 +18,21 @@ Vanilla API (port 8080):
   watch [secs]        poll adapters every N seconds (default 5)
   stop                stop polling
 
-GameStateBridge mod (port 8085):
+Timberbot read (port 8085):
   summary             full colony snapshot
   resources           resource stocks per district
   population          beaver/bot counts per district
   time                game time info
   weather             weather/drought cycle info
   districts           all districts with resources + population
+  buildings           list all buildings with IDs
+
+Timberbot write (port 8085):
+  speed [0-3]         get/set game speed (0=pause)
+  pause <id>          pause building
+  unpause <id>        unpause building
+  floodgate <id> <h>  set floodgate height
+  priority <id> <p>   set priority (VeryLow/Normal/VeryHigh)
 
 General:
   ping                check connectivity (game + bridge)
@@ -118,11 +126,11 @@ def print_status(api):
 
 
 def print_summary(api):
-    """Print full colony snapshot from GameStateBridge."""
+    """Print full colony snapshot from Timberbot."""
     try:
         data = api.get_summary()
     except requests.ConnectionError:
-        print("  bridge not reachable (is GameStateBridge mod installed?)")
+        print("  bridge not reachable (is Timberbot mod installed?)")
         return
 
     if "error" in data:
@@ -158,7 +166,7 @@ def main():
     api = TimberbornAPI()
     watcher = Watcher(api)
 
-    print("=== Timberborn Co-Pilot ===")
+    print("=== Timberborn Timberbot ===")
 
     game_ok = api.ping()
     bridge_ok = api.ping_bridge()
@@ -238,6 +246,51 @@ def main():
                     name = " ".join(args[:-1])
                     api.set_color(name, hex_val)
                     print(f"  {name} -> color {hex_val}")
+            elif cmd == "buildings":
+                data = api.get_buildings()
+                if isinstance(data, list):
+                    print(f"\n  Buildings ({len(data)}):")
+                    for b in data:
+                        flags = []
+                        if b.get("paused"):
+                            flags.append("PAUSED")
+                        if b.get("floodgate"):
+                            flags.append(f"h={b.get('height', 0)}/{b.get('maxHeight', 0)}")
+                        if b.get("priority"):
+                            flags.append(f"pri={b['priority']}")
+                        flag_str = f"  [{', '.join(flags)}]" if flags else ""
+                        coords = ""
+                        if "x" in b:
+                            coords = f" ({b['x']},{b['y']},{b['z']})"
+                        print(f"    {b.get('id', '?'):>10}  {b.get('name', '?')}{coords}{flag_str}")
+                    print()
+                else:
+                    pp(data)
+            elif cmd == "speed":
+                if args:
+                    pp(api.set_speed(int(args[0])))
+                else:
+                    pp(api.get_speed())
+            elif cmd == "pause":
+                if not args:
+                    print("  usage: pause <building-id>")
+                else:
+                    pp(api.pause_building(int(args[0]), True))
+            elif cmd == "unpause":
+                if not args:
+                    print("  usage: unpause <building-id>")
+                else:
+                    pp(api.pause_building(int(args[0]), False))
+            elif cmd == "floodgate":
+                if len(args) < 2:
+                    print("  usage: floodgate <building-id> <height>")
+                else:
+                    pp(api.set_floodgate_height(int(args[0]), float(args[1])))
+            elif cmd == "priority":
+                if len(args) < 2:
+                    print("  usage: priority <building-id> <VeryLow|Normal|VeryHigh>")
+                else:
+                    pp(api.set_priority(int(args[0]), args[1]))
             elif cmd == "watch":
                 interval = float(args[0]) if args else 5.0
                 watcher.interval = interval

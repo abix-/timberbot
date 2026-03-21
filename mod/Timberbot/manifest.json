@@ -1,0 +1,7 @@
+{
+  "Name": "Timberbot",
+  "Version": "0.2.0",
+  "Id": "claude.Timberbot",
+  "MinimumGameVersion": "0.7.0.0",
+  "Description": "HTTP API for AI agents to read and control Timberborn"
+}

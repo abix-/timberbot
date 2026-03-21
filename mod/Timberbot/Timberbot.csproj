@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-    <AssemblyName>GameStateBridge</AssemblyName>
-    <Version>0.1.0</Version>
+    <AssemblyName>Timberbot</AssemblyName>
+    <Version>0.2.0</Version>
     <LangVersion>9.0</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
@@ -62,6 +62,24 @@
     </Reference>
     <Reference Include="Timberborn.Persistence" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.Persistence.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Buildings" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.Buildings.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.WaterBuildings" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.WaterBuildings.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.PrioritySystem" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.PrioritySystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.BlockSystem" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.BlockSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Coordinates" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.Coordinates.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.BuilderPrioritySystem" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.BuilderPrioritySystem.dll</HintPath>
     </Reference>
 
     <!-- Non-publicized -->

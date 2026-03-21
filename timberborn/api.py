@@ -5,7 +5,7 @@ import requests
 
 
 class TimberbornAPI:
-    """Client for vanilla Timberborn HTTP API (port 8080) + GameStateBridge mod (port 8085)."""
+    """Client for vanilla Timberborn HTTP API (port 8080) + Timberbot mod (port 8085)."""
 
     def __init__(self, game_url="http://localhost:8080", bridge_url="http://localhost:8085"):
         self.game_url = game_url.rstrip("/")
@@ -38,6 +38,11 @@ class TimberbornAPI:
         resp.raise_for_status()
         return resp
 
+    def _post_bridge(self, path, data):
+        resp = self.session.post(self._bridge(path), json=data, timeout=5)
+        resp.raise_for_status()
+        return resp
+
     # -- connection check --
 
     def ping(self):
@@ -49,7 +54,7 @@ class TimberbornAPI:
             return False
 
     def ping_bridge(self):
-        """Return True if the GameStateBridge mod is reachable."""
+        """Return True if the Timberbot mod is reachable."""
         try:
             data = self._get_bridge("/api/ping").json()
             return data.get("ready", False)
@@ -92,7 +97,7 @@ class TimberbornAPI:
         """Return a single adapter by name."""
         return self._get_game(f"/api/adaptors/{self._encode(name)}").json()
 
-    # -- rich game state via GameStateBridge mod --
+    # -- rich game state via Timberbot mod --
 
     def get_summary(self):
         """Full colony snapshot: time, weather, districts with resources + population."""
@@ -117,3 +122,29 @@ class TimberbornAPI:
     def get_districts(self):
         """All districts with resources and population."""
         return self._get_bridge("/api/districts").json()
+
+    def get_buildings(self):
+        """All buildings with id, name, coords, pause/floodgate/priority state."""
+        return self._get_bridge("/api/buildings").json()
+
+    # -- write endpoints via Timberbot mod --
+
+    def get_speed(self):
+        """Current game speed."""
+        return self._get_bridge("/api/speed").json()
+
+    def set_speed(self, speed):
+        """Set game speed (0=pause, 1/2/3)."""
+        return self._post_bridge("/api/speed", {"speed": speed}).json()
+
+    def pause_building(self, building_id, paused=True):
+        """Pause or unpause a building by ID."""
+        return self._post_bridge("/api/building/pause", {"id": building_id, "paused": paused}).json()
+
+    def set_floodgate_height(self, building_id, height):
+        """Set floodgate height by building ID."""
+        return self._post_bridge("/api/floodgate", {"id": building_id, "height": height}).json()
+
+    def set_priority(self, building_id, priority):
+        """Set building priority (VeryLow, Normal, VeryHigh)."""
+        return self._post_bridge("/api/priority", {"id": building_id, "priority": priority}).json()

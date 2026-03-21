@@ -1,1 +1,1 @@
-"""Timberborn HTTP API co-pilot."""
+"""Timberbot -- Timberborn HTTP API client."""
