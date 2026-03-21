@@ -1,4 +1,5 @@
 """Interactive REPL for co-piloting Timberborn."""
+import json
 import shlex
 import sys
 import threading
@@ -9,17 +10,32 @@ import requests
 from timberborn.api import TimberbornAPI
 
 HELP_TEXT = """
-Commands:
+Vanilla API (port 8080):
   status              show all levers + adapters
   on <name>           switch lever on
   off <name>          switch lever off
-  color <name> <hex>  set lever color (e.g. color Lever%201 ff0000)
+  color <name> <hex>  set lever color
   watch [secs]        poll adapters every N seconds (default 5)
   stop                stop polling
-  ping                check if game API is reachable
+
+GameStateBridge mod (port 8085):
+  summary             full colony snapshot
+  resources           resource stocks per district
+  population          beaver/bot counts per district
+  time                game time info
+  weather             weather/drought cycle info
+  districts           all districts with resources + population
+
+General:
+  ping                check connectivity (game + bridge)
   help                show this message
   quit / exit         exit
 """
+
+
+def pp(data):
+    """Pretty-print JSON data."""
+    print(json.dumps(data, indent=2))
 
 
 class Watcher:
@@ -61,7 +77,7 @@ class Watcher:
                         print(f"\n[CHANGE] {name}: {prev_label} -> {label}")
                     self._prev_states[name] = state
             except requests.ConnectionError:
-                print("\n[watch] game not reachable -- retrying...")
+                pass
             except Exception as exc:
                 print(f"\n[watch] error: {exc}")
             self._stop.wait(self.interval)
@@ -101,18 +117,63 @@ def print_status(api):
     print()
 
 
+def print_summary(api):
+    """Print full colony snapshot from GameStateBridge."""
+    try:
+        data = api.get_summary()
+    except requests.ConnectionError:
+        print("  bridge not reachable (is GameStateBridge mod installed?)")
+        return
+
+    if "error" in data:
+        print(f"  {data['error']}")
+        return
+
+    t = data.get("time", {})
+    w = data.get("weather", {})
+    print(f"\n  Day {t.get('dayNumber', '?')} ({t.get('dayProgress', 0):.0%})")
+    print(f"  Cycle {w.get('cycle', '?')}, day {w.get('cycleDay', '?')}")
+
+    districts = data.get("districts", [])
+    for d in districts:
+        name = d.get("name", "?")
+        pop = d.get("population", {})
+        adults = pop.get("adults", 0)
+        children = pop.get("children", 0)
+        print(f"\n  [{name}] population: {adults} adults, {children} children")
+
+        resources = d.get("resources", {})
+        if resources:
+            # Show non-zero resources
+            nonzero = {k: v for k, v in resources.items() if v and v != 0}
+            if nonzero:
+                for good, amount in sorted(nonzero.items()):
+                    print(f"    {good:25s} {amount}")
+            else:
+                print("    (no resources)")
+    print()
+
+
 def main():
     api = TimberbornAPI()
     watcher = Watcher(api)
 
     print("=== Timberborn Co-Pilot ===")
-    if api.ping():
-        print("Connected to game at localhost:8080")
-    else:
-        print("Game not detected at localhost:8080 -- start Timberborn first")
-        print("(commands will retry when you issue them)\n")
 
-    print("Type 'help' for commands.\n")
+    game_ok = api.ping()
+    bridge_ok = api.ping_bridge()
+
+    if game_ok:
+        print("  game API:   connected (port 8080)")
+    else:
+        print("  game API:   not detected (port 8080)")
+
+    if bridge_ok:
+        print("  bridge mod: connected (port 8085)")
+    else:
+        print("  bridge mod: not detected (port 8085)")
+
+    print("\nType 'help' for commands.\n")
 
     while True:
         try:
@@ -137,12 +198,24 @@ def main():
             elif cmd == "help":
                 print(HELP_TEXT)
             elif cmd == "ping":
-                if api.ping():
-                    print("  connected")
-                else:
-                    print("  not reachable")
+                game_ok = api.ping()
+                bridge_ok = api.ping_bridge()
+                print(f"  game:   {'connected' if game_ok else 'not reachable'}")
+                print(f"  bridge: {'connected' if bridge_ok else 'not reachable'}")
             elif cmd == "status":
                 print_status(api)
+            elif cmd == "summary":
+                print_summary(api)
+            elif cmd == "resources":
+                pp(api.get_resources())
+            elif cmd == "population":
+                pp(api.get_population())
+            elif cmd == "time":
+                pp(api.get_time())
+            elif cmd == "weather":
+                pp(api.get_weather())
+            elif cmd == "districts":
+                pp(api.get_districts())
             elif cmd == "on":
                 if not args:
                     print("  usage: on <lever-name>")
@@ -174,7 +247,7 @@ def main():
             else:
                 print(f"  unknown command: {cmd} (type 'help')")
         except requests.ConnectionError:
-            print("  game not reachable -- is Timberborn running?")
+            print("  not reachable -- is Timberborn running?")
         except requests.HTTPError as exc:
             print(f"  API error: {exc.response.status_code} {exc.response.text}")
         except Exception as exc:

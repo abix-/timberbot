@@ -1,0 +1,112 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>GameStateBridge</AssemblyName>
+    <Description>HTTP API exposing Timberborn game state for external co-pilots</Description>
+    <Version>0.1.0</Version>
+    <LangVersion>9.0</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <GameManagedDir>C:\Games\Steam\steamapps\common\Timberborn\Timberborn_Data\Managed</GameManagedDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="netstandard"/>
+
+    <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all"/>
+    <PackageReference Include="BepInEx.Core" Version="5.*"/>
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="1.*"/>
+
+    <!-- Game DLLs via symlink to Managed folder -->
+    <Reference Include="Bindito.Core">
+      <HintPath>$(GameManagedDir)\Bindito.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Bindito.Unity">
+      <HintPath>$(GameManagedDir)\Bindito.Unity.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(GameManagedDir)\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Buildings">
+      <HintPath>$(GameManagedDir)\Timberborn.Buildings.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.BaseComponentSystem">
+      <HintPath>$(GameManagedDir)\Timberborn.BaseComponentSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Common">
+      <HintPath>$(GameManagedDir)\Timberborn.Common.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.EntitySystem">
+      <HintPath>$(GameManagedDir)\Timberborn.EntitySystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.GameDistricts">
+      <HintPath>$(GameManagedDir)\Timberborn.GameDistricts.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Goods">
+      <HintPath>$(GameManagedDir)\Timberborn.Goods.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.HazardousWeatherSystem">
+      <HintPath>$(GameManagedDir)\Timberborn.HazardousWeatherSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.MasterScene">
+      <HintPath>$(GameManagedDir)\Timberborn.MasterScene.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Population">
+      <HintPath>$(GameManagedDir)\Timberborn.Population.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.PopulationStatisticsSystem">
+      <HintPath>$(GameManagedDir)\Timberborn.PopulationStatisticsSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.ResourceCountingSystem">
+      <HintPath>$(GameManagedDir)\Timberborn.ResourceCountingSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.SingletonSystem">
+      <HintPath>$(GameManagedDir)\Timberborn.SingletonSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.TimeSystem">
+      <HintPath>$(GameManagedDir)\Timberborn.TimeSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.WeatherSystem">
+      <HintPath>$(GameManagedDir)\Timberborn.WeatherSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.WaterSystem">
+      <HintPath>$(GameManagedDir)\Timberborn.WaterSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Bootstrapper">
+      <HintPath>$(GameManagedDir)\Timberborn.Bootstrapper.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Automation">
+      <HintPath>$(GameManagedDir)\Timberborn.Automation.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.AutomationBuildings">
+      <HintPath>$(GameManagedDir)\Timberborn.AutomationBuildings.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Persistence">
+      <HintPath>$(GameManagedDir)\Timberborn.Persistence.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.FactionSystem">
+      <HintPath>$(GameManagedDir)\Timberborn.FactionSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.FactionSystemGame">
+      <HintPath>$(GameManagedDir)\Timberborn.FactionSystemGame.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.BuildingStatuses">
+      <HintPath>$(GameManagedDir)\Timberborn.BuildingStatuses.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(GameManagedDir)\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GameManagedDir)\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'netstandard'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all"/>
+  </ItemGroup>
+
+</Project>
