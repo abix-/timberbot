@@ -89,21 +89,33 @@ class Timberbot:
         """Districts: [{name, population: {adults, children, bots}, resources: {...}}]."""
         return self._get("/api/districts")
 
-    def buildings(self):
+    def buildings(self, limit=0, offset=0):
         """All buildings with coords, workers, reachability, and power status."""
-        return self._get("/api/buildings")
+        data = self._get("/api/buildings")
+        if offset: data = data[offset:]
+        if limit: data = data[:limit]
+        return data
 
-    def trees(self):
+    def trees(self, limit=0, offset=0):
         """All cuttable trees: [{id, name, x, y, z, marked, alive}]."""
-        return self._get("/api/trees")
+        data = self._get("/api/trees")
+        if offset: data = data[offset:]
+        if limit: data = data[:limit]
+        return data
 
-    def gatherables(self):
+    def gatherables(self, limit=0, offset=0):
         """All gatherable resources (berry bushes etc): [{id, name, x, y, z, alive}]."""
-        return self._get("/api/gatherables")
+        data = self._get("/api/gatherables")
+        if offset: data = data[offset:]
+        if limit: data = data[:limit]
+        return data
 
-    def beavers(self):
+    def beavers(self, limit=0, offset=0):
         """All beavers with wellbeing and needs: [{id, name, wellbeing, needs, anyCritical}]."""
-        return self._get("/api/beavers")
+        data = self._get("/api/beavers")
+        if offset: data = data[offset:]
+        if limit: data = data[:limit]
+        return data
 
     def science(self):
         """Science points and unlockable buildings: {points, unlockables: [{name, cost, unlocked}]}."""

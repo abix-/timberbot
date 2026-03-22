@@ -184,6 +184,18 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.DistributionSystem.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.BeaverContaminationSystem" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.BeaverContaminationSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Bots" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.Bots.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Wonders" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.Wonders.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.ConstructionSites" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.ConstructionSites.dll</HintPath>

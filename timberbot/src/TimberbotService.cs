@@ -35,6 +35,9 @@ using Timberborn.BuildingsReachability;
 using Timberborn.ConstructionSites;
 using Timberborn.MechanicalSystem;
 using Timberborn.ScienceSystem;
+using Timberborn.BeaverContaminationSystem;
+using Timberborn.Bots;
+using Timberborn.Wonders;
 using Timberborn.NotificationSystem;
 using Timberborn.StatusSystem;
 using UnityEngine;
@@ -413,6 +416,13 @@ namespace Timberbot
                         entry["inventory"] = goods;
                 }
 
+                var wonder = ec.GetComponent<Wonder>();
+                if (wonder != null)
+                {
+                    entry["isWonder"] = true;
+                    entry["wonderActive"] = wonder.IsActive;
+                }
+
                 results.Add(entry);
             }
             return results;
@@ -549,6 +559,13 @@ namespace Timberbot
                 var worker = ec.GetComponent<Worker>();
                 if (worker != null && worker.Workplace != null)
                     entry["workplace"] = worker.Workplace.GameObject.name;
+
+                var bot = ec.GetComponent<Bot>();
+                entry["isBot"] = bot != null;
+
+                var contaminable = ec.GetComponent<Contaminable>();
+                if (contaminable != null)
+                    entry["contaminated"] = contaminable.IsContaminated;
 
                 results.Add(entry);
             }
