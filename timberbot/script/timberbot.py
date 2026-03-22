@@ -689,11 +689,15 @@ def _flatten_for_toon(method, data):
             elif wb >= 8: tier = "okay"
             elif wb >= 4: tier = "unhappy"
             else: tier = "miserable"
+            wp = b.get("workplace", "")
+            if wp:
+                wp = wp.replace("(Clone)", "").replace(".IronTeeth", "").replace(".Folktails", "")
             flat.append({"id": b["id"],
                          "name": b.get("name", "").replace("(Clone)", ""),
                          "wellbeing": wb,
                          "tier": tier,
                          "isBot": b.get("isBot", False),
+                         "workplace": wp,
                          "critical": "+".join(critical) if critical else ""})
         return flat or data
 
