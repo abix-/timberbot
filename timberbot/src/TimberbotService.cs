@@ -351,7 +351,7 @@ namespace Timberbot
                     try
                     {
                         foreach (var s in statusSubject.ActiveStatuses)
-                            statuses.Add(s.ToString());
+                            statuses.Add(s.StatusDescription);
                     }
                     catch { }
                     if (statuses.Count > 0)
