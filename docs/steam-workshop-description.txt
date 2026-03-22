@@ -1,7 +1,6 @@
 Let an AI play Timberborn. Full read/write HTTP API with a Python client so Claude, ChatGPT, or your own scripts can run a beaver colony.
 
 [h1]Timberbot vs Vanilla HTTP API[/h1]
-
 Timberborn has a built-in HTTP API (port 8080) for automation with levers and adapters. Timberbot (port 8085) adds everything else. They work together:
 
 [table]
@@ -18,7 +17,6 @@ Timberborn has a built-in HTTP API (port 8080) for automation with levers and ad
 Use vanilla HTTP for real-time automation triggers (water rises -> open floodgate). Use Timberbot for strategic AI decisions (need food -> place farmhouse). The Python client wraps both APIs in one place.
 
 [h1]Features[/h1]
-
 [table]
 [tr][th]Category[/th][th]What you can do[/th][/tr]
 [tr][td]Read[/td][td]Colony snapshot. Population, resources, weather, drought countdown[/td][/tr]
@@ -39,7 +37,6 @@ Use vanilla HTTP for real-time automation triggers (water rises -> open floodgat
 
 [h1]How it works[/h1]
 Two APIs, one Python client:
-
 [code]
 # Timberbot API (port 8085) -- strategic control
 python timberbot.py summary
