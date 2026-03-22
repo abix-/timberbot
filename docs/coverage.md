@@ -54,8 +54,8 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 | Forestry tree planting | Untested | `plant_crop crop:Pine` should work but not confirmed |
 | Badwater contamination per tile | Minor | Map shows water height but not contamination level |
 | Per-building power input/output | Minor | Only graph-level demand/supply, not per-building |
-| Clutch toggle | Minor | Can't disconnect power network sections |
-| Dwelling occupants | Minor | Can't see which beaver lives in which house |
+| Clutch status | Closed | `isClutch`, `clutchEngaged` on buildings (read only, toggle via lever) |
+| Dwelling occupant count | Minor | `hasHome` on beavers but no occupant count on buildings |
 | Wellbeing tiers | Minor | No tier labels (just numeric score) |
 
 ## By design (not gaps)
