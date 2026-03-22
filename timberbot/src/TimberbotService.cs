@@ -34,6 +34,8 @@ using Timberborn.Wellbeing;
 using Timberborn.BuildingsReachability;
 using Timberborn.MechanicalSystem;
 using Timberborn.ScienceSystem;
+using Timberborn.NotificationSystem;
+using Timberborn.StatusSystem;
 using UnityEngine;
 
 namespace Timberbot
@@ -58,6 +60,7 @@ namespace Timberbot
         private readonly IThreadSafeColumnTerrainMap _terrainMap;
         private readonly ScienceService _scienceService;
         private readonly BuildingUnlockingService _buildingUnlockingService;
+        private readonly NotificationSaver _notificationSaver;
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -78,7 +81,8 @@ namespace Timberbot
             MapIndexService mapIndexService,
             IThreadSafeColumnTerrainMap terrainMap,
             ScienceService scienceService,
-            BuildingUnlockingService buildingUnlockingService)
+            BuildingUnlockingService buildingUnlockingService,
+            NotificationSaver notificationSaver)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -98,6 +102,7 @@ namespace Timberbot
             _terrainMap = terrainMap;
             _scienceService = scienceService;
             _buildingUnlockingService = buildingUnlockingService;
+            _notificationSaver = notificationSaver;
         }
 
         public void Load()
@@ -338,6 +343,20 @@ namespace Timberbot
                 var mechanical = ec.GetComponent<MechanicalBuilding>();
                 if (mechanical != null)
                     entry["powered"] = mechanical.ActiveAndPowered;
+
+                var statusSubject = ec.GetComponent<StatusSubject>();
+                if (statusSubject != null)
+                {
+                    var statuses = new List<string>();
+                    try
+                    {
+                        foreach (var s in statusSubject.ActiveStatuses)
+                            statuses.Add(s.ToString());
+                    }
+                    catch { }
+                    if (statuses.Count > 0)
+                        entry["statuses"] = statuses;
+                }
 
                 var node = ec.GetComponent<MechanicalNode>();
                 if (node != null)
@@ -908,6 +927,26 @@ namespace Timberbot
             {
                 return new { error = ex.Message, building = buildingName };
             }
+        }
+
+        public object CollectNotifications()
+        {
+            var results = new List<object>();
+            try
+            {
+                foreach (var n in _notificationSaver.Notifications)
+                {
+                    results.Add(new
+                    {
+                        subject = n.Subject,
+                        description = n.Description,
+                        cycle = n.Cycle,
+                        cycleDay = n.CycleDay
+                    });
+                }
+            }
+            catch { }
+            return results;
         }
 
         public object CollectDistribution()

@@ -184,6 +184,14 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.DistributionSystem.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.NotificationSystem" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.NotificationSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.StatusSystem" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.StatusSystem.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.BuildingAvailability" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.BuildingAvailability.dll</HintPath>

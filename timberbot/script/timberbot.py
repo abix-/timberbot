@@ -113,6 +113,29 @@ class Timberbot:
         """Unlock a building using science points."""
         return self._post("/api/science/unlock", {"building": building})
 
+    def notifications(self):
+        """Game notification history: [{subject, description, entityId, cycle, cycleDay}]."""
+        return self._get("/api/notifications")
+
+    def alerts(self):
+        """Computed alerts from building data: unstaffed, unpowered, unreachable."""
+        buildings = self.buildings()
+        issues = []
+        for b in buildings:
+            name = b.get("name", "").replace("(Clone)", "")
+            bid = b.get("id", 0)
+            if b.get("desiredWorkers", 0) > 0 and b.get("assignedWorkers", 0) < b.get("desiredWorkers", 0):
+                issues.append({"type": "unstaffed", "id": bid, "name": name,
+                               "workers": f"{b.get('assignedWorkers', 0)}/{b.get('desiredWorkers', 0)}"})
+            if b.get("isConsumer") and not b.get("powered"):
+                issues.append({"type": "unpowered", "id": bid, "name": name})
+            if b.get("reachable") is False:
+                issues.append({"type": "unreachable", "id": bid, "name": name})
+            for s in b.get("statuses", []):
+                if s not in ("", "Normal"):
+                    issues.append({"type": "status", "id": bid, "name": name, "status": s})
+        return issues
+
     def distribution(self):
         """Distribution settings per district: [{district, goods: [{good, importOption, exportThreshold}]}]."""
         return self._get("/api/distribution")

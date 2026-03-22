@@ -170,6 +170,9 @@ namespace Timberbot
                         return _service.CollectDistribution();
                     case "/api/science":
                         return _service.CollectScience();
+                    case "/api/notifications":
+                        return _service.CollectNotifications();
+
                     case "/api/map":
                         return _service.CollectMap(0, 0, 0, 0);
                     case "/api/speed":
