@@ -342,9 +342,11 @@ namespace Timberbot
                 }
 
                 if (prio != null)
-                {
-                    entry["priority"] = prio.Priority.ToString();
-                }
+                    entry["constructionPriority"] = prio.Priority.ToString();
+
+                var wpPrio = ec.GetComponent<WorkplacePriority>();
+                if (wpPrio != null)
+                    entry["workplacePriority"] = wpPrio.Priority.ToString();
 
                 if (workplace != null)
                 {
@@ -837,21 +839,36 @@ namespace Timberbot
             };
         }
 
-        public object SetBuildingPriority(int buildingId, string priorityStr)
+        public object SetBuildingPriority(int buildingId, string priorityStr, string type)
         {
             var ec = FindEntity(buildingId);
             if (ec == null)
                 return new { error = "building not found", id = buildingId };
 
-            var prio = ec.GetComponent<BuilderPrioritizable>();
-            if (prio == null)
-                return new { error = "building has no priority", id = buildingId };
-
             if (!Enum.TryParse<Priority>(priorityStr, true, out var parsed))
                 return new { error = "invalid priority, use: VeryLow, Normal, VeryHigh", value = priorityStr };
 
-            prio.SetPriority(parsed);
-            return new { id = buildingId, name = ec.GameObject.name, priority = prio.Priority.ToString() };
+            if (type == "construction" || string.IsNullOrEmpty(type))
+            {
+                var prio = ec.GetComponent<BuilderPrioritizable>();
+                if (prio != null)
+                {
+                    prio.SetPriority(parsed);
+                    return new { id = buildingId, name = ec.GameObject.name, constructionPriority = prio.Priority.ToString() };
+                }
+            }
+
+            if (type == "workplace" || string.IsNullOrEmpty(type))
+            {
+                var wpPrio = ec.GetComponent<WorkplacePriority>();
+                if (wpPrio != null)
+                {
+                    wpPrio.SetPriority(parsed);
+                    return new { id = buildingId, name = ec.GameObject.name, workplacePriority = wpPrio.Priority.ToString() };
+                }
+            }
+
+            return new { error = "building has no priority of that type", id = buildingId, type };
         }
 
         // ================================================================

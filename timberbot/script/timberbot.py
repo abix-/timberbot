@@ -188,9 +188,9 @@ class Timberbot:
         """Unpause a building."""
         return self._post("/api/building/pause", {"id": building_id, "paused": False})
 
-    def set_priority(self, building_id, priority):
-        """Set building priority. Values: VeryLow, Normal, VeryHigh."""
-        return self._post("/api/priority", {"id": building_id, "priority": priority})
+    def set_priority(self, building_id, priority, type=""):
+        """Set building priority. Values: VeryLow, Normal, VeryHigh. Type: workplace (finished) or construction (building)."""
+        return self._post("/api/priority", {"id": building_id, "priority": priority, "type": type})
 
     def set_workers(self, building_id, count):
         """Set desired worker count (0 to maxWorkers)."""

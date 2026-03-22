@@ -202,7 +202,8 @@ namespace Timberbot
                     case "/api/priority":
                         return _service.SetBuildingPriority(
                             body?.Value<int>("id") ?? 0,
-                            body?.Value<string>("priority") ?? "Normal");
+                            body?.Value<string>("priority") ?? "Normal",
+                            body?.Value<string>("type") ?? "");
                     case "/api/workers":
                         return _service.SetWorkers(
                             body?.Value<int>("id") ?? 0,
