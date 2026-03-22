@@ -80,23 +80,15 @@ pip install -r requirements.txt
 
 ## Usage
 
-### REPL
+### CLI
 
-```
-python -m timberborn
-
-=== Timberbot ===
-  game API:   connected (port 8080)
-  bridge mod: connected (port 8085)
-
-tb> summary
-tb> buildings
-tb> trees
-tb> speed 3
-tb> pause 12345
-tb> workers 12345 0
-tb> cut 100 100 110 110 2
-tb> uncut 100 100 110 110 2
+```bash
+python -m timberbot buildings
+python -m timberbot set_speed 3
+python -m timberbot place_building LumberjackFlag.IronTeeth 120 130 2
+python -m timberbot mark_trees 100 100 110 110 2
+python -m timberbot demolish_building -- -12345
+python -m timberbot                          # list all methods
 ```
 
 ### Live dashboard
@@ -110,7 +102,7 @@ Polls `/api/summary` every 3s. Shows day progress bar, drought countdown, per-di
 ### Python API
 
 ```python
-from timberborn.api import Timberbot
+from timberbot.api import Timberbot
 
 bot = Timberbot()
 

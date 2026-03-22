@@ -5,7 +5,7 @@ import threading
 
 import requests
 
-from timberborn.api import Timberbot
+from timberbot.api import Timberbot
 
 HELP_TEXT = """
 Vanilla API (port 8080):
