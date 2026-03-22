@@ -266,7 +266,7 @@ class Timberbot:
             # production
             "LumberMill": ("M", BWHT), "WoodWorkshop": ("M", BWHT),
             "IndustrialLumberMill": ("M", BWHT),
-            "FarmHouse": ("F", CYN), "Forester": ("F", GRN),
+            "FarmHouse": ("F", CYN), "Forester": ("f", GRN),
             "PowerWheel": ("E", BYEL), "PowerShaft": ("E", BYEL),
             "Inventor": ("S", BWHT), "Numbercruncher": ("S", BWHT),
             # gathering
