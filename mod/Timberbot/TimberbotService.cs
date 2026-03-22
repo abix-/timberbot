@@ -391,6 +391,20 @@ namespace Timberbot
             x2 = Mathf.Clamp(x2, 0, size.x - 1);
             y2 = Mathf.Clamp(y2, 0, size.y - 1);
 
+            // build occupancy map from all entities with BlockObject
+            var occupants = new Dictionary<long, string>();
+            foreach (var ec in _entityRegistry.Entities)
+            {
+                var bo = ec.GetComponent<BlockObject>();
+                if (bo == null) continue;
+                var c = bo.Coordinates;
+                if (c.x >= x1 && c.x <= x2 && c.y >= y1 && c.y <= y2)
+                {
+                    long key = (long)c.x * 100000 + c.y;
+                    occupants[key] = ec.GameObject.name;
+                }
+            }
+
             var tiles = new List<object>();
             for (int x = x1; x <= x2; x++)
             {
@@ -413,12 +427,17 @@ namespace Timberbot
                     }
                     catch { }
 
-                    tiles.Add(new
+                    long key = (long)x * 100000 + y;
+                    occupants.TryGetValue(key, out var occupant);
+
+                    if (occupant != null)
                     {
-                        x, y,
-                        terrain = terrainHeight,
-                        water = waterHeight
-                    });
+                        tiles.Add(new { x, y, terrain = terrainHeight, water = waterHeight, occupant });
+                    }
+                    else
+                    {
+                        tiles.Add(new { x, y, terrain = terrainHeight, water = waterHeight });
+                    }
                 }
             }
 

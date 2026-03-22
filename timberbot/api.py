@@ -292,6 +292,41 @@ class Timberbot:
 
         return {"free": free, "occupied": occupied}
 
+    def scan(self, x, y, radius=10):
+        """Scan an area and return a readable grid showing terrain, water, and occupants.
+
+        Usage: bot.scan(120, 140, 8)
+        Legend: .=empty ~=water P=path T=tree B=bush #=building
+        """
+        data = self.map(x - radius, y - radius, x + radius, y + radius)
+        tiles = {(t["x"], t["y"]): t for t in data.get("tiles", [])}
+        lines = []
+        for ty in range(y + radius, y - radius - 1, -1):
+            row = f"{ty:3d} "
+            for tx in range(x - radius, x + radius + 1):
+                t = tiles.get((tx, ty))
+                if not t:
+                    row += "?"
+                elif t.get("occupant"):
+                    name = t["occupant"]
+                    if "Path" in name:
+                        row += "="
+                    elif "Pine" in name or "Birch" in name or "Oak" in name or "Maple" in name:
+                        row += "T"
+                    elif "Bush" in name or "berry" in name.lower():
+                        row += "B"
+                    else:
+                        row += "#"
+                elif t["water"] > 0:
+                    row += "~"
+                elif t["terrain"] > 0:
+                    row += "."
+                else:
+                    row += " "
+            lines.append(row)
+        lines.append("    " + "".join(str(i % 10) for i in range(x - radius, x + radius + 1)))
+        return "\n".join(lines)
+
     def find(self, source, name=None, x=None, y=None, radius=20):
         """Find entities from a source (buildings/trees/gatherables). Filter by name and/or proximity.
 
