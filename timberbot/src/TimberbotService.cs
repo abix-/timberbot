@@ -32,6 +32,7 @@ using Timberborn.NeedSystem;
 using Timberborn.LifeSystem;
 using Timberborn.Wellbeing;
 using Timberborn.BuildingsReachability;
+using Timberborn.ConstructionSites;
 using Timberborn.MechanicalSystem;
 using Timberborn.ScienceSystem;
 using Timberborn.NotificationSystem;
@@ -375,6 +376,43 @@ namespace Timberbot
                     catch { }
                 }
 
+                // construction progress
+                var site = ec.GetComponent<ConstructionSite>();
+                if (site != null)
+                {
+                    entry["buildProgress"] = site.BuildTimeProgress;
+                    entry["materialProgress"] = site.MaterialProgress;
+                    entry["hasMaterials"] = site.HasMaterialsToResumeBuilding;
+                }
+
+                // inventory contents
+                var inventories = ec.GetComponent<Inventories>();
+                if (inventories != null)
+                {
+                    var goods = new Dictionary<string, int>();
+                    try
+                    {
+                        foreach (var inv in inventories.AllInventories)
+                        {
+                            if (inv.ComponentName == ConstructionSiteInventoryInitializer.InventoryComponentName) continue;
+                            foreach (var ga in inv.Stock)
+                            {
+                                if (ga.Amount > 0)
+                                {
+                                    var gid = ga.GoodId;
+                                    if (goods.ContainsKey(gid))
+                                        goods[gid] += ga.Amount;
+                                    else
+                                        goods[gid] = ga.Amount;
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                    if (goods.Count > 0)
+                        entry["inventory"] = goods;
+                }
+
                 results.Add(entry);
             }
             return results;
@@ -507,6 +545,10 @@ namespace Timberbot
                 var life = ec.GetComponent<LifeProgressor>();
                 if (life != null)
                     entry["lifeProgress"] = life.LifeProgress;
+
+                var worker = ec.GetComponent<Worker>();
+                if (worker != null && worker.Workplace != null)
+                    entry["workplace"] = worker.Workplace.GameObject.name;
 
                 results.Add(entry);
             }

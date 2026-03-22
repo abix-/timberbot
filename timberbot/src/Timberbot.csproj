@@ -184,6 +184,10 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.DistributionSystem.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.ConstructionSites" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.ConstructionSites.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.NotificationSystem" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.NotificationSystem.dll</HintPath>
