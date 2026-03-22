@@ -15,13 +15,15 @@ CLI output uses [TOON format](https://github.com/toon-format/toon) (Token-Orient
 | `/api/population` | tabular | `[N]{district,adults,children,bots}` |
 | `/api/resources` | tabular | `[N]{district,good,available,all}` |
 | `/api/districts` | tabular | `[N]{name,adults,children,bots,Water,Log,...}` |
-| `/api/buildings` | tabular | `[N]{id,name,x,y,z,orientation,finished,paused,priority,workers,...}` + reachable, powered, power fields |
+| `/api/buildings` | tabular | id, name, coords, workers, reachable, powered, power, construction progress, inventory, statuses, wonder |
 | `/api/trees` | tabular | `[N]{id,name,x,y,z,marked,alive,grown,growth}` |
 | `/api/gatherables` | tabular | `[N]{id,name,x,y,z,alive}` |
-| `/api/beavers` | tabular | `[N]{id,name,wellbeing,critical}` |
+| `/api/beavers` | tabular | id, name, wellbeing, needs, workplace, isBot, contaminated |
 | `/api/prefabs` | tabular | `[N]{name,sizeX,sizeY,sizeZ}` |
 | `/api/distribution` | nested tabular | `[N]{district, goods[N]{good,importOption,exportThreshold}}` |
 | `/api/science` | nested | `{points, unlockables[N]{name,unlocked}}` |
+| `/api/notifications` | tabular | `[N]{subject,description,cycle,cycleDay}` |
+| `/api/workhours` | flat kv | `{endHours, areWorkingHours}` |
 | `/api/speed` | flat kv | `speed: 0-3` (0=pause, 1=normal, 2=fast, 3=fastest) |
 | `/api/map` | tabular | `[N]{x,y,terrain,water,occupant,entrance}` |
 
@@ -34,6 +36,7 @@ All write endpoints accept JSON bodies.
 | `/api/speed` | `{"speed": 0}` | 0=pause, 1=normal, 2=fast, 3=fastest |
 | `/api/science/unlock` | `{"building": "Name"}` | unlock a building using science points |
 | `/api/distribution` | `{"district": "Name", "good": "Log", "import": "Forced", "exportThreshold": 50}` | set import/export per good |
+| `/api/workhours` | `{"endHours": 14}` | set when work ends (1-24) |
 | `/api/building/pause` | `{"id": N, "paused": true}` | pause/unpause building |
 | `/api/building/demolish` | `{"id": N}` | demolish a building |
 | `/api/building/place` | `{"prefab": "Name", "x": N, "y": N, "z": N, "orientation": 0}` | place a building (validates all tiles, origin-corrected) |
