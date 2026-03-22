@@ -5,7 +5,7 @@ version: "2.0"
 ---
 # AI Playbook - Playing Timberborn via API
 
-How to play Timberborn autonomously using `timberbot.py`. Copy this file to `~/.claude/skills/bot/SKILL.md` to use as a Claude Code skill.
+How to play Timberborn autonomously using `timberbot.py`. Copy this file to `~/.claude/skills/timberbot/SKILL.md` to use as a Claude Code skill.
 
 Play the game using `python timberbot/script/timberbot.py` commands only. NEVER use inline python or pipe through python -c.
 
