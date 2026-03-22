@@ -1,116 +1,100 @@
 ---
 name: timberbot-cli
-description: Python CLI and API for reading and controlling a running Timberborn game via the Timberbot mod. Use when interacting with Timberborn over HTTP.
+description: Python script for reading and controlling a running Timberborn game via the Timberbot mod. Use when interacting with Timberborn over HTTP.
 user-invocable: false
-version: "1.0"
+version: "2.0"
 updated: "2026-03-21"
 ---
-# Timberbot CLI
+# Timberbot
 
-Single-file Python client for the Timberbot mod. Reads and controls a running Timberborn game over HTTP (port 8085).
+`timberbot.py` is a single Python script that talks to the Timberbot mod over HTTP (port 8085). Download it, run it. No install needed beyond `pip install requests`.
 
-## Setup
+## Usage
 
-Requires the Timberbot mod installed in Timberborn and a game loaded.
-
-```bash
-pip install requests
-python timberbot.py           # list all methods
-python timberbot.py summary   # test connection
-```
-
-## CLI Usage
+Every public method on the `Timberbot` class is a CLI command. Pass method name + args:
 
 ```bash
-python timberbot.py <method> [args...]
-python timberbot.py watch                    # live dashboard
-python timberbot.py summary                  # full colony snapshot
-python timberbot.py buildings                # list all buildings with IDs
-python timberbot.py set_speed 3              # fast forward
-python timberbot.py pause_building 12345     # pause a building
-python timberbot.py demolish_building -- -12345  # use -- for negative IDs
+python timberbot.py                              # list all methods
+python timberbot.py summary                      # full colony snapshot
+python timberbot.py buildings                    # list all buildings with IDs
+python timberbot.py set_speed 3                  # fast forward
+python timberbot.py place_building Path 100 130 2
+python timberbot.py place_path 100 130 110 130 2 # line of paths
+python timberbot.py demolish_building -- -12345  # -- allows negative IDs
+python timberbot.py watch                        # live terminal dashboard
 ```
 
-## Python API
+Output is always JSON (except `watch` and `scan`).
 
-```python
-from timberbot import Timberbot
-bot = Timberbot()
-```
+## Read methods
 
-### Read state (nouns)
+| Command | Returns |
+|---------|---------|
+| `ping` | true/false if mod is reachable |
+| `summary` | time + weather + all districts with resources and population |
+| `time` | `{dayNumber, dayProgress, partialDayNumber}` |
+| `weather` | `{cycle, cycleDay, isHazardous, temperateWeatherDuration, hazardousWeatherDuration}` |
+| `population` | `[{district, adults, children, bots}]` |
+| `resources` | `{districtName: {goodName: {available, all}}}` |
+| `districts` | `[{name, population, resources}]` |
+| `buildings` | `[{id, name, x, y, z, finished, paused, priority, maxWorkers, desiredWorkers, assignedWorkers}]` |
+| `trees` | `[{id, name, x, y, z, marked, alive}]` |
+| `gatherables` | `[{id, name, x, y, z, alive}]` (berry bushes etc) |
+| `prefabs` | `[{name, sizeX, sizeY, sizeZ}]` |
+| `speed` | `{speed: 0-3}` |
+| `map x1 y1 x2 y2` | terrain + water tiles for a region |
 
-| Method | Returns |
-|--------|---------|
-| `bot.ping()` | True if mod is reachable |
-| `bot.summary()` | time + weather + all districts |
-| `bot.time()` | `{dayNumber, dayProgress, partialDayNumber}` |
-| `bot.weather()` | `{cycle, cycleDay, isHazardous, temperateWeatherDuration, hazardousWeatherDuration}` |
-| `bot.population()` | `[{district, adults, children, bots}]` |
-| `bot.resources()` | `{districtName: {goodName: {available, all}}}` |
-| `bot.districts()` | `[{name, population, resources}]` |
-| `bot.buildings()` | `[{id, name, x, y, z, finished, paused, priority, maxWorkers, desiredWorkers, assignedWorkers}]` |
-| `bot.trees()` | `[{id, name, x, y, z, marked, alive}]` |
-| `bot.gatherables()` | `[{id, name, x, y, z, alive}]` (berry bushes etc) |
-| `bot.prefabs()` | `[{name, sizeX, sizeY, sizeZ}]` |
-| `bot.speed()` | `{speed: 0-3}` |
-| `bot.map(x1, y1, x2, y2)` | terrain + water for a region |
+## Write methods
 
-### Write actions (verb_noun)
+| Command | Description |
+|---------|-------------|
+| `set_speed 0-3` | 0=pause, 1=normal, 2=fast, 3=fastest |
+| `pause_building ID` | pause a building |
+| `unpause_building ID` | unpause a building |
+| `set_priority ID VeryHigh` | VeryLow / Normal / VeryHigh |
+| `set_workers ID 2` | set desired worker count |
+| `set_floodgate ID 1.5` | set floodgate height |
+| `place_building PREFAB X Y Z [ORIENTATION]` | place a building (orientation 0-3, default 0) |
+| `demolish_building ID` | demolish a building |
+| `mark_trees X1 Y1 X2 Y2 Z` | mark rectangular area for cutting |
+| `clear_trees X1 Y1 X2 Y2 Z` | clear cutting marks |
+| `plant_crop X1 Y1 X2 Y2 Z CROP` | mark area for planting |
+| `clear_planting X1 Y1 X2 Y2 Z` | clear planting marks |
+| `set_capacity ID 100` | set stockpile capacity |
+| `set_good ID Log` | set allowed good on stockpile |
+| `place_path X1 Y1 X2 Y2 Z` | place straight line of paths (horizontal or vertical) |
 
-| Method | Description |
-|--------|-------------|
-| `bot.set_speed(0-3)` | 0=pause, 1=normal, 2=fast, 3=fastest |
-| `bot.pause_building(id)` | pause a building |
-| `bot.unpause_building(id)` | unpause a building |
-| `bot.set_priority(id, priority)` | VeryLow / Normal / VeryHigh |
-| `bot.set_workers(id, count)` | set desired worker count |
-| `bot.set_floodgate(id, height)` | set floodgate height |
-| `bot.place_building(prefab, x, y, z, orientation=0)` | place a building (orientation 0-3) |
-| `bot.demolish_building(id)` | demolish a building |
-| `bot.mark_trees(x1, y1, x2, y2, z)` | mark area for tree cutting |
-| `bot.clear_trees(x1, y1, x2, y2, z)` | clear cutting marks |
-| `bot.plant_crop(x1, y1, x2, y2, z, crop)` | mark area for planting |
-| `bot.clear_planting(x1, y1, x2, y2, z)` | clear planting marks |
-| `bot.set_capacity(id, capacity)` | set stockpile capacity |
-| `bot.set_good(id, good)` | set allowed good on stockpile |
-| `bot.place_path(x1, y1, x2, y2, z)` | place a straight line of paths (horizontal or vertical) |
+## Helpers
 
-### Vanilla API (port 8080)
+| Command | Description |
+|---------|-------------|
+| `scan X Y [RADIUS]` | ASCII grid of terrain, water, buildings, trees (default radius 10) |
+| `find SOURCE [NAME] [X] [Y] [RADIUS]` | find from buildings/trees/gatherables by name and/or proximity |
+| `watch` | live terminal dashboard (polls every 3s) |
 
-| Method | Description |
-|--------|-------------|
-| `bot.levers()` | list all levers |
-| `bot.adapters()` | list all adapters |
-| `bot.lever_on(name)` | turn lever ON |
-| `bot.lever_off(name)` | turn lever OFF |
+## Vanilla API (port 8080)
 
-### Helpers
+| Command | Description |
+|---------|-------------|
+| `levers` | list all levers |
+| `adapters` | list all adapters |
+| `lever_on NAME` | turn lever ON |
+| `lever_off NAME` | turn lever OFF |
 
-| Method | Description |
-|--------|-------------|
-| `bot.near(items, x, y, radius=20)` | filter items by proximity, sorted by distance |
-| `bot.named(items, name)` | filter items by name (case-insensitive substring) |
-| `bot.scan(x, y, radius=10)` | ASCII grid of terrain, water, buildings, trees |
-| `bot.find(source, name=None, x=None, y=None, radius=20)` | find entities from buildings/trees/gatherables |
+## IDs and values
 
-## IDs and Values
-
-- **Building IDs**: Unity instance IDs from `bot.buildings()`. Ephemeral per session
-- **Prefab names**: from `bot.prefabs()` (e.g. `LumberjackFlag.IronTeeth`, `DeepWaterPump.IronTeeth`)
-- **Good names**: Timberborn internal names (e.g. `Log`, `Plank`, `Water`, `Berries`)
+- **Building IDs**: from `buildings` output. Ephemeral per game session
+- **Prefab names**: from `prefabs` (e.g. `LumberjackFlag.IronTeeth`, `DeepWaterPump.IronTeeth`)
+- **Good names**: `Log`, `Plank`, `Water`, `Berries`, etc.
 - **Priority**: `VeryLow`, `Normal`, `VeryHigh`
 - **Orientation**: 0-3 (rotates 90 degrees each step)
-- **Crop names**: `Kohlrabi`, `Cassava`, `Carrot`, `Potato`, `Wheat`, `Sunflower`, etc.
+- **Crops**: `Kohlrabi`, `Cassava`, `Carrot`, `Potato`, `Wheat`, `Sunflower`, etc.
 
-## Raw HTTP
-
-The mod exposes a JSON API on `http://localhost:8085`. You don't need Python:
+## Raw HTTP (no Python needed)
 
 ```bash
 curl http://localhost:8085/api/summary
-curl -X POST http://localhost:8085/api/speed -d '{"speed": 3}'
 curl http://localhost:8085/api/buildings
+curl -X POST http://localhost:8085/api/speed -d '{"speed": 3}'
+curl -X POST http://localhost:8085/api/building/place -d '{"prefab": "Path", "x": 100, "y": 130, "z": 2, "orientation": 0}'
 ```
-
-Full endpoint list: GET endpoints use query params, POST endpoints accept JSON bodies. See `bot.prefabs()` for building names and `bot.buildings()` for IDs.
