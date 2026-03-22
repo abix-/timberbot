@@ -57,7 +57,6 @@ class Timberbot:
 
     def _post(self, path, data):
         r = self.s.post(f"{self.url}{path}", json=data, timeout=5)
-        r.raise_for_status()
         return r.json()
 
     def _game_get(self, path):
@@ -120,6 +119,12 @@ class Timberbot:
     def speed(self):
         """Current game speed: {speed: 0-3}."""
         return self._get("/api/speed")
+
+    def map(self, x1=0, y1=0, x2=0, y2=0):
+        """Terrain + water for a region. No args = map size only. Returns {mapSize, region, tiles: [{x,y,terrain,water}]}."""
+        if x1 == 0 and y1 == 0 and x2 == 0 and y2 == 0:
+            return self._get("/api/map")
+        return self._post("/api/map", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
 
     # -- write actions (verb_noun) --
 

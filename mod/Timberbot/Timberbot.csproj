@@ -102,6 +102,15 @@
     <Reference Include="Timberborn.TemplateSystem" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.TemplateSystem.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.TerrainSystem" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.TerrainSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.WaterSystem" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.WaterSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.MapIndexSystem" Publicize="true">
+      <HintPath>$(GameManagedDir)\Timberborn.MapIndexSystem.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.Cutting" Publicize="true">
       <HintPath>$(GameManagedDir)\Timberborn.Cutting.dll</HintPath>
     </Reference>

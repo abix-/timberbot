@@ -7,6 +7,9 @@ using Timberborn.BaseComponentSystem;
 using Timberborn.BlockObjectTools;
 using Timberborn.Coordinates;
 using Timberborn.Cutting;
+using Timberborn.MapIndexSystem;
+using Timberborn.TerrainSystem;
+using Timberborn.WaterSystem;
 using Timberborn.EntitySystem;
 using Timberborn.Forestry;
 using Timberborn.GameCycleSystem;
@@ -39,6 +42,10 @@ namespace Timberbot
         private readonly BuildingService _buildingService;
         private readonly BlockObjectPlacerService _blockObjectPlacerService;
         private readonly EntityService _entityService;
+        private readonly ITerrainService _terrainService;
+        private readonly IThreadSafeWaterMap _waterMap;
+        private readonly MapIndexService _mapIndexService;
+        private readonly IThreadSafeColumnTerrainMap _terrainMap;
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -52,7 +59,11 @@ namespace Timberbot
             TreeCuttingArea treeCuttingArea,
             BuildingService buildingService,
             BlockObjectPlacerService blockObjectPlacerService,
-            EntityService entityService)
+            EntityService entityService,
+            ITerrainService terrainService,
+            IThreadSafeWaterMap waterMap,
+            MapIndexService mapIndexService,
+            IThreadSafeColumnTerrainMap terrainMap)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -65,6 +76,10 @@ namespace Timberbot
             _buildingService = buildingService;
             _blockObjectPlacerService = blockObjectPlacerService;
             _entityService = entityService;
+            _terrainService = terrainService;
+            _waterMap = waterMap;
+            _mapIndexService = mapIndexService;
+            _terrainMap = terrainMap;
         }
 
         public void Load()
@@ -314,6 +329,64 @@ namespace Timberbot
         public object CollectSpeed()
         {
             return new { speed = _speedManager.CurrentSpeed };
+        }
+
+        public object CollectMap(int x1, int y1, int x2, int y2)
+        {
+            var size = _terrainService.Size;
+            var stride = _mapIndexService.VerticalStride;
+
+            // default to full map if no region specified
+            if (x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0)
+            {
+                return new
+                {
+                    mapSize = new { x = size.x, y = size.y, z = size.z }
+                };
+            }
+
+            x1 = Mathf.Clamp(x1, 0, size.x - 1);
+            y1 = Mathf.Clamp(y1, 0, size.y - 1);
+            x2 = Mathf.Clamp(x2, 0, size.x - 1);
+            y2 = Mathf.Clamp(y2, 0, size.y - 1);
+
+            var tiles = new List<object>();
+            for (int x = x1; x <= x2; x++)
+            {
+                for (int y = y1; y <= y2; y++)
+                {
+                    var index2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));
+                    var columnCount = _terrainMap.ColumnCounts[index2D];
+
+                    int terrainHeight = 0;
+                    if (columnCount > 0)
+                    {
+                        var topIndex = index2D + (columnCount - 1) * stride;
+                        terrainHeight = _terrainMap.GetColumnCeiling(topIndex);
+                    }
+
+                    float waterHeight = 0f;
+                    try
+                    {
+                        waterHeight = _waterMap.CeiledWaterHeight(new Vector3Int(x, y, terrainHeight));
+                    }
+                    catch { }
+
+                    tiles.Add(new
+                    {
+                        x, y,
+                        terrain = terrainHeight,
+                        water = waterHeight
+                    });
+                }
+            }
+
+            return new
+            {
+                mapSize = new { x = size.x, y = size.y, z = size.z },
+                region = new { x1, y1, x2, y2 },
+                tiles
+            };
         }
 
         // ================================================================

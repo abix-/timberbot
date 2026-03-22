@@ -162,6 +162,8 @@ namespace Timberbot
                         return _service.CollectBuildings();
                     case "/api/trees":
                         return _service.CollectTrees();
+                    case "/api/map":
+                        return _service.CollectMap(0, 0, 0, 0);
                     case "/api/speed":
                         return _service.CollectSpeed();
                     case "/api/prefabs":
@@ -208,6 +210,12 @@ namespace Timberbot
                         return _service.SetStockpileGood(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("good") ?? "");
+                    case "/api/map":
+                        return _service.CollectMap(
+                            body?.Value<int>("x1") ?? 0,
+                            body?.Value<int>("y1") ?? 0,
+                            body?.Value<int>("x2") ?? 0,
+                            body?.Value<int>("y2") ?? 0);
                     case "/api/building/demolish":
                         return _service.DemolishBuilding(
                             body?.Value<int>("id") ?? 0);
