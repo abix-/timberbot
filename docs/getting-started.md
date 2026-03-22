@@ -54,32 +54,13 @@ python timberbot.py watch
 
 Polls every 3 seconds. Shows day progress, drought countdown, per-district population and resources with color coding.
 
-### Python API
-
-```python
-from timberbot import Timberbot
-
-bot = Timberbot()
-
-# read
-bot.summary()
-bot.buildings()
-bot.trees()
-
-# write
-bot.set_speed(3)
-bot.pause_building(building_id)
-bot.place_building("LumberjackFlag.IronTeeth", x=120, y=130, z=2)
-bot.mark_trees(100, 100, 110, 110, z=2)
-bot.set_floodgate(gate_id, 2.0)
-```
-
 ### Raw HTTP
 
 You don't need Python. Any HTTP client works:
 
 ```bash
 curl http://localhost:8085/api/summary
+curl http://localhost:8085/api/buildings
 curl -X POST http://localhost:8085/api/speed -d '{"speed": 3}'
 ```
 

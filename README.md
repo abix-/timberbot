@@ -22,13 +22,11 @@ python timberbot.py watch             # live dashboard
 python timberbot.py                   # list all methods
 ```
 
-As a library:
+Or use raw HTTP -- no Python needed:
 
-```python
-from timberbot import Timberbot
-bot = Timberbot()
-bot.summary()
-bot.place_building("LumberjackFlag.IronTeeth", 120, 130, 2)
+```bash
+curl http://localhost:8085/api/summary
+curl -X POST http://localhost:8085/api/speed -d '{"speed": 3}'
 ```
 
 ## Docs
