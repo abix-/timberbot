@@ -214,6 +214,7 @@
     <Copy SourceFiles="$(OutputPath)Timberbot.dll" DestinationFolder="$(ModDir)" />
     <Copy SourceFiles="manifest.json" DestinationFolder="$(ModDir)" />
     <Copy SourceFiles="thumbnail.png" DestinationFolder="$(ModDir)" Condition="Exists('thumbnail.png')" />
+    <Copy SourceFiles="..\script\timberbot.py" DestinationFolder="$(ModDir)" />
     <Message Text="Deployed to $(ModDir)" Importance="high" />
   </Target>
 

@@ -57,7 +57,7 @@ python timberbot.py watch                # live dashboard
 1. Subscribe to this mod
 2. Enable it in the Mod Manager
 3. Start a game -- the API starts automatically on port 8085
-4. Download timberbot.py from the GitHub release
+4. Find timberbot.py in your Timberborn mods folder (Documents\Timberborn\Mods\Timberbot\)
 5. Run: python timberbot.py ping
 
 Full docs and source: https://github.com/abix-/TimberbornMods
