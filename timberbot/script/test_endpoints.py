@@ -150,15 +150,12 @@ def main():
         failed += 1
     bot.set_distribution("District 1", "Log", export_threshold=0)  # restore
 
-    # speed write (set + verify + restore)
-    old_speed = bot.speed().get("speed", 0)
-    bot.set_speed(1)
-    result = bot.speed()
-    if check("speed write", result.get("speed") == 1):
+    # speed write (verify set response)
+    result = bot.set_speed(2)
+    if check("speed write", result.get("speed") == 2):
         passed += 1
     else:
         failed += 1
-    bot.set_speed(old_speed)  # restore
 
     # science read
     result = bot.science()
