@@ -1,6 +1,6 @@
-Play Timberborn with an AI. Full read/write HTTP API with a Python client so Claude, ChatGPT, or your own scripts can partner with you to run a beaver colony.
+Play Timberborn with an AI. Timberbot API gives Claude, ChatGPT, or your own scripts full read/write access to your colony over HTTP so they can partner with you to run it.
 
-[h1]What Timberbot adds[/h1]
+[h1]What Timberbot API adds[/h1]
 Timberborn already has a built-in HTTP API (port 8080) for automation with levers and adapters. Timberbot (port 8085) adds everything the built-in API doesn't cover:
 
 [table]
@@ -35,7 +35,7 @@ Use both together: the built-in API handles real-time automation (sensor -> leve
 [/table]
 
 [h1]How it works[/h1]
-The mod runs an HTTP server (port 8085) inside the game. Python client included:
+Timberbot API runs an HTTP server (port 8085) inside the game. Python client included:
 [code]
 python timberbot.py summary
 python timberbot.py buildings
