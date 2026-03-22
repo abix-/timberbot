@@ -346,7 +346,11 @@ class Timberbot:
                 occupied.append({"x": tx, "y": ty, "what": "entrance"})
 
             if has_water and not has_occupant:
-                water.append({"x": tx, "y": ty})
+                bw = t.get("badwater", 0)
+                entry = {"x": tx, "y": ty}
+                if bw > 0:
+                    entry["badwater"] = bw
+                water.append(entry)
 
         return {
             "center": f"{x},{y}",

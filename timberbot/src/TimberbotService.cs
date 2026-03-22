@@ -769,9 +769,23 @@ namespace Timberbot
                     }
 
                     float waterHeight = 0f;
+                    float waterContamination = 0f;
+                    var waterCoord = new Vector3Int(x, y, terrainHeight);
+                    try { waterHeight = _waterMap.CeiledWaterHeight(waterCoord); } catch { }
                     try
                     {
-                        waterHeight = _waterMap.CeiledWaterHeight(new Vector3Int(x, y, terrainHeight));
+                        int wIdx2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));
+                        int wColCount = _waterMap.ColumnCount(wIdx2D);
+                        for (int ci = wColCount - 1; ci >= 0; ci--)
+                        {
+                            int wIdx3D = ci * _mapIndexService.VerticalStride + wIdx2D;
+                            var col = _waterMap.WaterColumns[wIdx3D];
+                            if (col.WaterDepth > 0 && col.Contamination > 0)
+                            {
+                                waterContamination = col.Contamination;
+                                break;
+                            }
+                        }
                     }
                     catch { }
 
@@ -786,6 +800,8 @@ namespace Timberbot
                         ["terrain"] = terrainHeight,
                         ["water"] = waterHeight
                     };
+                    if (waterContamination > 0)
+                        tile["badwater"] = Math.Round(waterContamination, 2);
                     if (occupant != null) tile["occupant"] = occupant;
                     if (isEntrance) tile["entrance"] = true;
                     if (isSeedling) tile["seedling"] = true;
