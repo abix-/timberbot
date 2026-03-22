@@ -46,7 +46,6 @@ namespace Timberbot
         private readonly BuildingService _buildingService;
         private readonly BlockObjectPlacerService _blockObjectPlacerService;
         private readonly EntityService _entityService;
-        private readonly PreviewFactory _previewFactory;
         private readonly ITerrainService _terrainService;
         private readonly IThreadSafeWaterMap _waterMap;
         private readonly MapIndexService _mapIndexService;
@@ -66,7 +65,6 @@ namespace Timberbot
             BuildingService buildingService,
             BlockObjectPlacerService blockObjectPlacerService,
             EntityService entityService,
-            PreviewFactory previewFactory,
             ITerrainService terrainService,
             IThreadSafeWaterMap waterMap,
             MapIndexService mapIndexService,
@@ -84,7 +82,6 @@ namespace Timberbot
             _buildingService = buildingService;
             _blockObjectPlacerService = blockObjectPlacerService;
             _entityService = entityService;
-            _previewFactory = previewFactory;
             _terrainService = terrainService;
             _waterMap = waterMap;
             _mapIndexService = mapIndexService;
@@ -744,29 +741,17 @@ namespace Timberbot
             var placement = new Placement(new Vector3Int(x, y, z), orient,
                 FlipMode.Unflipped);
 
-            // validate if possible -- block clearly invalid placements
-            var placeableSpec = buildingSpec.GetSpec<PlaceableBlockObjectSpec>();
-            bool validated = false;
-            bool isValid = false;
-            if (placeableSpec != null)
+            // Place() is the ground truth -- callback fires only for valid placements
+            var placer = _blockObjectPlacerService.GetMatchingPlacer(blockObjectSpec);
+            int placedId = 0;
+            string placedName = "";
+            placer.Place(blockObjectSpec, placement, (entity) =>
             {
-                Preview preview = null;
-                try
-                {
-                    preview = _previewFactory.Create(placeableSpec);
-                    preview.Reposition(placement);
-                    isValid = preview.BlockObject.IsValid();
-                    validated = true;
-                }
-                catch { }
-                finally
-                {
-                    if (preview != null)
-                        UnityEngine.Object.Destroy(preview.GameObject);
-                }
-            }
+                placedId = entity.GameObject.GetInstanceID();
+                placedName = entity.GameObject.name;
+            });
 
-            if (validated && !isValid)
+            if (placedId == 0)
             {
                 var size = blockObjectSpec.Size;
                 return new
@@ -778,18 +763,6 @@ namespace Timberbot
                     hint = "check terrain height, water, existing buildings, and building size"
                 };
             }
-
-            var placer = _blockObjectPlacerService.GetMatchingPlacer(blockObjectSpec);
-            int placedId = 0;
-            string placedName = "";
-            placer.Place(blockObjectSpec, placement, (entity) =>
-            {
-                placedId = entity.GameObject.GetInstanceID();
-                placedName = entity.GameObject.name;
-            });
-
-            if (placedId == 0)
-                return new { error = "placement failed", prefab = prefabName, x, y, z, orientation };
 
             return new { id = placedId, name = placedName, x, y, z, orientation };
         }
