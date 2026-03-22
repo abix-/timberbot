@@ -21,6 +21,8 @@ Let an AI play Timberborn. Full read/write HTTP API with a Python client so Clau
 [tr][td]Resources[/td][td]Plant crops -- skips buildings, water, and invalid terrain automatically[/td][/tr]
 [tr][td]Resources[/td][td]Set floodgate heights[/td][/tr]
 [tr][td]Resources[/td][td]Configure stockpile capacity and allowed goods[/td][/tr]
+[tr][td]Read[/td][td]Beaver wellbeing -- see each beaver's needs and what's critical[/td][/tr]
+[tr][td]Tools[/td][td]All output in TOON format -- compact, token-efficient for AI[/td][/tr]
 [tr][td]Tools[/td][td]ASCII map scanner -- see your colony layout in terminal[/td][/tr]
 [tr][td]Tools[/td][td]Live dashboard -- auto-refreshing colony status[/td][/tr]
 [tr][td]Tools[/td][td]Search for nearby buildings, trees, berry bushes[/td][/tr]
@@ -34,7 +36,8 @@ python timberbot.py summary
 python timberbot.py buildings
 python timberbot.py place_building prefab:LumberjackFlag.IronTeeth x:120 y:130 z:2 orientation:south
 python timberbot.py plant_crop x1:123 y1:138 x2:128 y2:141 z:2 crop:Kohlrabi
-python timberbot.py scan x:120 y:140 radius:10    # compact TOON format for AI
+python timberbot.py beavers                          # beaver wellbeing + critical needs
+python timberbot.py scan x:120 y:140 radius:10        # compact map for AI
 python timberbot.py visual x:120 y:140 radius:10  # colored ASCII map for humans
 python timberbot.py watch
 [/code]
