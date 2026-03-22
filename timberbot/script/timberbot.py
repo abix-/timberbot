@@ -231,6 +231,36 @@ class Timberbot:
 
     # -- helpers --
 
+    def tree_clusters(self, radius=10, top=5):
+        """Find clusters of grown trees. Returns top clusters by grown count."""
+        all_trees = self.trees()
+        grown = [t for t in all_trees if t.get("grown") and t.get("alive")]
+        if not grown:
+            return []
+
+        # grid-based clustering: divide map into cells of `radius` size
+        cells = {}
+        for t in grown:
+            cx = t["x"] // radius * radius + radius // 2
+            cy = t["y"] // radius * radius + radius // 2
+            key = (cx, cy, t.get("z", 0))
+            if key not in cells:
+                cells[key] = {"x": cx, "y": cy, "z": key[2], "grown": 0, "total": 0}
+            cells[key]["grown"] += 1
+
+        # count total trees (including seedlings) in each cell
+        for t in all_trees:
+            if not t.get("alive"):
+                continue
+            cx = t["x"] // radius * radius + radius // 2
+            cy = t["y"] // radius * radius + radius // 2
+            key = (cx, cy, t.get("z", 0))
+            if key in cells:
+                cells[key]["total"] += 1
+
+        clusters = sorted(cells.values(), key=lambda c: -c["grown"])
+        return clusters[:top]
+
     @staticmethod
     def near(items, x, y, radius=20):
         """Filter items to those within radius of (x,y). Sorted by distance."""
