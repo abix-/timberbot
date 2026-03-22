@@ -438,6 +438,13 @@ namespace Timberbot
                     entry["wonderActive"] = wonder.IsActive;
                 }
 
+                var dwelling = ec.GetComponent<Dwelling>();
+                if (dwelling != null)
+                {
+                    entry["dwellers"] = dwelling.NumberOfDwellers;
+                    entry["maxDwellers"] = dwelling.MaxBeavers;
+                }
+
                 var clutch = ec.GetComponent<Clutch>();
                 if (clutch != null)
                 {

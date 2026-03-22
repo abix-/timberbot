@@ -53,7 +53,6 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 
 | Gap | Severity | Notes |
 |---|---|---|
-| Dwelling occupant count | Minor | `hasHome` on beavers but no occupant count on buildings |
 | Forestry tree planting | Untested | `plant_crop crop:Pine` should work but not confirmed |
 | Bot condition/fuel | Untested | Bots use same NeedManager, needs should show via `beavers` endpoint |
 
