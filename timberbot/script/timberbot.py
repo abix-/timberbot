@@ -90,7 +90,7 @@ class Timberbot:
         return self._get("/api/districts")
 
     def buildings(self):
-        """All buildings: [{id, name, x, y, z, finished, paused, priority, maxWorkers, desiredWorkers, assignedWorkers}]."""
+        """All buildings with coords, workers, reachability, and power status."""
         return self._get("/api/buildings")
 
     def trees(self):
