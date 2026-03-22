@@ -74,6 +74,7 @@ bot = Timberbot()
 | `bot.clear_planting(x1, y1, x2, y2, z)` | clear planting marks |
 | `bot.set_capacity(id, capacity)` | set stockpile capacity |
 | `bot.set_good(id, good)` | set allowed good on stockpile |
+| `bot.place_path(x1, y1, x2, y2, z)` | place a straight line of paths (horizontal or vertical) |
 
 ### Vanilla API (port 8080)
 
