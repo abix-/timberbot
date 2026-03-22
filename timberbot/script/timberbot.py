@@ -282,6 +282,100 @@ class Timberbot:
 
         return "\n".join(lines)
 
+    def visual(self, x, y, radius=10):
+        """Colored ASCII map for humans. Same data as scan() but rendered as a roguelike grid."""
+        R = "\033[0m"
+        DIM = "\033[2m"
+        RED = "\033[31m"
+        GRN = "\033[32m"
+        YEL = "\033[33m"
+        BLU = "\033[34m"
+        MAG = "\033[35m"
+        CYN = "\033[36m"
+        BGRN = "\033[92m"
+        BYEL = "\033[93m"
+        BBLU = "\033[94m"
+        BWHT = "\033[97m"
+        BOLD = "\033[1m"
+
+        STYLE = {
+            "Path": ("=", YEL),
+            "DistrictCenter": ("D", BOLD + BYEL),
+            "Rowhouse": ("H", YEL), "Barrack": ("H", YEL), "Lodge": ("H", YEL),
+            "Breeding": ("R", YEL),
+            "LumberMill": ("M", BWHT), "WoodWorkshop": ("M", BWHT),
+            "IndustrialLumberMill": ("M", BWHT),
+            "FarmHouse": ("F", CYN), "Forester": ("f", GRN),
+            "PowerWheel": ("E", BYEL), "PowerShaft": ("E", BYEL),
+            "Inventor": ("S", BWHT), "Numbercruncher": ("S", BWHT),
+            "Lumberjack": ("L", RED), "Gatherer": ("G", MAG),
+            "Hauling": ("K", RED), "Scavenger": ("G", RED),
+            "Pump": ("P", BBLU), "Tank": ("W", BBLU),
+            "Floodgate": ("X", CYN), "Dam": ("X", CYN),
+            "Levee": ("X", CYN), "Sluice": ("X", CYN),
+            "Warehouse": ("$", YEL), "Pile": ("$", YEL),
+            "Pine": ("T", GRN), "Birch": ("T", GRN), "Oak": ("T", GRN),
+            "Maple": ("T", GRN), "Chestnut": ("T", GRN),
+            "Bush": ("B", MAG), "berry": ("B", MAG),
+            "Kohlrabi": ("k", BGRN), "Carrot": ("c", BGRN),
+            "Potato": ("p", BGRN), "Wheat": ("w", BGRN),
+            "Cassava": ("a", BGRN), "Sunflower": ("s", BGRN),
+            "Corn": ("n", BGRN), "Eggplant": ("e", BGRN),
+            "Cattail": ("l", BGRN), "Spadderdock": ("d", BGRN),
+            "Soybean": ("y", BGRN), "Canola": ("o", BGRN),
+            "Campfire": ("C", RED),
+        }
+
+        data = self.map(x - radius, y - radius, x + radius, y + radius)
+        tiles = {(t["x"], t["y"]): t for t in data.get("tiles", [])}
+        legend = {}
+
+        lines = []
+        for ty in range(y + radius, y - radius - 1, -1):
+            row = f"{DIM}{ty:3d}{R} "
+            for tx in range(x - radius, x + radius + 1):
+                t = tiles.get((tx, ty))
+                if not t:
+                    row += f"{DIM}?{R}"
+                elif t.get("entrance") and not t.get("occupant"):
+                    row += f"{BWHT}@{R}"
+                    legend["@"] = (BWHT, "entrance")
+                elif t.get("occupant"):
+                    oname = t["occupant"].replace("(Clone)", "").replace(".IronTeeth", "").replace(".Folktails", "")
+                    ch, co = None, None
+                    for key, (c, s) in STYLE.items():
+                        if key.lower() in oname.lower():
+                            ch, co = c, s
+                            legend[c] = (s, key)
+                            break
+                    if ch == "T" and t.get("seedling"):
+                        ch, co = "t", DIM + GRN
+                        legend["t"] = (co, "seedling")
+                    if ch:
+                        row += f"{co}{ch}{R}"
+                    else:
+                        row += f"{DIM}{oname[0]}{R}"
+                elif t["water"] > 0:
+                    row += f"{BLU}~{R}"
+                    legend["~"] = (BLU, "water")
+                elif t["terrain"] > 0:
+                    row += f"{DIM}.{R}"
+                else:
+                    row += " "
+            lines.append(row)
+
+        axis = f"    {DIM}" + "".join(str(i % 10) for i in range(x - radius, x + radius + 1)) + R
+        lines.append(axis)
+
+        leg = "  "
+        for ch, (co, label) in sorted(legend.items(), key=lambda x: x[1][1]):
+            leg += f" {co}{ch}{R} {label}"
+        lines.append(leg)
+
+        # print directly to terminal instead of returning as JSON
+        print("\n".join(lines))
+        return {"rendered": True, "tiles": len(tiles)}
+
     def find(self, source, name=None, x=None, y=None, radius=20):
         """Find entities from a source (buildings/trees/gatherables). Filter by name and/or proximity."""
         items = getattr(self, source)()
