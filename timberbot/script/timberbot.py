@@ -183,6 +183,23 @@ class Timberbot:
         """Set allowed good on a single-good stockpile."""
         return self._post("/api/stockpile/good", {"id": building_id, "good": good})
 
+    def place_path(self, x1, y1, x2, y2, z):
+        """Place a straight line of paths from (x1,y1) to (x2,y2) at height z. Returns list of results."""
+        results = []
+        if x1 == x2:
+            step = 1 if y2 >= y1 else -1
+            for y in range(y1, y2 + step, step):
+                results.append(self.place_building("Path", x1, y, z))
+        elif y1 == y2:
+            step = 1 if x2 >= x1 else -1
+            for x in range(x1, x2 + step, step):
+                results.append(self.place_building("Path", x, y1, z))
+        else:
+            return {"error": "path must be a straight line (x1==x2 or y1==y2)"}
+        placed = sum(1 for r in results if "id" in r)
+        failed = sum(1 for r in results if "error" in r)
+        return {"placed": placed, "failed": failed, "total": len(results)}
+
     # -- vanilla API (levers/adapters) --
 
     def levers(self):
