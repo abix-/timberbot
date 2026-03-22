@@ -25,7 +25,7 @@ CLI output uses [TOON format](https://github.com/toon-format/toon) (Token-Orient
 | `/api/notifications` | tabular | `[N]{subject,description,cycle,cycleDay}` |
 | `/api/workhours` | flat kv | `{endHours, areWorkingHours}` |
 | `/api/speed` | flat kv | `speed: 0-3` (0=pause, 1=normal, 2=fast, 3=fastest) |
-| `/api/map` | tabular | `[N]{x,y,terrain,water,occupant,entrance}` |
+| `/api/map` | tabular | `[N]{x,y,terrain,water,occupant,entrance,badwater,contaminated}` |
 
 ## Write (POST)
 
@@ -94,6 +94,8 @@ water[89]{x,y}:
 ```
 
 Suffixes: `.seedling` = not fully grown, `.dead` = dead stump (buildable), `.entrance` = building entrance tile.
+
+Water tiles with `badwater` > 0 are contaminated water (0-1 scale). Land tiles with `contaminated: true` have soil contamination from nearby badwater.
 
 ### visual color legend
 
