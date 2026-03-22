@@ -420,6 +420,9 @@ def _watch():
 # CLI
 # ---------------------------------------------------------------------------
 
+import inspect
+
+
 def _cast(a):
     if a.lower() == "true":
         return True
@@ -434,10 +437,30 @@ def _cast(a):
             return a
 
 
+def _method_params(method):
+    """Get parameter names (excluding self) for a method."""
+    sig = inspect.signature(method)
+    return [p.name for p in sig.parameters.values() if p.name != "self"]
+
+
+def _format_usage(name, method):
+    """Format usage string showing key:value pairs."""
+    params = []
+    sig = inspect.signature(method)
+    for p in sig.parameters.values():
+        if p.name == "self":
+            continue
+        if p.default is inspect.Parameter.empty:
+            params.append(f"{p.name}:VALUE")
+        else:
+            params.append(f"[{p.name}:{p.default}]")
+    return f"  {name} {' '.join(params)}"
+
+
 def main():
     if len(sys.argv) < 2:
         bot = Timberbot()
-        print("usage: python timberbot.py <method> [args...]")
+        print("usage: python timberbot.py <method> key:value ...")
         print()
         print("methods:")
         for name in sorted(dir(bot)):
@@ -447,6 +470,9 @@ def main():
             if callable(method):
                 doc = (method.__doc__ or "").split("\n")[0].strip()
                 print(f"  {name:30s} {doc}")
+                usage = _format_usage(name, method)
+                if "VALUE" in usage:
+                    print(f"    {usage.strip()}")
         print(f"\n  {'watch':30s} live terminal dashboard")
         sys.exit(1)
 
@@ -469,7 +495,18 @@ def main():
         print(json.dumps(method, indent=2))
         sys.exit(0)
 
-    result = method(*[_cast(a) for a in args])
+    params = _method_params(method)
+    kwargs = {}
+    for a in args:
+        if ":" in a:
+            key, val = a.split(":", 1)
+            kwargs[key] = _cast(val)
+        else:
+            print(f"error: expected key:value, got '{a}'", file=sys.stderr)
+            print(f"usage: {_format_usage(method_name, method).strip()}", file=sys.stderr)
+            sys.exit(1)
+
+    result = method(**kwargs)
     print(json.dumps(result, indent=2))
 
 

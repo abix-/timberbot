@@ -2,7 +2,7 @@
 name: timberbot-cli
 description: Python script for reading and controlling a running Timberborn game via the Timberbot mod. Use when interacting with Timberborn over HTTP.
 user-invocable: false
-version: "2.0"
+version: "3.0"
 updated: "2026-03-21"
 ---
 # Timberbot
@@ -11,17 +11,17 @@ updated: "2026-03-21"
 
 ## Usage
 
-Every public method on the `Timberbot` class is a CLI command. Pass method name + args:
+All args are `key:value` pairs. No positional arguments.
 
 ```bash
-python timberbot.py                              # list all methods
-python timberbot.py summary                      # full colony snapshot
-python timberbot.py buildings                    # list all buildings with IDs
-python timberbot.py set_speed 3                  # fast forward
-python timberbot.py place_building Path 100 130 2
-python timberbot.py place_path 100 130 110 130 2 # line of paths
-python timberbot.py demolish_building -- -12345  # -- allows negative IDs
-python timberbot.py watch                        # live terminal dashboard
+python timberbot.py                                          # list all methods with usage
+python timberbot.py summary                                  # full colony snapshot
+python timberbot.py buildings                                # list all buildings with IDs
+python timberbot.py set_speed speed:3                        # fast forward
+python timberbot.py place_building prefab:Path x:100 y:130 z:2
+python timberbot.py place_path x1:100 y1:130 x2:110 y2:130 z:2
+python timberbot.py demolish_building building_id:12345
+python timberbot.py watch                                    # live terminal dashboard
 ```
 
 Output is always JSON (except `watch` and `scan`).
@@ -42,34 +42,34 @@ Output is always JSON (except `watch` and `scan`).
 | `gatherables` | `[{id, name, x, y, z, alive}]` (berry bushes etc) |
 | `prefabs` | `[{name, sizeX, sizeY, sizeZ}]` |
 | `speed` | `{speed: 0-3}` |
-| `map x1 y1 x2 y2` | terrain + water tiles for a region |
+| `map x1:N y1:N x2:N y2:N` | terrain + water tiles for a region |
 
 ## Write methods
 
 | Command | Description |
 |---------|-------------|
-| `set_speed 0-3` | 0=pause, 1=normal, 2=fast, 3=fastest |
-| `pause_building ID` | pause a building |
-| `unpause_building ID` | unpause a building |
-| `set_priority ID VeryHigh` | VeryLow / Normal / VeryHigh |
-| `set_workers ID 2` | set desired worker count |
-| `set_floodgate ID 1.5` | set floodgate height |
-| `place_building PREFAB X Y Z [ORIENTATION]` | place a building (orientation 0-3, default 0) |
-| `demolish_building ID` | demolish a building |
-| `mark_trees X1 Y1 X2 Y2 Z` | mark rectangular area for cutting |
-| `clear_trees X1 Y1 X2 Y2 Z` | clear cutting marks |
-| `plant_crop X1 Y1 X2 Y2 Z CROP` | mark area for planting |
-| `clear_planting X1 Y1 X2 Y2 Z` | clear planting marks |
-| `set_capacity ID 100` | set stockpile capacity |
-| `set_good ID Log` | set allowed good on stockpile |
-| `place_path X1 Y1 X2 Y2 Z` | place straight line of paths (horizontal or vertical) |
+| `set_speed speed:0-3` | 0=pause, 1=normal, 2=fast, 3=fastest |
+| `pause_building building_id:ID` | pause a building |
+| `unpause_building building_id:ID` | unpause a building |
+| `set_priority building_id:ID priority:VeryHigh` | VeryLow / Normal / VeryHigh |
+| `set_workers building_id:ID count:2` | set desired worker count |
+| `set_floodgate building_id:ID height:1.5` | set floodgate height |
+| `place_building prefab:NAME x:N y:N z:N orientation:0` | place a building (orientation 0-3) |
+| `demolish_building building_id:ID` | demolish a building |
+| `mark_trees x1:N y1:N x2:N y2:N z:N` | mark rectangular area for cutting |
+| `clear_trees x1:N y1:N x2:N y2:N z:N` | clear cutting marks |
+| `plant_crop x1:N y1:N x2:N y2:N z:N crop:Carrot` | mark area for planting |
+| `clear_planting x1:N y1:N x2:N y2:N z:N` | clear planting marks |
+| `set_capacity building_id:ID capacity:100` | set stockpile capacity |
+| `set_good building_id:ID good:Log` | set allowed good on stockpile |
+| `place_path x1:N y1:N x2:N y2:N z:N` | place straight line of paths (horizontal or vertical) |
 
 ## Helpers
 
 | Command | Description |
 |---------|-------------|
-| `scan X Y [RADIUS]` | ASCII grid of terrain, water, buildings, trees (default radius 10) |
-| `find SOURCE [NAME] [X] [Y] [RADIUS]` | find from buildings/trees/gatherables by name and/or proximity |
+| `scan x:N y:N radius:10` | ASCII grid of terrain, water, buildings, trees |
+| `find source:buildings name:Lumber x:100 y:130 radius:20` | find entities by name and/or proximity |
 | `watch` | live terminal dashboard (polls every 3s) |
 
 ## Vanilla API (port 8080)
@@ -78,8 +78,8 @@ Output is always JSON (except `watch` and `scan`).
 |---------|-------------|
 | `levers` | list all levers |
 | `adapters` | list all adapters |
-| `lever_on NAME` | turn lever ON |
-| `lever_off NAME` | turn lever OFF |
+| `lever_on name:MyLever` | turn lever ON |
+| `lever_off name:MyLever` | turn lever OFF |
 
 ## IDs and values
 

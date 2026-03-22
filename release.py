@@ -40,7 +40,7 @@ def main():
         shutil.rmtree(DIST_DIR)
     os.makedirs(DIST_DIR)
 
-    # mod zip (DLL + manifest + thumbnail)
+    # mod zip (DLL + manifest + thumbnail + python client)
     zip_name = f"Timberbot-v{version}.zip"
     zip_path = os.path.join(DIST_DIR, zip_name)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -49,12 +49,9 @@ def main():
         thumb = os.path.join(SRC_DIR, "thumbnail.png")
         if os.path.exists(thumb):
             zf.write(thumb, "thumbnail.png")
-
-    # copy python client alongside
-    shutil.copy2(SCRIPT, DIST_DIR)
+        zf.write(SCRIPT, "timberbot.py")
 
     print(f"packaged: dist/{zip_name}")
-    print(f"packaged: dist/timberbot.py")
 
     # release
     if release:
@@ -62,7 +59,7 @@ def main():
         run(f"git tag {tag}")
         run(f"git push origin {tag}")
         run(
-            f'gh release create {tag} "{zip_path}" "{os.path.join(DIST_DIR, "timberbot.py")}"'
+            f'gh release create {tag} "{zip_path}"'
             f" --repo abix-/TimberbornMods"
             f' --title "Timberbot {tag}"'
             f' --notes "HTTP API for AI agents to read and control Timberborn."'
