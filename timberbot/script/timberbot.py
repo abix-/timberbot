@@ -141,10 +141,17 @@ class Timberbot:
         """Set floodgate height (clamped to min/max)."""
         return self._post("/api/floodgate", {"id": building_id, "height": height})
 
-    def place_building(self, prefab, x, y, z, orientation=0):
-        """Place a building. C# mod validates all tiles before placing."""
+    _ORIENTATIONS = {"south": 0, "west": 1, "north": 2, "east": 3,
+                     "s": 0, "w": 1, "n": 2, "e": 3}
+
+    def place_building(self, prefab, x, y, z, orientation="south"):
+        """Place a building. Orientation: south, west, north, east (or s/w/n/e)."""
+        o = str(orientation).lower()
+        if o not in self._ORIENTATIONS:
+            return {"error": f"invalid orientation '{orientation}', use: south, west, north, east"}
         return self._post("/api/building/place", {
-            "prefab": prefab, "x": x, "y": y, "z": z, "orientation": orientation
+            "prefab": prefab, "x": x, "y": y, "z": z,
+            "orientation": self._ORIENTATIONS[o]
         })
 
     def demolish_building(self, building_id):

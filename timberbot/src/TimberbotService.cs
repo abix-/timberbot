@@ -917,8 +917,21 @@ namespace Timberbot
             if (blockObjectSpec == null)
                 return new { error = "no block object spec", prefab = prefabName };
 
+            // correct origin so user coords = bottom-left corner regardless of orientation
+            // orientations 1,3 swap x/y dimensions
+            var size = blockObjectSpec.Size;
+            int rx = size.x, ry = size.y;
+            if (orientation == 1 || orientation == 3) { rx = size.y; ry = size.x; }
+            int gx = x, gy = y;
+            switch (orientation)
+            {
+                case 1: gy = y + ry - 1; break;
+                case 2: gx = x + rx - 1; gy = y + ry - 1; break;
+                case 3: gx = x + rx - 1; break;
+            }
+
             // pre-validate: check all tiles the building would occupy
-            var footprint = ComputeFootprint(blockObjectSpec, x, y, z, orientation);
+            var footprint = ComputeFootprint(blockObjectSpec, gx, gy, z, orientation);
             var occupied = GetOccupiedTiles();
             bool isWaterBuilding = false;
             foreach (var w in WaterBuildingNames)
@@ -965,7 +978,7 @@ namespace Timberbot
 
             // validation passed -- place the building
             var orient = (Timberborn.Coordinates.Orientation)orientation;
-            var placement = new Placement(new Vector3Int(x, y, z), orient,
+            var placement = new Placement(new Vector3Int(gx, gy, z), orient,
                 FlipMode.Unflipped);
 
             var placer = _blockObjectPlacerService.GetMatchingPlacer(blockObjectSpec);
@@ -979,7 +992,6 @@ namespace Timberbot
 
             if (placedId == 0)
             {
-                var size = blockObjectSpec.Size;
                 return new
                 {
                     error = "placement rejected by game engine",

@@ -80,7 +80,7 @@ def main():
          {"expect_error": "occupied"}),
 
         ("duplicate pump",
-         lambda: bot.place_building("DeepWaterPump.IronTeeth", 121, 133, 1, orientation=1),
+         lambda: bot.place_building("DeepWaterPump.IronTeeth", 121, 133, 1, orientation="west"),
          {"expect_error": "occupied"}),
     ]
 
@@ -130,6 +130,58 @@ def main():
     bot.clear_planting(119, 130, 122, 134, 2)
     bot.clear_planting(110, 130, 112, 132, 2)
     bot.clear_planting(123, 142, 126, 145, 2)
+
+    print("\n=== orientation (origin correction) ===\n")
+
+    # test area: east of DC at y=145 z=2, flat open ground
+    # place all 4 orientations for a 2x2 (FarmHouse) and 3x2 (Barrack)
+    for prefab, sx, sy in [("FarmHouse.IronTeeth", 2, 2),
+                               ("Barrack.IronTeeth", 3, 2),
+                               ("Rowhouse.IronTeeth", 1, 2),
+                               ("IndustrialLumberMill.IronTeeth", 2, 3),
+                               ("WoodWorkshop.IronTeeth", 2, 4),
+                               ("WeatherStation.IronTeeth", 3, 1)]:
+        for orient in ["south", "west", "north", "east"]:
+            bx, by = 130, 145
+            result = bot.place_building(prefab, bx, by, 2, orientation=orient)
+            if "id" not in result:
+                if check(f"{prefab} {orient} placement", result, expect_id=True):
+                    passed += 1
+                else:
+                    failed += 1
+                continue
+
+            # check footprint bottom-left matches user coords
+            tiles = bot.map(bx - 1, by - 1, bx + sx, by + sy)
+            occupied = [(t["x"], t["y"]) for t in tiles.get("tiles", [])
+                        if t.get("occupant") and prefab.split(".")[0] in t["occupant"]]
+            min_x = min(t[0] for t in occupied) if occupied else -1
+            min_y = min(t[1] for t in occupied) if occupied else -1
+            origin_ok = min_x == bx and min_y == by
+            if check(f"{prefab.split('.')[0]} {orient} origin=({min_x},{min_y})",
+                     result, expect_id=True):
+                if origin_ok:
+                    passed += 1
+                else:
+                    failed += 1
+                    print(f"         expected bottom-left ({bx},{by}), got ({min_x},{min_y})")
+            else:
+                failed += 1
+
+            bot.demolish_building(result["id"])
+
+    # named orientation validation
+    result = bot.place_building("Path", 130, 145, 2, orientation="1")
+    if check("numeric orientation rejected", result, expect_error="invalid orientation"):
+        passed += 1
+    else:
+        failed += 1
+
+    result = bot.place_building("Path", 130, 145, 2, orientation="bogus")
+    if check("invalid orientation name rejected", result, expect_error="invalid orientation"):
+        passed += 1
+    else:
+        failed += 1
 
     print(f"\n=== {passed} passed, {failed} failed ===\n")
     sys.exit(1 if failed else 0)
