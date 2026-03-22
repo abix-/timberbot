@@ -51,6 +51,11 @@ def main():
         if os.path.exists(thumb):
             zf.write(thumb, "thumbnail.png")
         zf.write(SCRIPT, "timberbot.py")
+        # include docs
+        docs_dir = os.path.join(ROOT, "docs")
+        for doc in os.listdir(docs_dir):
+            if doc.endswith((".md", ".txt")):
+                zf.write(os.path.join(docs_dir, doc), f"docs/{doc}")
 
     print(f"packaged: dist/{zip_name}")
 
