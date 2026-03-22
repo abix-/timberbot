@@ -709,16 +709,39 @@ namespace Timberbot
                 }
             }
 
+            var occupied = GetOccupiedTiles();
+            int planted = 0, skipped = 0;
             foreach (var c in coords)
             {
+                long key = (long)c.x * 1000000 + (long)c.y * 1000 + c.z;
+                if (occupied.Contains(key))
+                {
+                    skipped++;
+                    continue;
+                }
+                int th = GetTerrainHeight(c.x, c.y);
+                if (th == 0 || th < c.z)
+                {
+                    skipped++;
+                    continue;
+                }
+                float wh = 0f;
+                try { wh = _waterMap.CeiledWaterHeight(new Vector3Int(c.x, c.y, th)); }
+                catch { }
+                if (wh > 0)
+                {
+                    skipped++;
+                    continue;
+                }
                 _plantingService.SetPlantingCoordinates(c, crop);
+                planted++;
             }
 
             return new
             {
                 x1 = minX, y1 = minY, x2 = maxX, y2 = maxY, z,
                 crop,
-                tiles = coords.Count
+                planted, skipped
             };
         }
 
