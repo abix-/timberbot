@@ -32,7 +32,7 @@ Use both together: the built-in API handles real-time automation (sensor -> leve
 [tr][td]Manage[/td][td]Unlock buildings with UI update, set import/export per good[/td][td]Tested[/td][/tr]
 [tr][td]Manage[/td][td]Migrate beavers between districts[/td][td]Implemented[/td][/tr]
 [tr][td]Resources[/td][td]Plant crops, configure stockpiles[/td][td]Tested[/td][/tr]
-[tr][td]Resources[/td][td]Mark trees for cutting[/td][td]Implemented[/td][/tr]
+[tr][td]Resources[/td][td]Mark trees for cutting[/td][td]Tested[/td][/tr]
 [tr][td]Resources[/td][td]Set floodgate heights[/td][td]Implemented[/td][/tr]
 [tr][td]Resources[/td][td]Soil contamination per tile[/td][td]Implemented[/td][/tr]
 [tr][td]Resources[/td][td]Bot condition and fuel via beaver needs[/td][td]Implemented[/td][/tr]
