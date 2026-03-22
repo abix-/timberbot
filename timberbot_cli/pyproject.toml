@@ -1,0 +1,9 @@
+[project]
+name = "timberbot-cli"
+version = "0.2.0"
+description = "CLI and Python client for the Timberbot Timberborn mod"
+requires-python = ">=3.8"
+dependencies = ["requests>=2.28"]
+
+[project.scripts]
+timberbot = "timberbot_cli.__main__:main"
