@@ -134,6 +134,39 @@ def main():
             else:
                 failed += 1
 
+    print("\n=== write endpoints ===\n")
+
+    # distribution write (set + verify + restore)
+    result = bot.set_distribution("District 1", "Log", export_threshold=99)
+    if check("distribution write", "error" not in result):
+        passed += 1
+    else:
+        failed += 1
+    dist = bot.distribution()
+    log_goods = [g for d in dist for g in d.get("goods", []) if g.get("good") == "Log"]
+    if check("distribution write verified", log_goods and log_goods[0].get("exportThreshold") == 99):
+        passed += 1
+    else:
+        failed += 1
+    bot.set_distribution("District 1", "Log", export_threshold=0)  # restore
+
+    # speed write (set + verify + restore)
+    old_speed = bot.speed().get("speed", 0)
+    bot.set_speed(1)
+    result = bot.speed()
+    if check("speed write", result.get("speed") == 1):
+        passed += 1
+    else:
+        failed += 1
+    bot.set_speed(old_speed)  # restore
+
+    # science read
+    result = bot.science()
+    if check("science read", "points" in result and "unlockables" in result):
+        passed += 1
+    else:
+        failed += 1
+
     print("\n=== TOON CLI output ===\n")
 
     cli = "python timberbot/script/timberbot.py"
