@@ -3,5 +3,5 @@
   "Version": "0.3.0",
   "Id": "claude.Timberbot",
   "MinimumGameVersion": "1.0.0.0",
-  "Description": "HTTP API that lets external programs read and control your game. Query resources, population, weather. Place buildings, manage workers, control floodgates. Built for AI agents, scripts, and custom dashboards. Python client included."
+  "Description": "Let an AI play Timberborn. Full read/write HTTP API -- place buildings, mark trees, plant crops, manage workers, control floodgates, all from code. Comes with a Python client so Claude, GPT, or your own scripts can run a beaver colony."
 }
