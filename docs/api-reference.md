@@ -15,11 +15,12 @@ CLI output uses [TOON format](https://github.com/toon-format/toon) (Token-Orient
 | `/api/population` | tabular | `[N]{district,adults,children,bots}` |
 | `/api/resources` | tabular | `[N]{district,good,available,all}` |
 | `/api/districts` | tabular | `[N]{name,adults,children,bots,Water,Log,...}` |
-| `/api/buildings` | tabular | `[N]{id,name,x,y,z,orientation,finished,paused,priority,workers}` |
+| `/api/buildings` | tabular | `[N]{id,name,x,y,z,orientation,finished,paused,priority,workers,...}` + reachable, powered, power fields |
 | `/api/trees` | tabular | `[N]{id,name,x,y,z,marked,alive,grown,growth}` |
 | `/api/gatherables` | tabular | `[N]{id,name,x,y,z,alive}` |
 | `/api/beavers` | tabular | `[N]{id,name,wellbeing,critical}` |
 | `/api/prefabs` | tabular | `[N]{name,sizeX,sizeY,sizeZ}` |
+| `/api/distribution` | nested tabular | `[N]{district, goods[N]{good,importOption,exportThreshold}}` |
 | `/api/speed` | flat kv | `speed: 0-3` |
 | `/api/map` | tabular | `[N]{x,y,terrain,water,occupant,entrance}` |
 
@@ -60,8 +61,9 @@ These are convenience methods in `timberbot.py`, not HTTP endpoints:
 | Method | Description |
 |--------|-------------|
 | `beavers` | beaver wellbeing + critical needs (flattened to tabular TOON) |
+| `tree_clusters` | top 5 clusters of grown trees with coords and counts |
 | `scan x:N y:N radius:10` | occupied tiles + water, skipping empty ground (tabular TOON) |
-| `visual x:N y:N radius:10` | colored ASCII grid for humans -- roguelike style with ANSI colors |
+| `visual x:N y:N radius:10` | colored ASCII grid for humans, roguelike style with ANSI colors |
 | `find source:buildings name:NAME x:N y:N radius:20` | find entities by name and/or proximity |
 | `place_path x1:N y1:N x2:N y2:N z:N` | place a straight line of paths |
 | `watch` | live terminal dashboard (polls every 3s) |
