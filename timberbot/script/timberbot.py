@@ -248,6 +248,9 @@ class Timberbot:
             "Tank": "W", "Pump": "P", "PowerWheel": "E", "PowerShaft": "e",
             "LumberMill": "M", "WoodWorkshop": "M", "IndustrialLumberMill": "M",
             "FarmHouse": "F", "Hauling": "K", "Breeding": "R", "Inventor": "S",
+            "Kohlrabi": "k", "Carrot": "k", "Potato": "k", "Wheat": "k",
+            "Cassava": "k", "Sunflower": "k", "Corn": "k", "Eggplant": "k",
+            "Cattail": "k", "Spadderdock": "k", "Soybean": "k", "Canola": "k",
             "Forester": "f", "Warehouse": "$", "Pile": "$", "Campfire": "C",
             "Floodgate": "X", "Dam": "X", "Levee": "X",
         }
