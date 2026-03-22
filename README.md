@@ -15,11 +15,11 @@ Python client
 
 ```bash
 # with Timberborn running + mod loaded
-python timberbot/script/timberbot.py summary
-python timberbot/script/timberbot.py buildings
-python timberbot/script/timberbot.py set_speed 3
-python timberbot/script/timberbot.py watch              # live dashboard
-python timberbot/script/timberbot.py                    # list all methods
+python timberbot.py summary           # full colony snapshot
+python timberbot.py buildings         # list all buildings
+python timberbot.py set_speed 3       # fast forward
+python timberbot.py watch             # live dashboard
+python timberbot.py                   # list all methods
 ```
 
 As a library:
