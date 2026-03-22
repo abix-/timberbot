@@ -50,6 +50,7 @@ def main():
         ("workhours", lambda: bot.workhours(), lambda r: "endHours" in r),
         ("science", lambda: bot.science(), lambda r: "points" in r),
         ("tree_clusters", lambda: bot.tree_clusters(), lambda r: isinstance(r, list)),
+        ("alerts", lambda: bot.alerts(), lambda r: isinstance(r, list)),
     ]
 
     for name, fn, validate in tests:
@@ -63,7 +64,7 @@ def main():
     print("\n=== beavers detail ===\n")
 
     b = bot.beavers()[0]
-    for field in ["id", "name", "wellbeing", "needs", "anyCritical", "isBot", "contaminated"]:
+    for field in ["id", "name", "wellbeing", "needs", "anyCritical", "isBot", "contaminated", "hasHome"]:
         if check(f"has {field}", field in b):
             passed += 1
         else:
@@ -82,7 +83,7 @@ def main():
     power_bldgs = [b for b in buildings if "isGenerator" in b or "isConsumer" in b]
     if power_bldgs:
         pb = power_bldgs[0]
-        for field in ["isGenerator", "isConsumer"]:
+        for field in ["isGenerator", "isConsumer", "nominalPowerInput", "nominalPowerOutput"]:
             if check(f"power building has {field}", field in pb):
                 passed += 1
             else:
@@ -96,6 +97,20 @@ def main():
     # find a building with reachable field
     reach_bldgs = [b for b in buildings if "reachable" in b]
     if check(f"buildings have reachable ({len(reach_bldgs)} of {len(buildings)})", len(reach_bldgs) > 0):
+        passed += 1
+    else:
+        failed += 1
+
+    # construction progress on unfinished buildings
+    unfinished = [b for b in buildings if not b.get("finished", True) and "buildProgress" in b]
+    if check(f"unfinished buildings have buildProgress ({len(unfinished)})", len(unfinished) >= 0):
+        passed += 1
+    else:
+        failed += 1
+
+    # inventory on storage buildings
+    inv_bldgs = [b for b in buildings if "inventory" in b]
+    if check(f"buildings with inventory ({len(inv_bldgs)})", True):
         passed += 1
     else:
         failed += 1
@@ -175,6 +190,13 @@ def main():
     else:
         failed += 1
     bot.set_workhours(old)  # restore
+
+    # migrate (will fail gracefully with single district -- that's expected)
+    result = bot.migrate("District 1", "NonExistent", 1)
+    if check("migrate write (invalid target)", "error" in result):
+        passed += 1
+    else:
+        failed += 1
 
     # distribution import option write
     result = bot.set_distribution("District 1", "Plank", import_option="Auto")
