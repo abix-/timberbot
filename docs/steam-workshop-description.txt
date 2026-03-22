@@ -6,7 +6,7 @@ Timberborn already has a built-in HTTP API (port 8080) for automation with lever
 [table]
 [tr][th]Capability[/th][th]Built-in API[/th][th]Timberbot API[/th][/tr]
 [tr][td]Building placement + demolition[/td][td]No[/td][td]Yes, with tile validation[/td][/tr]
-[tr][td]Read all game state[/td][td]Lever/adapter signals only[/td][td]Buildings, beavers, trees, map, resources, weather[/td][/tr]
+[tr][td]Read game state[/td][td]On/off signals via sensor -> adapter chains[/td][td]Full data: buildings, beavers, trees, map, resources, weather, science[/td][/tr]
 [tr][td]Beaver wellbeing + needs[/td][td]No[/td][td]Per-beaver needs, contamination, workplace[/td][/tr]
 [tr][td]Colony management[/td][td]No[/td][td]Workers, priority, speed, crops, trees, science, distribution[/td][/tr]
 [tr][td]Map + terrain reading[/td][td]No[/td][td]Terrain, water, contamination, occupants[/td][/tr]
