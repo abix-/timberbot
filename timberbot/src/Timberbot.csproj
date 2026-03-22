@@ -184,6 +184,22 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.DistributionSystem.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.BuildingsReachability" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.BuildingsReachability.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.MechanicalSystem" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.MechanicalSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.PowerGeneration" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.PowerGeneration.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Terraforming" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.Terraforming.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.NeedSpecs" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.NeedSpecs.dll</HintPath>

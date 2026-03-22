@@ -31,6 +31,8 @@ using Timberborn.WorkSystem;
 using Timberborn.NeedSystem;
 using Timberborn.LifeSystem;
 using Timberborn.Wellbeing;
+using Timberborn.BuildingsReachability;
+using Timberborn.MechanicalSystem;
 using UnityEngine;
 
 namespace Timberbot
@@ -321,6 +323,14 @@ namespace Timberbot
                     entry["desiredWorkers"] = workplace.DesiredWorkers;
                     entry["assignedWorkers"] = workplace.NumberOfAssignedWorkers;
                 }
+
+                var reachability = ec.GetComponent<EntityReachabilityStatus>();
+                if (reachability != null)
+                    entry["reachable"] = !reachability.IsAnyUnreachable();
+
+                var mechanical = ec.GetComponent<MechanicalBuilding>();
+                if (mechanical != null)
+                    entry["powered"] = mechanical.ActiveAndPowered;
 
                 results.Add(entry);
             }
