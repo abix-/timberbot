@@ -1396,6 +1396,9 @@ namespace Timberbot
 
                     if (terrainHeight < tile.z && !isWaterBuilding)
                         return new { error = $"terrain too low at ({tile.x},{tile.y}): height {terrainHeight} < {tile.z}", prefab = prefabName, x, y, z, orientation };
+
+                    if (terrainHeight > tile.z && !isWaterBuilding)
+                        return new { error = $"terrain too high at ({tile.x},{tile.y}): height {terrainHeight} > {tile.z} (building would clip underground)", prefab = prefabName, x, y, z, orientation };
                 }
 
                 // check occupancy (all floors)
