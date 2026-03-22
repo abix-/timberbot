@@ -93,7 +93,7 @@ water[89]{x,y}:
   123,131
 ```
 
-Suffixes: `.seedling` = not fully grown, `.entrance` = building entrance tile.
+Suffixes: `.seedling` = not fully grown, `.dead` = dead stump (buildable), `.entrance` = building entrance tile.
 
 ### visual color legend
 

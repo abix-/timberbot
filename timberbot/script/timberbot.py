@@ -331,10 +331,13 @@ class Timberbot:
             has_water = t.get("water", 0) > 0
             is_entrance = t.get("entrance", False)
             is_seedling = t.get("seedling", False)
+            is_dead = t.get("dead", False)
 
             if has_occupant:
                 name = has_occupant.replace("(Clone)", "").replace(".IronTeeth", "").replace(".Folktails", "")
-                if is_seedling:
+                if is_dead:
+                    name += ".dead"
+                elif is_seedling:
                     name += ".seedling"
                 if is_entrance:
                     name += ".entrance"

@@ -695,6 +695,7 @@ namespace Timberbot
             var occupants = new Dictionary<long, string>();
             var entrances = new HashSet<long>();
             var seedlings = new HashSet<long>();
+            var deadTiles = new HashSet<long>();
             foreach (var ec in _entityRegistry.Entities)
             {
                 var bo = ec.GetComponent<BlockObject>();
@@ -707,6 +708,14 @@ namespace Timberbot
                 {
                     var c = bo.Coordinates;
                     seedlings.Add((long)c.x * 100000 + c.y);
+                }
+
+                // track dead trees/plants (stumps -- buildable)
+                var lnr = ec.GetComponent<LivingNaturalResource>();
+                if (lnr != null && lnr.IsDead)
+                {
+                    var c = bo.Coordinates;
+                    deadTiles.Add((long)c.x * 100000 + c.y);
                 }
 
                 // record entrance tile
@@ -780,6 +789,7 @@ namespace Timberbot
                     if (occupant != null) tile["occupant"] = occupant;
                     if (isEntrance) tile["entrance"] = true;
                     if (isSeedling) tile["seedling"] = true;
+                    if (deadTiles.Contains(key)) tile["dead"] = true;
                     try
                     {
                         if (_soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight)))
@@ -1209,6 +1219,9 @@ namespace Timberbot
                 // skip temporary debris from demolished buildings
                 var name = ec.GameObject.name;
                 if (name.Contains("RecoveredGoodStack") || name.Contains("GoodStack")) continue;
+                // skip dead trees/plants -- game allows building on them
+                var living = ec.GetComponent<LivingNaturalResource>();
+                if (living != null && living.IsDead) continue;
                 try
                 {
                     foreach (var block in bo.PositionedBlocks.GetAllBlocks())

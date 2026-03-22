@@ -29,11 +29,13 @@ Every turn:
 
 ## Placement workflow (MANDATORY every time)
 
-1. `scan` the area -- find paths, buildings, open ground
-2. Pick orientation so entrance FACES the path
-3. `place_building` with correct coords and orientation
-4. `scan` again -- confirm entrance faces the path. If not, demolish and redo
-- **NEVER skip steps 1 or 4**
+1. `scan` the area -- find paths, buildings, open ground. `.dead` tiles are buildable stumps
+2. Check terrain height with `map` -- z MUST match terrain height
+3. Pick orientation so entrance FACES the path
+4. `place_building` with correct coords, z, and orientation
+5. `scan` again -- confirm entrance faces the path. If not, demolish and redo
+- **NEVER skip steps 1, 2, or 5**
+- Scan suffixes: `.dead` = buildable stump, `.seedling` = growing (blocked), `.entrance` = door tile
 
 ## Orientation
 
