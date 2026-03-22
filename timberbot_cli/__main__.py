@@ -34,6 +34,11 @@ def main():
     method_name = raw_args[0]
     args = raw_args[1:]
 
+    if method_name == "watch":
+        from timberbot_cli.watch import main as watch_main
+        watch_main()
+        sys.exit(0)
+
     if not hasattr(bot, method_name):
         print(f"error: unknown method '{method_name}'", file=sys.stderr)
         sys.exit(1)
