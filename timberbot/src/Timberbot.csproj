@@ -259,6 +259,11 @@
     <Copy SourceFiles="manifest.json" DestinationFolder="$(ModDir)" />
     <Copy SourceFiles="thumbnail.png" DestinationFolder="$(ModDir)" Condition="Exists('thumbnail.png')" />
     <Copy SourceFiles="..\script\timberbot.py" DestinationFolder="$(ModDir)" />
+    <MakeDir Directories="$(ModDir)\docs" />
+    <Copy SourceFiles="..\..\docs\api-reference.md" DestinationFolder="$(ModDir)\docs" />
+    <Copy SourceFiles="..\..\docs\getting-started.md" DestinationFolder="$(ModDir)\docs" />
+    <Copy SourceFiles="..\..\docs\developing.md" DestinationFolder="$(ModDir)\docs" />
+    <Copy SourceFiles="..\..\docs\timberbot.md" DestinationFolder="$(ModDir)\docs" />
     <Message Text="Deployed to $(ModDir)" Importance="high" />
   </Target>
 
