@@ -46,6 +46,9 @@ def main():
         ("map (region)", lambda: bot.map(120, 130, 125, 135), lambda r: "tiles" in r),
         ("scan", lambda: bot.scan(120, 135, 5), lambda r: isinstance(r, dict) and "occupied" in r),
         ("distribution", lambda: bot.distribution(), lambda r: isinstance(r, list)),
+        ("notifications", lambda: bot.notifications(), lambda r: isinstance(r, list)),
+        ("workhours", lambda: bot.workhours(), lambda r: "endHours" in r),
+        ("science", lambda: bot.science(), lambda r: "points" in r),
         ("tree_clusters", lambda: bot.tree_clusters(), lambda r: isinstance(r, list)),
     ]
 
@@ -60,7 +63,7 @@ def main():
     print("\n=== beavers detail ===\n")
 
     b = bot.beavers()[0]
-    for field in ["id", "name", "wellbeing", "needs", "anyCritical"]:
+    for field in ["id", "name", "wellbeing", "needs", "anyCritical", "isBot", "contaminated"]:
         if check(f"has {field}", field in b):
             passed += 1
         else:
@@ -160,6 +163,36 @@ def main():
     # science read
     result = bot.science()
     if check("science read", "points" in result and "unlockables" in result):
+        passed += 1
+    else:
+        failed += 1
+
+    # work hours write (set + verify + restore)
+    old = bot.workhours().get("endHours", 16)
+    result = bot.set_workhours(14)
+    if check("workhours write", result.get("endHours") == 14):
+        passed += 1
+    else:
+        failed += 1
+    bot.set_workhours(old)  # restore
+
+    print("\n=== pagination ===\n")
+
+    all_buildings = bot.buildings()
+    limited = bot.buildings(limit=3)
+    if check(f"buildings limit=3 ({len(limited)} of {len(all_buildings)})", len(limited) == 3):
+        passed += 1
+    else:
+        failed += 1
+
+    offset_buildings = bot.buildings(limit=2, offset=5)
+    if check("buildings offset=5 limit=2", len(offset_buildings) == 2 and offset_buildings[0]["id"] == all_buildings[5]["id"]):
+        passed += 1
+    else:
+        failed += 1
+
+    all_trees = bot.trees(limit=10)
+    if check(f"trees limit=10 ({len(all_trees)})", len(all_trees) == 10):
         passed += 1
     else:
         failed += 1
