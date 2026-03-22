@@ -5,4 +5,7 @@ obj/
 .vs/
 __pycache__/
 *.pyc
+*.egg-info/
+dist/
+build/
 workshop_data.json
