@@ -69,14 +69,30 @@ If your Steam install is elsewhere, edit `GameManagedDir` in `Timberbot.csproj`.
 
 ### First publish
 
-1. `dotnet build` (auto-deploys to mods folder)
-2. Launch Timberborn, open Mod Manager
-3. Use the upload panel (accept Workshop ToS on first upload)
-4. A `workshop_data.json` is generated -- keep it for updates (gitignored)
+1. `dotnet build` (auto-deploys DLL + manifest + thumbnail to mods folder)
+2. Launch Timberborn, open Mod Manager from main menu
+3. Find Timberbot in your local mods, click the upload/publish button
+4. Accept Steam Workshop ToS on first upload
+5. A `workshop_data.json` is generated in your mods folder -- this links your local mod to the Workshop item ID
 
 ### Updating
 
-With `workshop_data.json` present, re-uploading lets you selectively update description, visibility, and preview image. Check "Upload as new" to create a separate entry.
+1. Bump version in `manifest.json` and `Timberbot.csproj`
+2. `dotnet build` (auto-deploys updated files to mods folder)
+3. Launch Timberborn, open Mod Manager
+4. Your mod shows an update option because `workshop_data.json` is present
+5. Check the boxes for what to update (files, description, preview image)
+6. Upload
+
+**Important:** Keep `workshop_data.json` in your mods folder (it's gitignored). Without it, uploading creates a NEW Workshop entry instead of updating the existing one.
+
+### GitHub release
+
+```bash
+python timberbot/script/release.py --release
+```
+
+This builds a Release DLL, packages a ZIP (DLL + manifest + thumbnail + timberbot.py), tags the version, and creates a GitHub release.
 
 ### mod.io
 
