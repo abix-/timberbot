@@ -1,190 +1,196 @@
-"""Thin wrapper over the Timberborn HTTP API."""
+"""Timberbot API client for controlling Timberborn.
+
+Usage:
+    from timberborn.api import Timberbot
+    bot = Timberbot()
+
+Read state (noun methods):
+    bot.summary()          -> {time, weather, districts}
+    bot.time()             -> {dayNumber, dayProgress, partialDayNumber}
+    bot.weather()          -> {cycle, cycleDay, isHazardous, ...}
+    bot.population()       -> [{district, adults, children, bots}]
+    bot.resources()        -> {districtName: {goodName: {available, all}}}
+    bot.districts()        -> [{name, population, resources}]
+    bot.buildings()        -> [{id, name, x, y, z, finished, paused, priority, maxWorkers, ...}]
+    bot.trees()            -> [{id, name, x, y, z, marked, alive}]
+    bot.prefabs()          -> [{name, sizeX, sizeY, sizeZ}]
+    bot.speed()            -> {speed}
+
+Write actions (verb_noun methods):
+    bot.set_speed(0-3)
+    bot.pause_building(id)
+    bot.unpause_building(id)
+    bot.set_priority(id, "VeryLow"|"Normal"|"VeryHigh")
+    bot.set_workers(id, count)
+    bot.set_floodgate(id, height)
+    bot.place_building(prefab, x, y, z, orientation=0)
+    bot.demolish_building(id)
+    bot.mark_trees(x1, y1, x2, y2, z)
+    bot.clear_trees(x1, y1, x2, y2, z)
+    bot.set_capacity(id, capacity)
+    bot.set_good(id, good_name)
+
+Vanilla API:
+    bot.levers()
+    bot.adapters()
+    bot.lever_on(name)
+    bot.lever_off(name)
+"""
 import urllib.parse
 
 import requests
 
 
-class TimberbornAPI:
-    """Client for vanilla Timberborn HTTP API (port 8080) + Timberbot mod (port 8085)."""
+class Timberbot:
+    """Client for Timberbot mod (port 8085) + vanilla API (port 8080)."""
 
-    def __init__(self, game_url="http://localhost:8080", bridge_url="http://localhost:8085"):
-        self.game_url = game_url.rstrip("/")
-        self.bridge_url = bridge_url.rstrip("/")
-        self.session = requests.Session()
-        self.session.headers["Accept"] = "application/json"
+    def __init__(self, host="localhost", port=8085, game_port=8080):
+        self.url = f"http://{host}:{port}"
+        self.game_url = f"http://{host}:{game_port}"
+        self.s = requests.Session()
+        self.s.headers["Accept"] = "application/json"
 
-    def _game(self, path):
-        return f"{self.game_url}{path}"
+    def _get(self, path):
+        r = self.s.get(f"{self.url}{path}", timeout=5)
+        r.raise_for_status()
+        return r.json()
 
-    def _bridge(self, path):
-        return f"{self.bridge_url}{path}"
+    def _post(self, path, data):
+        r = self.s.post(f"{self.url}{path}", json=data, timeout=5)
+        r.raise_for_status()
+        return r.json()
 
-    @staticmethod
-    def _encode(name):
-        return urllib.parse.quote(name, safe="")
+    def _game_get(self, path):
+        r = self.s.get(f"{self.game_url}{path}", timeout=5)
+        r.raise_for_status()
+        return r.json()
 
-    def _get_game(self, path):
-        resp = self.session.get(self._game(path), timeout=5)
-        resp.raise_for_status()
-        return resp
+    def _game_post(self, path):
+        r = self.s.post(f"{self.game_url}{path}", timeout=5)
+        r.raise_for_status()
+        return r.json()
 
-    def _post_game(self, path):
-        resp = self.session.post(self._game(path), timeout=5)
-        resp.raise_for_status()
-        return resp
-
-    def _get_bridge(self, path):
-        resp = self.session.get(self._bridge(path), timeout=5)
-        resp.raise_for_status()
-        return resp
-
-    def _post_bridge(self, path, data):
-        resp = self.session.post(self._bridge(path), json=data, timeout=5)
-        resp.raise_for_status()
-        return resp
-
-    # -- connection check --
+    # -- connection --
 
     def ping(self):
-        """Return True if the game API is reachable."""
+        """True if Timberbot mod is reachable."""
         try:
-            self._get_game("/api/levers")
-            return True
+            return self._get("/api/ping").get("ready", False)
         except (requests.ConnectionError, requests.Timeout):
             return False
 
-    def ping_bridge(self):
-        """Return True if the Timberbot mod is reachable."""
-        try:
-            data = self._get_bridge("/api/ping").json()
-            return data.get("ready", False)
-        except (requests.ConnectionError, requests.Timeout):
-            return False
+    # -- read state (nouns) --
 
-    # -- levers (read + write) via vanilla API --
+    def summary(self):
+        """Full snapshot: time + weather + districts with resources and population."""
+        return self._get("/api/summary")
 
-    def get_levers(self):
-        """Return list of all levers."""
-        return self._get_game("/api/levers").json()
+    def time(self):
+        """Game time: {dayNumber, dayProgress, partialDayNumber}."""
+        return self._get("/api/time")
 
-    def get_lever(self, name):
-        """Return a single lever by name."""
-        return self._get_game(f"/api/levers/{self._encode(name)}").json()
+    def weather(self):
+        """Weather: {cycle, cycleDay, isHazardous, temperateWeatherDuration, hazardousWeatherDuration}."""
+        return self._get("/api/weather")
 
-    def switch_on(self, name):
-        """Turn a lever ON. Returns True on success."""
-        self._post_game(f"/api/switch-on/{self._encode(name)}")
-        return True
+    def population(self):
+        """Beaver counts: [{district, adults, children, bots}]."""
+        return self._get("/api/population")
 
-    def switch_off(self, name):
-        """Turn a lever OFF. Returns True on success."""
-        self._post_game(f"/api/switch-off/{self._encode(name)}")
-        return True
+    def resources(self):
+        """Resource stocks: {districtName: {goodName: {available, all}}}."""
+        return self._get("/api/resources")
 
-    def set_color(self, name, hex_color):
-        """Set lever color (6-char hex, no #). Returns True on success."""
-        color = hex_color.lstrip("#")
-        self._post_game(f"/api/color/{self._encode(name)}/{color}")
-        return True
+    def districts(self):
+        """Districts: [{name, population: {adults, children, bots}, resources: {...}}]."""
+        return self._get("/api/districts")
 
-    # -- adapters (read-only) via vanilla API --
+    def buildings(self):
+        """All buildings: [{id, name, x, y, z, finished, paused, priority, maxWorkers, desiredWorkers, assignedWorkers}]."""
+        return self._get("/api/buildings")
 
-    def get_adapters(self):
-        """Return list of all adapters."""
-        return self._get_game("/api/adaptors").json()
+    def trees(self):
+        """All cuttable trees: [{id, name, x, y, z, marked, alive}]."""
+        return self._get("/api/trees")
 
-    def get_adapter(self, name):
-        """Return a single adapter by name."""
-        return self._get_game(f"/api/adaptors/{self._encode(name)}").json()
+    def prefabs(self):
+        """Available building templates: [{name, sizeX, sizeY, sizeZ}]."""
+        return self._get("/api/prefabs")
 
-    # -- rich game state via Timberbot mod --
+    def speed(self):
+        """Current game speed: {speed: 0-3}."""
+        return self._get("/api/speed")
 
-    def get_summary(self):
-        """Full colony snapshot: time, weather, districts with resources + population."""
-        return self._get_bridge("/api/summary").json()
-
-    def get_resources(self):
-        """All resource stocks per district."""
-        return self._get_bridge("/api/resources").json()
-
-    def get_population(self):
-        """Beaver/bot counts per district."""
-        return self._get_bridge("/api/population").json()
-
-    def get_time(self):
-        """Current game time: day number, progress, cycle."""
-        return self._get_bridge("/api/time").json()
-
-    def get_weather(self):
-        """Current weather: cycle, cycle day."""
-        return self._get_bridge("/api/weather").json()
-
-    def get_districts(self):
-        """All districts with resources and population."""
-        return self._get_bridge("/api/districts").json()
-
-    def get_buildings(self):
-        """All buildings with id, name, coords, pause/floodgate/priority state."""
-        return self._get_bridge("/api/buildings").json()
-
-    # -- write endpoints via Timberbot mod --
-
-    def get_speed(self):
-        """Current game speed."""
-        return self._get_bridge("/api/speed").json()
+    # -- write actions (verb_noun) --
 
     def set_speed(self, speed):
-        """Set game speed (0=pause, 1/2/3)."""
-        return self._post_bridge("/api/speed", {"speed": speed}).json()
+        """Set game speed. 0=pause, 1=normal, 2=fast, 3=fastest."""
+        return self._post("/api/speed", {"speed": speed})
 
-    def pause_building(self, building_id, paused=True):
-        """Pause or unpause a building by ID."""
-        return self._post_bridge("/api/building/pause", {"id": building_id, "paused": paused}).json()
+    def pause_building(self, building_id):
+        """Pause a building."""
+        return self._post("/api/building/pause", {"id": building_id, "paused": True})
 
-    def set_floodgate_height(self, building_id, height):
-        """Set floodgate height by building ID."""
-        return self._post_bridge("/api/floodgate", {"id": building_id, "height": height}).json()
+    def unpause_building(self, building_id):
+        """Unpause a building."""
+        return self._post("/api/building/pause", {"id": building_id, "paused": False})
 
     def set_priority(self, building_id, priority):
-        """Set building priority (VeryLow, Normal, VeryHigh)."""
-        return self._post_bridge("/api/priority", {"id": building_id, "priority": priority}).json()
-
-    # -- Tier 2 endpoints --
-
-    def get_trees(self):
-        """All cuttable trees/resources with coords and marked status."""
-        return self._get_bridge("/api/trees").json()
+        """Set building priority. Values: VeryLow, Normal, VeryHigh."""
+        return self._post("/api/priority", {"id": building_id, "priority": priority})
 
     def set_workers(self, building_id, count):
-        """Set desired worker count on a workplace."""
-        return self._post_bridge("/api/workers", {"id": building_id, "count": count}).json()
+        """Set desired worker count (0 to maxWorkers)."""
+        return self._post("/api/workers", {"id": building_id, "count": count})
 
-    def mark_cutting_area(self, x1, y1, x2, y2, z, marked=True):
-        """Mark or clear a rectangular cutting area."""
-        return self._post_bridge("/api/cutting/area", {
-            "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z, "marked": marked
-        }).json()
-
-    def set_stockpile_capacity(self, building_id, capacity):
-        """Set stockpile capacity."""
-        return self._post_bridge("/api/stockpile/capacity", {"id": building_id, "capacity": capacity}).json()
-
-    def set_stockpile_good(self, building_id, good):
-        """Set allowed good on a single-good stockpile."""
-        return self._post_bridge("/api/stockpile/good", {"id": building_id, "good": good}).json()
-
-    # -- Tier 3 endpoints --
-
-    def get_prefabs(self):
-        """List all available building prefab templates."""
-        return self._get_bridge("/api/prefabs").json()
-
-    def demolish_building(self, building_id):
-        """Demolish/delete a building by ID."""
-        return self._post_bridge("/api/building/demolish", {"id": building_id}).json()
+    def set_floodgate(self, building_id, height):
+        """Set floodgate height (clamped to min/max)."""
+        return self._post("/api/floodgate", {"id": building_id, "height": height})
 
     def place_building(self, prefab, x, y, z, orientation=0):
-        """Place a new building. orientation: 0-3 (0=default, 1=cw90, 2=cw180, 3=cw270)."""
-        return self._post_bridge("/api/building/place", {
+        """Place a building. Get prefab names from prefabs(). orientation: 0-3."""
+        return self._post("/api/building/place", {
             "prefab": prefab, "x": x, "y": y, "z": z, "orientation": orientation
-        }).json()
+        })
+
+    def demolish_building(self, building_id):
+        """Demolish a building. Get IDs from buildings()."""
+        return self._post("/api/building/demolish", {"id": building_id})
+
+    def mark_trees(self, x1, y1, x2, y2, z):
+        """Mark a rectangular area for tree cutting."""
+        return self._post("/api/cutting/area", {
+            "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z, "marked": True
+        })
+
+    def clear_trees(self, x1, y1, x2, y2, z):
+        """Clear tree cutting marks from a rectangular area."""
+        return self._post("/api/cutting/area", {
+            "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z, "marked": False
+        })
+
+    def set_capacity(self, building_id, capacity):
+        """Set stockpile capacity."""
+        return self._post("/api/stockpile/capacity", {"id": building_id, "capacity": capacity})
+
+    def set_good(self, building_id, good):
+        """Set allowed good on a single-good stockpile."""
+        return self._post("/api/stockpile/good", {"id": building_id, "good": good})
+
+    # -- vanilla API (levers/adapters) --
+
+    def levers(self):
+        """List all levers (vanilla API port 8080)."""
+        return self._game_get("/api/levers")
+
+    def adapters(self):
+        """List all adapters (vanilla API port 8080)."""
+        return self._game_get("/api/adaptors")
+
+    def lever_on(self, name):
+        """Turn a lever ON."""
+        return self._game_post(f"/api/switch-on/{urllib.parse.quote(name, safe='')}")
+
+    def lever_off(self, name):
+        """Turn a lever OFF."""
+        return self._game_post(f"/api/switch-off/{urllib.parse.quote(name, safe='')}")

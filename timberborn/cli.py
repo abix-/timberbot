@@ -1,24 +1,21 @@
-"""Interactive REPL for Timberbot interactive REPL."""
+"""Timberbot interactive REPL."""
 import json
 import shlex
-import sys
 import threading
-import time
 
 import requests
 
-from timberborn.api import TimberbornAPI
+from timberborn.api import Timberbot
 
 HELP_TEXT = """
 Vanilla API (port 8080):
   status              show all levers + adapters
   on <name>           switch lever on
   off <name>          switch lever off
-  color <name> <hex>  set lever color
   watch [secs]        poll adapters every N seconds (default 5)
   stop                stop polling
 
-Timberbot read (port 8085):
+Read (port 8085):
   summary             full colony snapshot
   resources           resource stocks per district
   population          beaver/bot counts per district
@@ -27,39 +24,39 @@ Timberbot read (port 8085):
   districts           all districts with resources + population
   buildings           list all buildings with IDs
   trees               list all cuttable trees
+  prefabs             list available building templates
 
-Timberbot write (port 8085):
-  speed [0-3]         get/set game speed (0=pause)
-  pause <id>          pause building
-  unpause <id>        unpause building
-  floodgate <id> <h>  set floodgate height
-  priority <id> <p>   set priority (VeryLow/Normal/VeryHigh)
-  workers <id> <n>    set desired workers
-  cut <x1> <y1> <x2> <y2> <z>    mark cutting area
-  uncut <x1> <y1> <x2> <y2> <z>  clear cutting area
-  capacity <id> <n>   set stockpile capacity
+Write (port 8085):
+  speed [0-3]                      get/set game speed (0=pause)
+  pause <id>                       pause building
+  unpause <id>                     unpause building
+  priority <id> <p>                set priority (VeryLow/Normal/VeryHigh)
+  workers <id> <n>                 set desired workers
+  floodgate <id> <h>               set floodgate height
+  place <prefab> <x> <y> <z> [o]   place building (orientation 0-3)
+  demolish <id>                    demolish building
+  cut <x1> <y1> <x2> <y2> <z>     mark cutting area
+  uncut <x1> <y1> <x2> <y2> <z>   clear cutting area
+  capacity <id> <n>                set stockpile capacity
 
 General:
-  ping                check connectivity (game + bridge)
+  ping                check connectivity
   help                show this message
   quit / exit         exit
 """
 
 
 def pp(data):
-    """Pretty-print JSON data."""
     print(json.dumps(data, indent=2))
 
 
 class Watcher:
-    """Background thread that polls adapters and prints changes."""
-
-    def __init__(self, api, interval=5.0):
-        self.api = api
+    def __init__(self, bot, interval=5.0):
+        self.bot = bot
         self.interval = interval
         self._stop = threading.Event()
         self._thread = None
-        self._prev_states = {}
+        self._prev = {}
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -79,16 +76,13 @@ class Watcher:
     def _loop(self):
         while not self._stop.is_set():
             try:
-                adapters = self.api.get_adapters()
-                for a in adapters:
+                for a in self.bot.adapters():
                     name = a.get("name", "?")
                     state = a.get("state")
-                    prev = self._prev_states.get(name)
+                    prev = self._prev.get(name)
                     if prev is not None and prev != state:
-                        label = "ON" if state else "OFF"
-                        prev_label = "ON" if prev else "OFF"
-                        print(f"\n[CHANGE] {name}: {prev_label} -> {label}")
-                    self._prev_states[name] = state
+                        print(f"\n[CHANGE] {name}: {'ON' if prev else 'OFF'} -> {'ON' if state else 'OFF'}")
+                    self._prev[name] = state
             except requests.ConnectionError:
                 pass
             except Exception as exc:
@@ -96,96 +90,13 @@ class Watcher:
             self._stop.wait(self.interval)
 
 
-def print_status(api):
-    """Print all levers and adapters."""
-    try:
-        levers = api.get_levers()
-    except requests.ConnectionError:
-        print("  (game not reachable)")
-        return
-    except Exception as exc:
-        print(f"  error: {exc}")
-        return
-
-    print(f"\n  Levers ({len(levers)}):")
-    if not levers:
-        print("    (none)")
-    for lev in levers:
-        state = "ON" if lev.get("state") else "OFF"
-        spring = " [spring]" if lev.get("springReturn") else ""
-        print(f"    {lev.get('name', '?'):30s} {state}{spring}")
-
-    try:
-        adapters = api.get_adapters()
-    except Exception as exc:
-        print(f"\n  Adapters: error: {exc}")
-        return
-
-    print(f"\n  Adapters ({len(adapters)}):")
-    if not adapters:
-        print("    (none)")
-    for ad in adapters:
-        state = "ON" if ad.get("state") else "OFF"
-        print(f"    {ad.get('name', '?'):30s} {state}")
-    print()
-
-
-def print_summary(api):
-    """Print full colony snapshot from Timberbot."""
-    try:
-        data = api.get_summary()
-    except requests.ConnectionError:
-        print("  bridge not reachable (is Timberbot mod installed?)")
-        return
-
-    if "error" in data:
-        print(f"  {data['error']}")
-        return
-
-    t = data.get("time", {})
-    w = data.get("weather", {})
-    print(f"\n  Day {t.get('dayNumber', '?')} ({t.get('dayProgress', 0):.0%})")
-    print(f"  Cycle {w.get('cycle', '?')}, day {w.get('cycleDay', '?')}")
-
-    districts = data.get("districts", [])
-    for d in districts:
-        name = d.get("name", "?")
-        pop = d.get("population", {})
-        adults = pop.get("adults", 0)
-        children = pop.get("children", 0)
-        print(f"\n  [{name}] population: {adults} adults, {children} children")
-
-        resources = d.get("resources", {})
-        if resources:
-            # Show non-zero resources
-            nonzero = {k: v for k, v in resources.items() if v and v != 0}
-            if nonzero:
-                for good, amount in sorted(nonzero.items()):
-                    print(f"    {good:25s} {amount}")
-            else:
-                print("    (no resources)")
-    print()
-
-
 def main():
-    api = TimberbornAPI()
-    watcher = Watcher(api)
+    bot = Timberbot()
+    watcher = Watcher(bot)
 
-    print("=== Timberborn Timberbot ===")
-
-    game_ok = api.ping()
-    bridge_ok = api.ping_bridge()
-
-    if game_ok:
-        print("  game API:   connected (port 8080)")
-    else:
-        print("  game API:   not detected (port 8080)")
-
-    if bridge_ok:
-        print("  bridge mod: connected (port 8085)")
-    else:
-        print("  bridge mod: not detected (port 8085)")
-
+    print("=== Timberbot ===")
+    ok = bot.ping()
+    print(f"  mod: {'connected' if ok else 'not detected'} (port 8085)")
     print("\nType 'help' for commands.\n")
 
     while True:
@@ -193,7 +104,6 @@ def main():
             line = input("tb> ").strip()
         except (EOFError, KeyboardInterrupt):
             break
-
         if not line:
             continue
 
@@ -211,133 +121,91 @@ def main():
             elif cmd == "help":
                 print(HELP_TEXT)
             elif cmd == "ping":
-                game_ok = api.ping()
-                bridge_ok = api.ping_bridge()
-                print(f"  game:   {'connected' if game_ok else 'not reachable'}")
-                print(f"  bridge: {'connected' if bridge_ok else 'not reachable'}")
-            elif cmd == "status":
-                print_status(api)
+                print(f"  mod: {'connected' if bot.ping() else 'not reachable'}")
+
+            # -- read --
             elif cmd == "summary":
-                print_summary(api)
+                pp(bot.summary())
             elif cmd == "resources":
-                pp(api.get_resources())
+                pp(bot.resources())
             elif cmd == "population":
-                pp(api.get_population())
+                pp(bot.population())
             elif cmd == "time":
-                pp(api.get_time())
+                pp(bot.time())
             elif cmd == "weather":
-                pp(api.get_weather())
+                pp(bot.weather())
             elif cmd == "districts":
-                pp(api.get_districts())
-            elif cmd == "on":
-                if not args:
-                    print("  usage: on <lever-name>")
-                else:
-                    name = " ".join(args)
-                    api.switch_on(name)
-                    print(f"  {name} -> ON")
-            elif cmd == "off":
-                if not args:
-                    print("  usage: off <lever-name>")
-                else:
-                    name = " ".join(args)
-                    api.switch_off(name)
-                    print(f"  {name} -> OFF")
-            elif cmd == "color":
-                if len(args) < 2:
-                    print("  usage: color <lever-name> <hex>")
-                else:
-                    hex_val = args[-1]
-                    name = " ".join(args[:-1])
-                    api.set_color(name, hex_val)
-                    print(f"  {name} -> color {hex_val}")
+                pp(bot.districts())
             elif cmd == "buildings":
-                data = api.get_buildings()
-                if isinstance(data, list):
-                    print(f"\n  Buildings ({len(data)}):")
-                    for b in data:
-                        flags = []
-                        if b.get("paused"):
-                            flags.append("PAUSED")
-                        if b.get("floodgate"):
-                            flags.append(f"h={b.get('height', 0)}/{b.get('maxHeight', 0)}")
-                        if b.get("priority"):
-                            flags.append(f"pri={b['priority']}")
-                        flag_str = f"  [{', '.join(flags)}]" if flags else ""
-                        coords = ""
-                        if "x" in b:
-                            coords = f" ({b['x']},{b['y']},{b['z']})"
-                        print(f"    {b.get('id', '?'):>10}  {b.get('name', '?')}{coords}{flag_str}")
-                    print()
-                else:
-                    pp(data)
-            elif cmd == "speed":
-                if args:
-                    pp(api.set_speed(int(args[0])))
-                else:
-                    pp(api.get_speed())
-            elif cmd == "pause":
-                if not args:
-                    print("  usage: pause <building-id>")
-                else:
-                    pp(api.pause_building(int(args[0]), True))
-            elif cmd == "unpause":
-                if not args:
-                    print("  usage: unpause <building-id>")
-                else:
-                    pp(api.pause_building(int(args[0]), False))
-            elif cmd == "floodgate":
-                if len(args) < 2:
-                    print("  usage: floodgate <building-id> <height>")
-                else:
-                    pp(api.set_floodgate_height(int(args[0]), float(args[1])))
-            elif cmd == "priority":
-                if len(args) < 2:
-                    print("  usage: priority <building-id> <VeryLow|Normal|VeryHigh>")
-                else:
-                    pp(api.set_priority(int(args[0]), args[1]))
+                for b in bot.buildings():
+                    flags = []
+                    if b.get("paused"): flags.append("PAUSED")
+                    if b.get("floodgate"): flags.append(f"h={b.get('height',0)}/{b.get('maxHeight',0)}")
+                    if b.get("priority"): flags.append(f"pri={b['priority']}")
+                    if "maxWorkers" in b: flags.append(f"w={b.get('assignedWorkers',0)}/{b['maxWorkers']}")
+                    f = f"  [{', '.join(flags)}]" if flags else ""
+                    c = f" ({b['x']},{b['y']},{b['z']})" if "x" in b else ""
+                    print(f"  {b.get('id','?'):>10}  {b.get('name','?')}{c}{f}")
             elif cmd == "trees":
-                data = api.get_trees()
-                if isinstance(data, list):
-                    print(f"\n  Trees ({len(data)}):")
-                    for t in data:
-                        status = "MARKED" if t.get("marked") else ""
-                        alive = "" if t.get("alive", True) else " DEAD"
-                        coords = ""
-                        if "x" in t:
-                            coords = f" ({t['x']},{t['y']},{t['z']})"
-                        print(f"    {t.get('id', '?'):>10}  {t.get('name', '?')}{coords} {status}{alive}")
-                    print()
-                else:
-                    pp(data)
+                trees = bot.trees()
+                marked = [t for t in trees if t.get("marked")]
+                print(f"  {len(trees)} trees, {len(marked)} marked")
+                for t in marked:
+                    c = f" ({t['x']},{t['y']},{t['z']})" if "x" in t else ""
+                    print(f"    {t.get('id','?'):>10}  {t.get('name','?')}{c}")
+            elif cmd == "prefabs":
+                for p in bot.prefabs():
+                    size = f" {p.get('sizeX',0)}x{p.get('sizeY',0)}x{p.get('sizeZ',0)}" if "sizeX" in p else ""
+                    print(f"  {p.get('name','?')}{size}")
+            elif cmd == "status":
+                for lev in bot.levers():
+                    state = "ON" if lev.get("state") else "OFF"
+                    print(f"  {lev.get('name','?'):30s} {state}")
+                for ad in bot.adapters():
+                    state = "ON" if ad.get("state") else "OFF"
+                    print(f"  {ad.get('name','?'):30s} {state}")
+
+            # -- write --
+            elif cmd == "speed":
+                pp(bot.set_speed(int(args[0])) if args else bot.speed())
+            elif cmd == "pause":
+                pp(bot.pause_building(int(args[0])))
+            elif cmd == "unpause":
+                pp(bot.unpause_building(int(args[0])))
+            elif cmd == "priority":
+                pp(bot.set_priority(int(args[0]), args[1]))
             elif cmd == "workers":
-                if len(args) < 2:
-                    print("  usage: workers <building-id> <count>")
-                else:
-                    pp(api.set_workers(int(args[0]), int(args[1])))
+                pp(bot.set_workers(int(args[0]), int(args[1])))
+            elif cmd == "floodgate":
+                pp(bot.set_floodgate(int(args[0]), float(args[1])))
+            elif cmd == "place":
+                o = int(args[4]) if len(args) > 4 else 0
+                pp(bot.place_building(args[0], int(args[1]), int(args[2]), int(args[3]), o))
+            elif cmd == "demolish":
+                pp(bot.demolish_building(int(args[0])))
             elif cmd == "cut":
-                if len(args) < 5:
-                    print("  usage: cut <x1> <y1> <x2> <y2> <z>")
-                else:
-                    pp(api.mark_cutting_area(int(args[0]), int(args[1]), int(args[2]), int(args[3]), int(args[4]), True))
+                pp(bot.mark_trees(int(args[0]), int(args[1]), int(args[2]), int(args[3]), int(args[4])))
             elif cmd == "uncut":
-                if len(args) < 5:
-                    print("  usage: uncut <x1> <y1> <x2> <y2> <z>")
-                else:
-                    pp(api.mark_cutting_area(int(args[0]), int(args[1]), int(args[2]), int(args[3]), int(args[4]), False))
+                pp(bot.clear_trees(int(args[0]), int(args[1]), int(args[2]), int(args[3]), int(args[4])))
             elif cmd == "capacity":
-                if len(args) < 2:
-                    print("  usage: capacity <building-id> <amount>")
-                else:
-                    pp(api.set_stockpile_capacity(int(args[0]), int(args[1])))
+                pp(bot.set_capacity(int(args[0]), int(args[1])))
+
+            # -- vanilla --
+            elif cmd == "on":
+                bot.lever_on(" ".join(args))
+                print(f"  {' '.join(args)} -> ON")
+            elif cmd == "off":
+                bot.lever_off(" ".join(args))
+                print(f"  {' '.join(args)} -> OFF")
             elif cmd == "watch":
-                interval = float(args[0]) if args else 5.0
-                watcher.interval = interval
+                watcher.interval = float(args[0]) if args else 5.0
                 watcher.start()
             elif cmd == "stop":
                 watcher.stop()
             else:
                 print(f"  unknown command: {cmd} (type 'help')")
+        except IndexError:
+            print(f"  missing arguments (type 'help')")
         except requests.ConnectionError:
             print("  not reachable -- is Timberborn running?")
         except requests.HTTPError as exc:

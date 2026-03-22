@@ -110,33 +110,35 @@ Polls `/api/summary` every 3s. Shows day progress bar, drought countdown, per-di
 ### Python API
 
 ```python
-from timberborn.api import TimberbornAPI
+from timberborn.api import Timberbot
 
-api = TimberbornAPI()
+bot = Timberbot()
 
 # read game state
-summary = api.get_summary()
-buildings = api.get_buildings()
-trees = api.get_trees()
-prefabs = api.get_prefabs()
+bot.summary()
+bot.buildings()
+bot.trees()
+bot.prefabs()
 
 # control game speed
-api.set_speed(3)
+bot.set_speed(3)
 
 # manage buildings
-api.pause_building(building_id, True)
-api.set_workers(building_id, 0)
-api.set_priority(building_id, "VeryHigh")
-api.demolish_building(building_id)
+bot.pause_building(building_id)
+bot.unpause_building(building_id)
+bot.set_workers(building_id, 0)
+bot.set_priority(building_id, "VeryHigh")
+bot.demolish_building(building_id)
 
 # place new buildings
-api.place_building("LumberjackFlag.IronTeeth", x=120, y=130, z=2)
+bot.place_building("LumberjackFlag.IronTeeth", x=120, y=130, z=2)
 
 # mark trees for cutting (rectangle region)
-api.mark_cutting_area(100, 100, 110, 110, z=2, marked=True)
+bot.mark_trees(100, 100, 110, 110, z=2)
+bot.clear_trees(100, 100, 110, 110, z=2)
 
 # floodgate control
-api.set_floodgate_height(gate_id, 2.0)
+bot.set_floodgate(gate_id, 2.0)
 ```
 
 ## Requirements
