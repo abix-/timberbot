@@ -41,8 +41,8 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 | Decorations | YES | YES | `place_building` |
 | Map/terrain | YES | NO | `map`, `scan`, `visual` |
 | Game speed | YES | YES | `speed`, `set_speed` (0-3) |
-| Automation levers | YES | YES | `levers`, `lever_on/off` (vanilla API port 8080) |
-| Automation adapters | YES | NO | `adapters` (vanilla API port 8080) |
+| Automation levers | NO | NO | Use Timberborn's built-in HTTP API (port 8080) directly |
+| Automation adapters | NO | NO | Use Timberborn's built-in HTTP API (port 8080) directly |
 | Pagination | YES | N/A | `limit`/`offset` on buildings, trees, gatherables, beavers |
 
 ## Known gaps
@@ -62,7 +62,7 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 
 | System | Why not in Timberbot |
 |---|---|
-| Automation sensors | Read via vanilla HTTP adapters (port 8080) |
+| Automation (levers, adapters, sensors) | Use Timberborn's built-in HTTP API (port 8080) directly |
 | Logic gates | In-game only, no external control needed |
 | Reproduction | Happens naturally when needs are met |
 | Water physics/flow | Game engine handles this, not controllable |

@@ -119,16 +119,3 @@ Suffixes: `.seedling` = not fully grown, `.entrance` = building entrance tile.
 | `k` | bright green | kohlrabi |
 | `c` | bright green | carrot |
 
-## Vanilla API (port 8080)
-
-Timberborn's built-in API for levers and adapters. Not part of this mod.
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/levers` | GET | list all levers |
-| `/api/levers/{name}` | GET | single lever |
-| `/api/switch-on/{name}` | POST | turn lever on |
-| `/api/switch-off/{name}` | POST | turn lever off |
-| `/api/color/{name}/{hex}` | POST | set lever color |
-| `/api/adaptors` | GET | list all adapters |
-| `/api/adaptors/{name}` | GET | single adapter |

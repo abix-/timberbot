@@ -17,8 +17,6 @@ As a library:
 import json
 import sys
 import time
-import urllib.parse
-
 import requests
 
 
@@ -27,11 +25,10 @@ import requests
 # ---------------------------------------------------------------------------
 
 class Timberbot:
-    """Client for Timberbot mod (port 8085) + vanilla API (port 8080)."""
+    """Client for Timberbot API (port 8085)."""
 
-    def __init__(self, host="localhost", port=8085, game_port=8080):
+    def __init__(self, host="localhost", port=8085):
         self.url = f"http://{host}:{port}"
-        self.game_url = f"http://{host}:{game_port}"
         self.s = requests.Session()
         self.s.headers["Accept"] = "application/json"
 
@@ -42,16 +39,6 @@ class Timberbot:
 
     def _post(self, path, data):
         r = self.s.post(f"{self.url}{path}", json=data, timeout=5)
-        return r.json()
-
-    def _game_get(self, path):
-        r = self.s.get(f"{self.game_url}{path}", timeout=5)
-        r.raise_for_status()
-        return r.json()
-
-    def _game_post(self, path):
-        r = self.s.post(f"{self.game_url}{path}", timeout=5)
-        r.raise_for_status()
         return r.json()
 
     # -- connection --
@@ -278,24 +265,6 @@ class Timberbot:
         placed = sum(1 for r in results if "id" in r)
         failed = sum(1 for r in results if "error" in r)
         return {"placed": placed, "failed": failed, "total": len(results)}
-
-    # -- vanilla API (levers/adapters) --
-
-    def levers(self):
-        """List all levers (vanilla API port 8080)."""
-        return self._game_get("/api/levers")
-
-    def adapters(self):
-        """List all adapters (vanilla API port 8080)."""
-        return self._game_get("/api/adaptors")
-
-    def lever_on(self, name):
-        """Turn a lever ON."""
-        return self._game_post(f"/api/switch-on/{urllib.parse.quote(name, safe='')}")
-
-    def lever_off(self, name):
-        """Turn a lever OFF."""
-        return self._game_post(f"/api/switch-off/{urllib.parse.quote(name, safe='')}")
 
     # -- helpers --
 

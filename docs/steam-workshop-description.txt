@@ -1,20 +1,19 @@
 Play Timberborn with an AI. Full read/write HTTP API with a Python client so Claude, ChatGPT, or your own scripts can partner with you to run a beaver colony.
 
-[h1]Timberbot vs Vanilla HTTP API[/h1]
-Timberborn has a built-in HTTP API (port 8080) for automation with levers and adapters. Timberbot (port 8085) adds everything else. They work together:
+[h1]What Timberbot adds[/h1]
+Timberborn already has a built-in HTTP API (port 8080) for automation with levers and adapters. Timberbot (port 8085) adds everything the built-in API doesn't cover:
 
 [table]
-[tr][th]What[/th][th]Vanilla HTTP (port 8080)[/th][th]Timberbot (port 8085)[/th][/tr]
-[tr][td]Floodgates[/td][td]Control via levers[/td][td]Set height directly[/td][/tr]
-[tr][td]Sensors (depth, flow, power)[/td][td]Read via adapters[/td][td]Read all game state directly, no sensors needed[/td][/tr]
-[tr][td]Real-time automation[/td][td]Sensor -> logic -> lever chains[/td][td]Not real-time, polled by AI[/td][/tr]
-[tr][td]Building placement[/td][td]No[/td][td]Yes, with validation[/td][/tr]
-[tr][td]Beaver wellbeing[/td][td]No[/td][td]Yes, per-beaver needs[/td][/tr]
-[tr][td]Colony management[/td][td]No[/td][td]Workers, priority, speed, crops, trees, science[/td][/tr]
-[tr][td]Map reading[/td][td]No[/td][td]Terrain, water, occupants, scan[/td][/tr]
+[tr][th]Capability[/th][th]Built-in API[/th][th]Timberbot API[/th][/tr]
+[tr][td]Building placement + demolition[/td][td]No[/td][td]Yes, with tile validation[/td][/tr]
+[tr][td]Read all game state[/td][td]Lever/adapter signals only[/td][td]Buildings, beavers, trees, map, resources, weather[/td][/tr]
+[tr][td]Beaver wellbeing + needs[/td][td]No[/td][td]Per-beaver needs, contamination, workplace[/td][/tr]
+[tr][td]Colony management[/td][td]No[/td][td]Workers, priority, speed, crops, trees, science, distribution[/td][/tr]
+[tr][td]Map + terrain reading[/td][td]No[/td][td]Terrain, water, contamination, occupants[/td][/tr]
+[tr][td]AI-optimized output[/td][td]No[/td][td]TOON format, scan, visual, alerts, tree clusters[/td][/tr]
 [/table]
 
-Use vanilla HTTP for real-time automation triggers (water rises -> open floodgate). Use Timberbot for strategic AI decisions (need food -> place farmhouse). The Python client wraps both APIs in one place.
+Use both together: the built-in API handles real-time automation (sensor -> lever -> floodgate). Timberbot handles strategic AI decisions (check needs -> place farmhouse -> plant crops).
 
 [h1]Features[/h1]
 [table]
