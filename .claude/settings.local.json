@@ -11,7 +11,8 @@
       "Bash(cp GameStateBridge/nuget.config Timberbot/)",
       "Bash(curl:*)",
       "Bash(cd:*)",
-      "Bash(reg add:*)"
+      "Bash(reg add:*)",
+      "Bash(python -c \":*)"
     ]
   }
 }

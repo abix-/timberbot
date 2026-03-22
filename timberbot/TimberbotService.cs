@@ -13,7 +13,7 @@ using Timberborn.TerrainSystem;
 using Timberborn.WaterSystem;
 using Timberborn.EntitySystem;
 using Timberborn.Forestry;
-using Timberborn.PlantingUI;
+using Timberborn.Planting;
 using Timberborn.Gathering;
 using Timberborn.GameCycleSystem;
 using Timberborn.GameDistricts;
@@ -42,7 +42,7 @@ namespace Timberbot
         private readonly SpeedManager _speedManager;
         private readonly EntityRegistry _entityRegistry;
         private readonly TreeCuttingArea _treeCuttingArea;
-        private readonly PlantingSelectionService _plantingSelectionService;
+        private readonly PlantingService _plantingService;
         private readonly BuildingService _buildingService;
         private readonly BlockObjectPlacerService _blockObjectPlacerService;
         private readonly EntityService _entityService;
@@ -61,7 +61,7 @@ namespace Timberbot
             SpeedManager speedManager,
             EntityRegistry entityRegistry,
             TreeCuttingArea treeCuttingArea,
-            PlantingSelectionService plantingSelectionService,
+            PlantingService plantingService,
             BuildingService buildingService,
             BlockObjectPlacerService blockObjectPlacerService,
             EntityService entityService,
@@ -78,7 +78,7 @@ namespace Timberbot
             _speedManager = speedManager;
             _entityRegistry = entityRegistry;
             _treeCuttingArea = treeCuttingArea;
-            _plantingSelectionService = plantingSelectionService;
+            _plantingService = plantingService;
             _buildingService = buildingService;
             _blockObjectPlacerService = blockObjectPlacerService;
             _entityService = entityService;
@@ -677,8 +677,10 @@ namespace Timberbot
                 }
             }
 
-            var ray = new Ray(Vector3.up * 100, Vector3.down);
-            _plantingSelectionService.MarkArea(coords, ray, crop);
+            foreach (var c in coords)
+            {
+                _plantingService.SetPlantingCoordinates(c, crop);
+            }
 
             return new
             {
@@ -704,8 +706,10 @@ namespace Timberbot
                 }
             }
 
-            var ray = new Ray(Vector3.up * 100, Vector3.down);
-            _plantingSelectionService.UnmarkArea(coords, ray);
+            foreach (var c in coords)
+            {
+                _plantingService.UnsetPlantingCoordinates(c);
+            }
 
             return new
             {
