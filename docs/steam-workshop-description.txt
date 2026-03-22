@@ -35,7 +35,7 @@ Use both together: the built-in API handles real-time automation (sensor -> leve
 [/table]
 
 [h1]How it works[/h1]
-Two APIs, one Python client:
+The mod runs an HTTP server (port 8085) inside the game. Python client included:
 [code]
 python timberbot.py summary
 python timberbot.py buildings
