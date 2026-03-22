@@ -4,27 +4,27 @@ Let an AI play Timberborn. Full read/write HTTP API with a Python client so Clau
 
 [table]
 [tr][th]Category[/th][th]What you can do[/th][/tr]
-[tr][td]Read[/td][td]Colony snapshot:population, resources, weather, drought countdown[/td][/tr]
+[tr][td]Read[/td][td]Colony snapshot. Population, resources, weather, drought countdown[/td][/tr]
 [tr][td]Read[/td][td]List all buildings with workers, priority, orientation, entrances[/td][/tr]
-[tr][td]Read[/td][td]List all trees:distinguish grown from seedlings, see cutting marks[/td][/tr]
+[tr][td]Read[/td][td]List all trees. Distinguishes grown from seedlings, shows cutting marks[/td][/tr]
 [tr][td]Read[/td][td]Find berry bushes and other gatherables[/td][/tr]
 [tr][td]Read[/td][td]Terrain map with water levels and what's on every tile[/td][/tr]
 [tr][td]Read[/td][td]List all available building types[/td][/tr]
-[tr][td]Build[/td][td]Place any building with named orientation (south/west/north/east):validates all tiles before placing[/td][/tr]
+[tr][td]Read[/td][td]Beaver wellbeing. See each beaver's needs and what's critical[/td][/tr]
+[tr][td]Build[/td][td]Place any building with named orientation (south/west/north/east). Validates all tiles before placing[/td][/tr]
 [tr][td]Build[/td][td]Demolish buildings[/td][/tr]
 [tr][td]Build[/td][td]Lay down paths[/td][/tr]
 [tr][td]Manage[/td][td]Pause and unpause buildings[/td][/tr]
 [tr][td]Manage[/td][td]Set how many workers a building gets[/td][/tr]
 [tr][td]Manage[/td][td]Set building construction priority[/td][/tr]
-[tr][td]Manage[/td][td]Control game speed:pause, 1x, 2x, 3x[/td][/tr]
+[tr][td]Manage[/td][td]Control game speed. Pause, 1x, 2x, 3x[/td][/tr]
 [tr][td]Resources[/td][td]Mark and clear tree cutting areas[/td][/tr]
-[tr][td]Resources[/td][td]Plant crops:skips buildings, water, and invalid terrain automatically[/td][/tr]
+[tr][td]Resources[/td][td]Plant crops. Skips buildings, water, and invalid terrain automatically[/td][/tr]
 [tr][td]Resources[/td][td]Set floodgate heights[/td][/tr]
 [tr][td]Resources[/td][td]Configure stockpile capacity and allowed goods[/td][/tr]
-[tr][td]Read[/td][td]Beaver wellbeing:see each beaver's needs and what's critical[/td][/tr]
-[tr][td]Tools[/td][td]All output in TOON format:compact, token-efficient for AI[/td][/tr]
-[tr][td]Tools[/td][td]ASCII map scanner:see your colony layout in terminal[/td][/tr]
-[tr][td]Tools[/td][td]Live dashboard:auto-refreshing colony status[/td][/tr]
+[tr][td]Tools[/td][td]All output in TOON format. Compact and token-efficient for AI[/td][/tr]
+[tr][td]Tools[/td][td]ASCII map scanner. See your colony layout in terminal[/td][/tr]
+[tr][td]Tools[/td][td]Live dashboard. Auto-refreshing colony status[/td][/tr]
 [tr][td]Tools[/td][td]Search for nearby buildings, trees, berry bushes[/td][/tr]
 [/table]
 
@@ -44,12 +44,12 @@ python timberbot.py watch
 
 [h1]Getting started[/h1]
 1. Subscribe and enable in Mod Manager
-2. Start a game:API starts automatically on port 8085
+2. Start a game. API starts automatically on port 8085
 3. Find timberbot.py in your mods folder (Documents\Timberborn\Mods\Timberbot\)
 4. Run: python timberbot.py ping
-5. Run: python timberbot.py:lists all commands
+5. Run: python timberbot.py (lists all commands)
 
 [h1]Docs[/h1]
-[url=https://github.com/abix-/TimberbornMods/blob/master/docs/api-reference.md]API Reference[/url]:all endpoints and commands
-[url=https://github.com/abix-/TimberbornMods/blob/master/docs/getting-started.md]Getting Started[/url]:examples and walkthrough
+[url=https://github.com/abix-/TimberbornMods/blob/master/docs/api-reference.md]API Reference[/url]. All endpoints and commands
+[url=https://github.com/abix-/TimberbornMods/blob/master/docs/getting-started.md]Getting Started[/url]. Examples and walkthrough
 [url=https://github.com/abix-/TimberbornMods]Source Code[/url]
