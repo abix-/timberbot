@@ -21,7 +21,8 @@ CLI output uses [TOON format](https://github.com/toon-format/toon) (Token-Orient
 | `/api/beavers` | tabular | `[N]{id,name,wellbeing,critical}` |
 | `/api/prefabs` | tabular | `[N]{name,sizeX,sizeY,sizeZ}` |
 | `/api/distribution` | nested tabular | `[N]{district, goods[N]{good,importOption,exportThreshold}}` |
-| `/api/speed` | flat kv | `speed: 0-3` |
+| `/api/science` | nested | `{points, unlockables[N]{name,unlocked}}` |
+| `/api/speed` | flat kv | `speed: 0-3` (0=pause, 1=normal, 2=fast, 3=fastest) |
 | `/api/map` | tabular | `[N]{x,y,terrain,water,occupant,entrance}` |
 
 ## Write (POST)
@@ -30,7 +31,9 @@ All write endpoints accept JSON bodies.
 
 | Endpoint | Body | Description |
 |----------|------|-------------|
-| `/api/speed` | `{"speed": 0}` | 0=pause, 1/2/3=speed |
+| `/api/speed` | `{"speed": 0}` | 0=pause, 1=normal, 2=fast, 3=fastest |
+| `/api/science/unlock` | `{"building": "Name"}` | unlock a building using science points |
+| `/api/distribution` | `{"district": "Name", "good": "Log", "import": "Forced", "exportThreshold": 50}` | set import/export per good |
 | `/api/building/pause` | `{"id": N, "paused": true}` | pause/unpause building |
 | `/api/building/demolish` | `{"id": N}` | demolish a building |
 | `/api/building/place` | `{"prefab": "Name", "x": N, "y": N, "z": N, "orientation": 0}` | place a building (validates all tiles, origin-corrected) |

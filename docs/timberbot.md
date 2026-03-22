@@ -1,5 +1,5 @@
 ---
-name: bot
+name: timberbot
 description: Play Timberborn autonomously via timberbot.py. Keep beavers alive, wellbeing high, needs met.
 version: "2.0"
 ---

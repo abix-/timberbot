@@ -23,6 +23,9 @@ Let an AI play Timberborn. Full read/write HTTP API with a Python client so Clau
 [tr][td]Resources[/td][td]Set floodgate heights[/td][/tr]
 [tr][td]Resources[/td][td]Configure stockpile capacity and allowed goods[/td][/tr]
 [tr][td]Read[/td][td]Distribution settings. Import/export options per good per district[/td][/tr]
+[tr][td]Read[/td][td]Science points and unlockable buildings[/td][/tr]
+[tr][td]Manage[/td][td]Unlock buildings with science points[/td][/tr]
+[tr][td]Manage[/td][td]Set district import/export for any good[/td][/tr]
 [tr][td]Tools[/td][td]Find densest tree clusters for optimal lumberjack placement[/td][/tr]
 [tr][td]Tools[/td][td]All output in TOON format. Compact and token-efficient for AI[/td][/tr]
 [tr][td]Tools[/td][td]ASCII map scanner. See your colony layout in terminal[/td][/tr]
@@ -50,6 +53,19 @@ python timberbot.py watch
 3. Find timberbot.py in your mods folder (Documents\Timberborn\Mods\Timberbot\)
 4. Run: python timberbot.py ping
 5. Run: python timberbot.py (lists all commands)
+
+[h1]Let AI play for you[/h1]
+The mod includes an AI playbook (docs/timberbot.md) that teaches Claude, ChatGPT, or any LLM how to run your colony. With Claude Code:
+
+[code]
+# copy the playbook as a skill
+cp docs/timberbot.md ~/.claude/skills/timberbot/SKILL.md
+
+# let Claude play on a loop
+/loop 1m /timberbot
+[/code]
+
+The AI will check beaver wellbeing, manage food and water, place buildings, mark trees, and keep your colony alive.
 
 [h1]Docs[/h1]
 [url=https://github.com/abix-/TimberbornMods/blob/master/docs/api-reference.md]API Reference[/url]. All endpoints and commands

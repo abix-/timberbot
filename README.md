@@ -21,6 +21,7 @@ python timberbot.py set_speed speed:3                    # fast forward
 python timberbot.py place_building prefab:Path x:100 y:130 z:2 orientation:south
 python timberbot.py beavers                              # beaver wellbeing + critical needs
 python timberbot.py distribution                         # import/export settings per district
+python timberbot.py science                               # science points + unlockable buildings
 python timberbot.py tree_clusters                         # find densest tree clusters
 python timberbot.py scan x:120 y:140 radius:10           # compact map for AI
 python timberbot.py watch                                # live dashboard
