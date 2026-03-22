@@ -172,6 +172,8 @@ namespace Timberbot
                         return _service.CollectScience();
                     case "/api/notifications":
                         return _service.CollectNotifications();
+                    case "/api/workhours":
+                        return _service.CollectWorkHours();
 
                     case "/api/map":
                         return _service.CollectMap(0, 0, 0, 0);
@@ -236,6 +238,9 @@ namespace Timberbot
                         return _service.SetStockpileGood(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<string>("good") ?? "");
+                    case "/api/workhours":
+                        return _service.SetWorkHours(
+                            body?.Value<int>("endHours") ?? 16);
                     case "/api/science/unlock":
                         return _service.UnlockBuilding(
                             body?.Value<string>("building") ?? "");

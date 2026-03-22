@@ -117,6 +117,14 @@ class Timberbot:
         if limit: data = data[:limit]
         return data
 
+    def workhours(self):
+        """Work schedule: {endHours, areWorkingHours, hoursPassedToday}."""
+        return self._get("/api/workhours")
+
+    def set_workhours(self, end_hours):
+        """Set when work ends (1-24). Beavers work from dawn until endHours."""
+        return self._post("/api/workhours", {"endHours": end_hours})
+
     def science(self):
         """Science points and unlockable buildings: {points, unlockables: [{name, cost, unlocked}]}."""
         return self._get("/api/science")

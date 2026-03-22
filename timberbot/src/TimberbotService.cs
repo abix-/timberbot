@@ -65,6 +65,7 @@ namespace Timberbot
         private readonly ScienceService _scienceService;
         private readonly BuildingUnlockingService _buildingUnlockingService;
         private readonly NotificationSaver _notificationSaver;
+        private readonly WorkingHoursManager _workingHoursManager;
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -86,7 +87,8 @@ namespace Timberbot
             IThreadSafeColumnTerrainMap terrainMap,
             ScienceService scienceService,
             BuildingUnlockingService buildingUnlockingService,
-            NotificationSaver notificationSaver)
+            NotificationSaver notificationSaver,
+            WorkingHoursManager workingHoursManager)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -107,6 +109,7 @@ namespace Timberbot
             _scienceService = scienceService;
             _buildingUnlockingService = buildingUnlockingService;
             _notificationSaver = notificationSaver;
+            _workingHoursManager = workingHoursManager;
         }
 
         public void Load()
@@ -578,6 +581,23 @@ namespace Timberbot
             int level = System.Array.IndexOf(SpeedScale, raw);
             if (level < 0) level = 0;
             return new { speed = level };
+        }
+
+        public object CollectWorkHours()
+        {
+            return new
+            {
+                endHours = _workingHoursManager.EndHours,
+                areWorkingHours = _workingHoursManager.AreWorkingHours
+            };
+        }
+
+        public object SetWorkHours(int endHours)
+        {
+            if (endHours < 1 || endHours > 24)
+                return new { error = "endHours must be 1-24" };
+            _workingHoursManager.EndHours = endHours;
+            return new { endHours = _workingHoursManager.EndHours };
         }
 
         public object CollectMap(int x1, int y1, int x2, int y2)
