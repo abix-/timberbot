@@ -10,7 +10,7 @@ Timberborn already has a built-in HTTP API (port 8080) for automation with lever
 [tr][td]Beaver wellbeing + needs[/td][td]No[/td][td]Per-beaver needs, contamination, workplace[/td][/tr]
 [tr][td]Colony management[/td][td]No[/td][td]Workers, priority, speed, crops, trees, science, distribution[/td][/tr]
 [tr][td]Map + terrain reading[/td][td]No[/td][td]Terrain, water, contamination, occupants[/td][/tr]
-[tr][td]AI-optimized output[/td][td]No[/td][td]TOON format, scan, visual, alerts, tree clusters[/td][/tr]
+[tr][td]AI-optimized output[/td][td]No[/td][td]TOON format, scan, visual map with terrain height, alerts, tree clusters[/td][/tr]
 [/table]
 
 Use both together: the built-in API handles real-time automation (sensor -> lever -> floodgate). Timberbot handles strategic AI decisions (check needs -> place farmhouse -> plant crops).
@@ -34,7 +34,7 @@ Use both together: the built-in API handles real-time automation (sensor -> leve
 [tr][td]Manage[/td][td]Migrate beavers between districts[/td][td]In-Progress[/td][/tr]
 [tr][td]Resources[/td][td]Plant crops, mark trees, configure stockpiles, set floodgate heights[/td][td]Yes[/td][/tr]
 [tr][td]Resources[/td][td]Bot condition and fuel via beaver needs[/td][td]In-Progress[/td][/tr]
-[tr][td]Tools[/td][td]TOON output for AI, ASCII map scanner, live dashboard, search[/td][td]Yes[/td][/tr]
+[tr][td]Tools[/td][td]TOON output for AI, ASCII map with terrain height shading, live dashboard, search[/td][td]Yes[/td][/tr]
 [/table]
 
 [h1]How it works[/h1]
@@ -44,7 +44,7 @@ python timberbot.py summary                          # colony dashboard with hou
 python timberbot.py buildings                        # all buildings (flat TOON format)
 python timberbot.py --json buildings                 # full JSON for programmatic access
 python timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2 orientation:south
-python timberbot.py scan x:120 y:140 radius:10
+python timberbot.py visual x:120 y:140 radius:10     # ASCII map with terrain height shading
 python timberbot.py alerts
 [/code]
 
