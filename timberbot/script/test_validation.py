@@ -79,6 +79,7 @@ class TestRunner:
         self.test_orientation()
         self.test_find_placement()
         self.test_path_routing()
+        self.test_overridable_placement()
         self.test_summary_projection()
         self.test_map_moisture()
         self.test_unlock()
@@ -115,6 +116,7 @@ class TestRunner:
             ("prefabs", lambda: self.bot.prefabs()),
             ("map", lambda: self.bot.map(120, 142, 122, 144)),
             ("tree_clusters", lambda: self.bot.tree_clusters()),
+            ("wellbeing", lambda: self.bot.wellbeing()),
         ]
         for name, fn in reads:
             result = fn()
@@ -588,6 +590,76 @@ class TestRunner:
                             self.bot.demolish_building(b["id"])
         else:
             self.skip("path with z-change", "no adjacent z-diff=1 tiles found")
+
+    def test_overridable_placement(self):
+        print("\n=== overridable placement ===\n")
+
+        # find a non-overridable tree (dead standing or alive) -- should block placement
+        # find an overridable entity (empty cut stump) -- should allow placement
+        # use debug to check BlockObject.Overridable on each
+
+        trees = self.bot.trees(limit=500)
+        if not isinstance(trees, list) or len(trees) == 0:
+            self.skip("overridable placement", "no trees found")
+            return
+
+        blocking_tree = None
+        overridable_tree = None
+
+        def is_overridable(entity_id):
+            """check BlockObject.Overridable via debug endpoint"""
+            self.bot.debug(target="call", method="FindEntity", arg0=str(entity_id))
+            # BlockObject is at index 20 for natural resources (Pine, Birch, etc.)
+            r = self.bot.debug(target="get", path="$.AllComponents.[20].Overridable")
+            val = r.get("value")
+            if val in ("True", "False"):
+                return val == "True"
+            # fallback: scan nearby indices
+            for idx in range(18, 25):
+                self.bot.debug(target="call", method="FindEntity", arg0=str(entity_id))
+                r = self.bot.debug(target="get", path=f"$.AllComponents.[{idx}]")
+                if "BlockObject" in r.get("type", "") and "Spec" not in r.get("type", ""):
+                    self.bot.debug(target="call", method="FindEntity", arg0=str(entity_id))
+                    ov = self.bot.debug(target="get", path=f"$.AllComponents.[{idx}].Overridable")
+                    return ov.get("value") == "True"
+            return False
+
+        # living trees are always non-overridable
+        # dead trees might be overridable (empty cut stumps)
+        for t in trees:
+            if not t.get("id"):
+                continue
+            if t.get("alive") and blocking_tree is None:
+                blocking_tree = t
+            elif not t.get("alive") and overridable_tree is None:
+                if is_overridable(t["id"]):
+                    overridable_tree = t
+
+            if blocking_tree and overridable_tree:
+                break
+
+        # test: non-overridable tree blocks placement
+        if blocking_tree:
+            bx, by, bz = blocking_tree["x"], blocking_tree["y"], blocking_tree["z"]
+            result = self.bot.place_building("Path", bx, by, bz)
+            self.check("non-overridable tree blocks",
+                       self.err(result) and "occupied" in str(result.get("error", "")),
+                       json.dumps(result)[:100])
+        else:
+            self.skip("non-overridable tree blocks", "no blocking tree found")
+
+        # test: overridable stump allows placement
+        if overridable_tree:
+            ox, oy, oz = overridable_tree["x"], overridable_tree["y"], overridable_tree["z"]
+            result = self.bot.place_building("Path", ox, oy, oz)
+            placed = self.has(result, "id")
+            self.check("overridable stump allows placement", placed,
+                       json.dumps(result)[:100])
+            # clean up
+            if placed:
+                self.bot.demolish_building(result["id"])
+        else:
+            self.skip("overridable stump allows placement", "no overridable stump found")
 
     def test_summary_projection(self):
         print("\n=== summary projection ===\n")
