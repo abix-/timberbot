@@ -40,7 +40,8 @@ Install dependencies:
 pip install requests toons
 ```
 
-`requests` is the HTTP client. `toons` formats the compact TOON output that most commands produce by default.
+!!! tip "What are these?"
+    `requests` is the HTTP client. `toons` formats the compact TOON output that most commands produce by default. Both are required.
 
 ## Output formats
 
@@ -132,19 +133,16 @@ Paste the contents of `docs/timberbot.md` as a system prompt. Then ask the AI to
 
 ## Troubleshooting
 
-**"Connection refused" or no response on port 8085**
-- The API only runs while a game is loaded. It won't respond from the main menu or loading screen.
-- Check that the mod is enabled in the Mod Manager.
-- Windows Firewall may block the port. The mod tries `http://+:8085/` first (all interfaces), then falls back to `http://localhost:8085/` if that fails.
+!!! warning "Connection refused / no response on port 8085"
+    - The API only runs while a game is loaded. It won't respond from the main menu or loading screen.
+    - Check that the mod is enabled in the Mod Manager.
+    - Windows Firewall may block the port. The mod tries `http://+:8085/` first (all interfaces), then falls back to `http://localhost:8085/` if that fails.
 
-**"No module named 'toons'"**
-- Run `pip install toons`. The TOON formatter is required for default CLI output.
+!!! warning "No module named 'toons' / 'requests'"
+    Run `pip install requests toons`. Both are required for the Python CLI.
 
-**"No module named 'requests'"**
-- Run `pip install requests`.
-
-**Building placement creates ghost buildings**
-- Failed placements can sometimes create invisible entities. See [Known Issues](api-reference.md#known-issues) in the API reference.
+!!! bug "Building placement creates ghost buildings"
+    Failed placements can sometimes create invisible entities. See [Known Issues](api-reference.md#known-issues) in the API reference.
 
 ## Next steps
 

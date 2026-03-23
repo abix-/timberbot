@@ -1,0 +1,56 @@
+/* timberborn warm tones */
+
+:root {
+  --md-admonition-icon--beaver: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>');
+}
+
+/* warm code block backgrounds in dark mode */
+[data-md-color-scheme="slate"] .md-typeset code {
+  background-color: rgba(255, 179, 0, 0.08);
+}
+
+[data-md-color-scheme="slate"] .md-typeset pre {
+  background-color: #1a1714;
+}
+
+/* warm hover on nav items */
+[data-md-color-scheme="slate"] .md-nav__link:hover {
+  color: #ffb300;
+}
+
+/* style the header with a subtle wood grain feel */
+[data-md-color-scheme="slate"] .md-header {
+  background-color: #1c1610;
+}
+
+/* warmer footer */
+[data-md-color-scheme="slate"] .md-footer {
+  background-color: #1c1610;
+}
+
+/* custom admonition for api endpoints */
+.md-typeset .admonition.api,
+.md-typeset details.api {
+  border-color: #ffb300;
+}
+
+.md-typeset .api > .admonition-title,
+.md-typeset .api > summary {
+  background-color: rgba(255, 179, 0, 0.1);
+}
+
+/* make tables pop a bit more */
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
+  background-color: rgba(255, 179, 0, 0.15);
+  color: #ffb300;
+}
+
+/* subtle glow on inline code */
+[data-md-color-scheme="slate"] .md-typeset :not(pre) > code {
+  border: 1px solid rgba(255, 179, 0, 0.15);
+}
+
+/* response example styling */
+.md-typeset details.example {
+  border-color: #ff9100;
+}

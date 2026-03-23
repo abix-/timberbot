@@ -26,7 +26,8 @@ All errors return JSON with an `error` field:
 {"error": "description of what went wrong"}
 ```
 
-Some errors include additional context fields (e.g. `id`, `building`, `available`).
+!!! info "Error context"
+    Some errors include additional fields for debugging: `id`, `building`, `available`, `scienceCost`, `currentPoints`, etc.
 
 ### Python CLI
 
@@ -81,19 +82,21 @@ Full game state snapshot: time, weather, population, resources, trees, housing, 
 | science | int | Current science points |
 | alerts | object | `{unstaffed, unpowered, unreachable}` counts |
 
-```json
-{
-  "time": {"dayNumber": 42, "dayProgress": 0.65, "partialDayNumber": 42.65},
-  "weather": {"cycle": 3, "cycleDay": 5, "isHazardous": false, "temperateWeatherDuration": 12, "hazardousWeatherDuration": 6, "cycleLengthInDays": 18},
-  "districts": [{"name": "District 1", "population": {"adults": 20, "children": 5, "bots": 2}, "resources": {"Water": {"available": 150, "all": 200}, "Log": {"available": 80, "all": 80}}}],
-  "trees": {"markedGrown": 5, "markedSeedling": 2, "unmarkedGrown": 120},
-  "housing": {"occupiedBeds": 25, "totalBeds": 30, "homeless": 0},
-  "employment": {"assigned": 18, "vacancies": 22, "unemployed": 2},
-  "wellbeing": {"average": 12.3, "miserable": 0, "critical": 1},
-  "science": 450,
-  "alerts": {"unstaffed": 3, "unpowered": 1, "unreachable": 0}
-}
-```
+??? example "Example response"
+
+    ```json
+    {
+      "time": {"dayNumber": 42, "dayProgress": 0.65, "partialDayNumber": 42.65},
+      "weather": {"cycle": 3, "cycleDay": 5, "isHazardous": false, "temperateWeatherDuration": 12, "hazardousWeatherDuration": 6, "cycleLengthInDays": 18},
+      "districts": [{"name": "District 1", "population": {"adults": 20, "children": 5, "bots": 2}, "resources": {"Water": {"available": 150, "all": 200}, "Log": {"available": 80, "all": 80}}}],
+      "trees": {"markedGrown": 5, "markedSeedling": 2, "unmarkedGrown": 120},
+      "housing": {"occupiedBeds": 25, "totalBeds": 30, "homeless": 0},
+      "employment": {"assigned": 18, "vacancies": 22, "unemployed": 2},
+      "wellbeing": {"average": 12.3, "miserable": 0, "critical": 1},
+      "science": 450,
+      "alerts": {"unstaffed": 3, "unpowered": 1, "unreachable": 0}
+    }
+    ```
 
 #### Response (format=toon)
 
@@ -955,7 +958,8 @@ Place a building in the world. Validates all tiles before placing: occupancy, te
 | z | int | yes | Terrain height (must match) |
 | orientation | int | yes | 0=south, 1=west, 2=north, 3=east |
 
-> **Warning:** Failed placements may create ghost buildings. See [Known Issues](#known-issues).
+!!! danger "Ghost buildings"
+    Failed placements may create invisible entities. See [Known Issues](#known-issues).
 
 #### Response (success)
 
@@ -1523,8 +1527,7 @@ Coordinates always refer to the bottom-left corner of the footprint regardless o
 
 ## Known Issues
 
-### Ghost Buildings
+!!! bug "Ghost Buildings"
+    `POST /api/building/place` may create ghost buildings on invalid spots. The `Place()` callback fires and creates an entity even when placement is invalid. Python-side validation blocks most cases, but multi-tile overlaps or bad terrain can still ghost.
 
-`POST /api/building/place` may create ghost buildings on invalid spots. The Place() callback fires and creates an entity even when placement is invalid. Python-side validation blocks most cases, but multi-tile overlaps or bad terrain can still ghost.
-
-**Never test placement carelessly** -- every failed Place() may create a ghost that needs manual cleanup.
+    **Never test placement carelessly** -- every failed `Place()` may create a ghost that needs manual cleanup.

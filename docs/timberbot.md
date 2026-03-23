@@ -29,15 +29,15 @@ Every turn:
 
 ## Placement workflow (MANDATORY every time)
 
-1. `visual` the area -- see the map with colored tiles and terrain height. Background shading shows z-level; empty ground shows z % 10 digit. Find a clear rectangle that fits the building footprint
-2. Verify z from visual (height digits). Use `map` only if you need exact terrain data for ambiguous tiles
-3. Verify every tile in the footprint is open (height digits or .dead stumps). Count the tiles against building size
-4. Pick orientation so entrance FACES the path
-5. `place_building` with correct coords, z, and orientation
-6. `visual` again -- confirm entrance faces the path. If not, demolish and redo
-- **NEVER skip steps 1, 2, 3, or 6**
-- **NEVER guess placement** -- always visually confirm the footprint fits before placing
-- Scan suffixes: `.dead` = buildable stump, `.seedling` = growing (blocked), `.entrance` = door tile
+!!! warning "ALWAYS use find_placement"
+    Never guess coordinates or z-level. The server validates terrain, occupancy, water, and picks the best orientation.
+
+1. `find_placement prefab:Name x1:X y1:Y x2:X2 y2:Y2` -- server finds all valid spots with correct z and orientation toward paths
+2. Pick the first result with `pathAccess: true`
+3. `place_building` with the coords, z, and orientation from the result
+4. `visual` the area -- confirm building placed correctly and entrance faces path. If not, demolish and redo
+- If find_placement returns no results, widen the search area or try a different location
+- After placing, check `alerts` for "not connected to any district center" -- if it appears, demolish and redo with path access
 
 ## Z-level rules
 
@@ -59,8 +59,8 @@ Pick the direction that points FROM the building TOWARD the path. If the path is
 
 ## Priority rules
 
-- New buildings have TWO priorities: `construction` (while building) and `workplace` (when finished)
-- ALWAYS set BOTH priorities on new buildings: `set_priority type:construction` AND `set_priority type:workplace`
+!!! tip "Two priorities per building"
+    New buildings have TWO priorities: `construction` (while building) and `workplace` (when finished). ALWAYS set BOTH on new buildings.
 - Food and water buildings get VeryHigh on both
 - When workers are scarce, pause non-essential buildings (lumber mill, power wheel) to free workers for critical tasks
 
@@ -93,12 +93,13 @@ Pick the direction that points FROM the building TOWARD the path. If the path is
 
 ## Food rules
 
-- **FOOD IS THE #1 PRIORITY** -- each beaver eats ~1 food/day
+!!! danger "FOOD IS THE #1 PRIORITY"
+    Each beaver eats ~1 food/day. If food hits 0, beavers die. Pause non-food buildings to free haulers.
+
 - Gatherers only collect wild berries. Berries WILL run out
 - Build Farmhouse EARLY (by day 3-4), plant Kohlrabi (3-day cycle, no processing)
 - Need ~1 farmhouse per 8 beavers with full kohlrabi fields
 - If food drops below 30, prioritize farming
-- If food hits 0, beavers die. Pause non-food buildings to free haulers
 - Crops grow during drought as long as soil is irrigated (near standing water). Keep planting and farming year-round on oasis maps
 - Set VeryHigh priority on food and water buildings
 
@@ -126,6 +127,7 @@ Pick the direction that points FROM the building TOWARD the path. If the path is
 - Plan layout so power wheel -> lumber mill -> other buildings are all touching
 - Large Power Wheel: 300hp, needs workers
 - Check `nominalPowerInput` on buildings to plan power budget
+- `find_placement` results include `nearPower` -- use it to place powered buildings adjacent to the power chain
 
 ## Building sizes
 
