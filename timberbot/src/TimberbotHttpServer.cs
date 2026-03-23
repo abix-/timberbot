@@ -182,6 +182,8 @@ namespace Timberbot
                         return _service.CollectDistribution();
                     case "/api/science":
                         return _service.CollectScience();
+                    case "/api/wellbeing":
+                        return _service.CollectWellbeing();
                     case "/api/notifications":
                         return _service.CollectNotifications();
                     case "/api/workhours":

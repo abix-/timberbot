@@ -53,6 +53,8 @@ using Timberborn.ToolSystem;
 using Timberborn.PlantingUI;
 using Timberborn.BuildingsNavigation;
 using Timberborn.SoilMoistureSystem;
+using Timberborn.NeedSpecs;
+using Timberborn.GameFactionSystem;
 using UnityEngine;
 
 namespace Timberbot
@@ -97,6 +99,8 @@ namespace Timberbot
         private readonly DistrictPathNavRangeDrawerRegistrar _districtPathNavRegistrar; // district road connectivity
         private readonly Timberborn.Navigation.INavMeshService _navMeshService;   // road/terrain nav mesh connectivity
         private readonly ISoilMoistureService _soilMoistureService;       // soil moisture/irrigation
+        private readonly FactionNeedService _factionNeedService;           // need specs per faction (beaver/bot)
+        private readonly NeedGroupSpecService _needGroupSpecService;       // need group categories (Social, Hygiene, etc)
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -129,7 +133,9 @@ namespace Timberbot
             DistrictPathNavRangeDrawerRegistrar districtPathNavRegistrar,
             Timberborn.Navigation.INavMeshService navMeshService,
             ISoilMoistureService soilMoistureService,
-            StackableBlockService stackableBlockService)
+            StackableBlockService stackableBlockService,
+            FactionNeedService factionNeedService,
+            NeedGroupSpecService needGroupSpecService)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -161,6 +167,8 @@ namespace Timberbot
             _navMeshService = navMeshService;
             _soilMoistureService = soilMoistureService;
             _stackableBlockService = stackableBlockService;
+            _factionNeedService = factionNeedService;
+            _needGroupSpecService = needGroupSpecService;
         }
 
         public void Load()
@@ -1714,6 +1722,96 @@ namespace Timberbot
             catch (System.Exception ex)
             {
                 return new { error = ex.Message, building = buildingName };
+            }
+        }
+
+        // population wellbeing breakdown by need group (Social, Hygiene, etc)
+        // aggregates all beaver needs into per-category current/max scores
+        public object CollectWellbeing()
+        {
+            try
+            {
+                // get all need specs for beavers
+                var beaverNeeds = _factionNeedService.GetBeaverNeeds();
+
+                // build group -> need specs mapping
+                var groupNeeds = new Dictionary<string, List<NeedSpec>>();
+                foreach (var ns in beaverNeeds)
+                {
+                    var groupId = ns.NeedGroupId;
+                    if (string.IsNullOrEmpty(groupId)) continue;
+                    if (!groupNeeds.ContainsKey(groupId))
+                        groupNeeds[groupId] = new List<NeedSpec>();
+                    groupNeeds[groupId].Add(ns);
+                }
+
+                // aggregate per beaver
+                int beaverCount = 0;
+                var groupTotals = new Dictionary<string, float>();    // current wellbeing sum per group
+                var groupMaxTotals = new Dictionary<string, float>(); // max wellbeing sum per group
+
+                foreach (var ec in _entityRegistry.Entities)
+                {
+                    var needMgr = ec.GetComponent<NeedManager>();
+                    if (needMgr == null) continue;
+                    var wb = ec.GetComponent<WellbeingTracker>();
+                    if (wb == null) continue;
+                    beaverCount++;
+
+                    foreach (var kvp in groupNeeds)
+                    {
+                        var groupId = kvp.Key;
+                        float groupWb = 0f;
+                        float groupMax = 0f;
+                        foreach (var ns in kvp.Value)
+                        {
+                            if (needMgr.HasNeed(ns.Id))
+                            {
+                                var need = needMgr.GetNeedWellbeing(ns.Id);
+                                groupWb += need;
+                            }
+                            groupMax += ns.FavorableWellbeing;
+                        }
+                        if (!groupTotals.ContainsKey(groupId))
+                        {
+                            groupTotals[groupId] = 0f;
+                            groupMaxTotals[groupId] = 0f;
+                        }
+                        groupTotals[groupId] += groupWb;
+                        groupMaxTotals[groupId] += groupMax;
+                    }
+                }
+
+                // build output
+                var categories = new List<object>();
+                foreach (var kvp in groupNeeds)
+                {
+                    var groupId = kvp.Key;
+                    float avgCurrent = beaverCount > 0 ? groupTotals.GetValueOrDefault(groupId) / beaverCount : 0;
+                    float avgMax = beaverCount > 0 ? groupMaxTotals.GetValueOrDefault(groupId) / beaverCount : 0;
+
+                    var needs = new List<object>();
+                    foreach (var ns in kvp.Value)
+                        needs.Add(new { id = ns.Id, favorableWellbeing = ns.FavorableWellbeing, unfavorableWellbeing = ns.UnfavorableWellbeing });
+
+                    categories.Add(new
+                    {
+                        group = groupId,
+                        current = System.Math.Round(avgCurrent, 1),
+                        max = System.Math.Round(avgMax, 1),
+                        needs
+                    });
+                }
+
+                return new
+                {
+                    beavers = beaverCount,
+                    categories
+                };
+            }
+            catch (System.Exception ex)
+            {
+                return new { error = ex.Message };
             }
         }
 

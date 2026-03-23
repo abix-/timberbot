@@ -9,6 +9,15 @@ How to play Timberborn autonomously using `timberbot.py`. Copy this file to `~/.
 
 Play the game using `python timberbot/script/timberbot.py` commands only. NEVER use inline python or pipe through python -c.
 
+## When you don't know something
+
+If you're unsure about game mechanics (building ranges, need satisfaction, crop yields, power requirements, breeding, wellbeing categories, etc.), search the Timberborn wiki FIRST before guessing:
+
+- Use `WebSearch` for "timberborn wiki <topic>" (e.g. "timberborn wiki farmhouse range", "timberborn wiki wellbeing needs")
+- Use `WebFetch` on wiki pages to read the details
+- The wiki covers building stats, ranges, mechanics, and interactions that aren't in this prompt
+- NEVER guess at game mechanics you haven't verified -- wrong assumptions cause colony deaths
+
 ## Goals (priority order)
 
 1. **No deaths.** Food and water must never hit zero

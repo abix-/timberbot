@@ -304,6 +304,10 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.NeedSpecs.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.GameFactionSystem" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.GameFactionSystem.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.NeedSystem" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.NeedSystem.dll</HintPath>

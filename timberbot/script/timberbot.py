@@ -136,6 +136,10 @@ class Timberbot:
         """Science points and unlockable buildings: {points, unlockables: [{name, cost, unlocked}]}."""
         return self._get("/api/science")
 
+    def wellbeing(self):
+        """Population wellbeing breakdown by category: {beavers, categories: [{group, current, max, needs}]}."""
+        return self._get("/api/wellbeing")
+
     def unlock_building(self, building):
         """Unlock a building using science points."""
         return self._post("/api/science/unlock", {"building": building})
