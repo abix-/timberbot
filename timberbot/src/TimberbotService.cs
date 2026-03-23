@@ -54,6 +54,21 @@ using UnityEngine;
 
 namespace Timberbot
 {
+    /// <summary>
+    /// Core service for the Timberbot HTTP API. Injected via Bindito DI as a game singleton.
+    ///
+    /// All read/write methods return plain objects serialized to JSON by TimberbotHttpServer.
+    /// Endpoints that return lists support a "format" param:
+    ///   - "toon" (default): flat dicts optimized for TOON tabular output
+    ///   - "json": full nested data for programmatic access
+    ///
+    /// Entity access pattern: Timberborn has no typed entity queries. All data comes from
+    /// iterating _entityRegistry.Entities and calling GetComponent&lt;T&gt;() per entity.
+    /// FindEntity() uses a per-frame dictionary cache to make ID lookups O(1).
+    ///
+    /// Names: all entity names pass through CleanName() to strip Unity suffixes
+    /// like "(Clone)", ".IronTeeth", ".Folktails" before returning to clients.
+    /// </summary>
     public class TimberbotService : ILoadableSingleton, IUpdatableSingleton
     {
         private readonly IGoodService _goodService;
@@ -148,9 +163,12 @@ namespace Timberbot
             _server?.DrainRequests();
         }
 
+        // Per-frame entity cache: write endpoints call FindEntity() often.
+        // Without this, each call scans all entities O(n). With cache, O(1) after first call per frame.
         private Dictionary<int, EntityComponent> _entityCache;
         private int _entityCacheFrame = -1;
 
+        /// <summary>Strip Unity/faction suffixes so API returns human-readable names.</summary>
         private static string CleanName(string name) =>
             name.Replace("(Clone)", "").Replace(".IronTeeth", "").Replace(".Folktails", "").Trim();
 
@@ -170,8 +188,15 @@ namespace Timberbot
 
         // ================================================================
         // READ ENDPOINTS
+        // Each returns an object serialized to JSON. The "format" param controls shape:
+        //   toon: flat dicts/lists for tabular TOON display (default for CLI)
+        //   json: full nested data for programmatic access (--json flag)
         // ================================================================
 
+        /// <summary>
+        /// Single-pass dashboard: iterates all entities once to collect trees, housing,
+        /// employment, wellbeing, and alerts. The bot loop only needs this one call.
+        /// </summary>
         public object CollectSummary(string format = "toon")
         {
             // single pass over all entities
@@ -1594,6 +1619,13 @@ namespace Timberbot
             };
         }
 
+        /// <summary>
+        /// Unlock a building via science. Three steps required for full UI update:
+        /// 1. BuildingUnlockingService.Unlock() - marks unlocked in data layer
+        /// 2. Clear the tool's Locker via reflection - removes the click-blocking lock
+        /// 3. OnToolUnlocked() - updates toolbar button appearance
+        /// Matches by TemplateName string (not reference equality) to avoid stale object refs.
+        /// </summary>
         public object UnlockBuilding(string buildingName)
         {
             try
@@ -1848,6 +1880,14 @@ namespace Timberbot
             "Pump", "Floodgate", "Dam", "Levee", "Sluice", "WaterWheel"
         };
 
+        /// <summary>
+        /// Place a building with full validation:
+        /// 1. Check building exists and is unlocked (science)
+        /// 2. Correct origin for orientation (user coords = bottom-left regardless of rotation)
+        /// 3. Validate every footprint tile: terrain height must match z, no water (unless water building),
+        ///    no occupancy (dead trees are skipped), no underground clipping
+        /// 4. Call BlockObjectPlacerService.Place() only after all checks pass
+        /// </summary>
         public object PlaceBuilding(string prefabName, int x, int y, int z, int orientation)
         {
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);

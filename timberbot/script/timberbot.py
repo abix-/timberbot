@@ -1,17 +1,24 @@
 """Timberbot -- control Timberborn over HTTP.
 
+CLI for the Timberbot API (port 8085). Talks to the C# mod running inside the game.
+The API does all data processing; this client is a thin wrapper that formats output.
+
+Output formats:
+    TOON (default): compact tabular format optimized for AI token efficiency
+    JSON (--json):  full nested data for programmatic access
+
 Usage:
     python timberbot.py                     list all methods
-    python timberbot.py summary             full colony snapshot
+    python timberbot.py summary             colony dashboard (one call, all stats)
     python timberbot.py buildings           list all buildings
-    python timberbot.py set_speed 3         fast forward
-    python timberbot.py watch               live dashboard
-    python timberbot.py place_building LumberjackFlag.IronTeeth 120 130 2
-    python timberbot.py demolish_building -- -12345
+    python timberbot.py --json summary      full JSON output
+    python timberbot.py watch               live terminal dashboard
+    python timberbot.py place_building prefab:LumberjackFlag.IronTeeth x:120 y:130 z:2
 
 As a library:
     from timberbot import Timberbot
-    bot = Timberbot()
+    bot = Timberbot()                       # toon format (flat)
+    bot = Timberbot(json_mode=True)         # json format (full)
     bot.summary()
 """
 import json
@@ -25,7 +32,12 @@ import requests
 # ---------------------------------------------------------------------------
 
 class Timberbot:
-    """Client for Timberbot API (port 8085)."""
+    """Client for Timberbot API (port 8085).
+
+    All data processing happens server-side in the C# mod. This client sends
+    a format param ("toon" or "json") and passes the response straight through.
+    No client-side transformation of API data.
+    """
 
     def __init__(self, host="localhost", port=8085, json_mode=False):
         self.url = f"http://{host}:{port}"
