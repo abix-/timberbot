@@ -16,7 +16,6 @@ theme:
     code: Roboto Mono
   icon:
     repo: fontawesome/brands/github
-    logo: material/api
   features:
     - content.code.copy
     - content.code.annotate
