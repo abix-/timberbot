@@ -178,6 +178,7 @@ namespace Timberbot
             float totalWellbeing = 0f;
             int beaverCount = 0;
             int alertUnstaffed = 0, alertUnpowered = 0, alertUnreachable = 0;
+            int miserable = 0, critical = 0;
 
             foreach (var ec in _entityRegistry.Entities)
             {
@@ -216,12 +217,26 @@ namespace Timberbot
                         alertUnstaffed++;
                 }
 
-                // wellbeing
+                // wellbeing + critical needs
                 var wb = ec.GetComponent<WellbeingTracker>();
                 if (wb != null)
                 {
                     totalWellbeing += wb.Wellbeing;
                     beaverCount++;
+                    if (wb.Wellbeing < 4) miserable++;
+                    try
+                    {
+                        var needMgr = ec.GetComponent<NeedManager>();
+                        if (needMgr != null)
+                        {
+                            foreach (var needSpec in needMgr.GetNeeds())
+                            {
+                                var need = needMgr.GetNeed(needSpec.Id);
+                                if (need.IsActive && need.IsCritical) { critical++; break; }
+                            }
+                        }
+                    }
+                    catch { }
                 }
 
                 // power alert
@@ -246,7 +261,7 @@ namespace Timberbot
                 trees = new { markedGrown, markedSeedling, unmarkedGrown },
                 housing = new { occupiedBeds, totalBeds, homeless },
                 employment = new { assigned = assignedWorkers, vacancies = totalVacancies, unemployed },
-                wellbeing = System.Math.Round(avgWellbeing, 1),
+                wellbeing = new { average = System.Math.Round(avgWellbeing, 1), miserable, critical },
                 science = _scienceService.SciencePoints,
                 alerts = new { unstaffed = alertUnstaffed, unpowered = alertUnpowered, unreachable = alertUnreachable }
             };

@@ -642,8 +642,13 @@ def _flatten_for_toon(method, data):
         if e:
             flat["workers"] = f"{e.get('assigned', 0)}/{e.get('vacancies', 0)}"
             flat["unemployed"] = e.get("unemployed", 0)
-        if "wellbeing" in data:
-            flat["wellbeing"] = data["wellbeing"]
+        wb = data.get("wellbeing", {})
+        if isinstance(wb, dict):
+            flat["wellbeing"] = wb.get("average", 0)
+            flat["miserable"] = wb.get("miserable", 0)
+            flat["critical"] = wb.get("critical", 0)
+        elif wb:
+            flat["wellbeing"] = wb
         if "science" in data:
             flat["science"] = data["science"]
         a = data.get("alerts", {})
