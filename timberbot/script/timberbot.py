@@ -641,6 +641,13 @@ def _flatten_for_toon(method, data):
             flat["wellbeing"] = data["wellbeing"]
         if "science" in data:
             flat["science"] = data["science"]
+        a = data.get("alerts", {})
+        if a:
+            alert_parts = []
+            if a.get("unstaffed", 0): alert_parts.append(f"{a['unstaffed']} unstaffed")
+            if a.get("unpowered", 0): alert_parts.append(f"{a['unpowered']} unpowered")
+            if a.get("unreachable", 0): alert_parts.append(f"{a['unreachable']} unreachable")
+            flat["alerts"] = ", ".join(alert_parts) if alert_parts else "none"
         return flat
 
     if method == "map" and isinstance(data, dict) and "tiles" in data:

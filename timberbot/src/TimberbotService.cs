@@ -190,6 +190,8 @@ namespace Timberbot
             // wellbeing
             float totalWellbeing = 0f;
             int beaverCount = 0;
+            // alerts
+            int alertUnstaffed = 0, alertUnpowered = 0, alertUnreachable = 0;
             foreach (var ec in _entityRegistry.Entities)
             {
                 var dwelling = ec.GetComponent<Dwelling>();
@@ -198,15 +200,13 @@ namespace Timberbot
                     occupiedBeds += dwelling.NumberOfDwellers;
                     totalBeds += dwelling.MaxBeavers;
                 }
-                var workplace = ec.GetComponent<WorkplacePriority>();
-                if (workplace != null)
+                var wp = ec.GetComponent<Timberborn.WorkSystem.Workplace>();
+                if (wp != null)
                 {
-                    var wp = ec.GetComponent<Timberborn.WorkSystem.Workplace>();
-                    if (wp != null)
-                    {
-                        assignedWorkers += wp.AssignedWorkers.Count;
-                        totalVacancies += wp.DesiredWorkers;
-                    }
+                    assignedWorkers += wp.AssignedWorkers.Count;
+                    totalVacancies += wp.DesiredWorkers;
+                    if (wp.DesiredWorkers > 0 && wp.AssignedWorkers.Count < wp.DesiredWorkers)
+                        alertUnstaffed++;
                 }
                 var wb = ec.GetComponent<WellbeingTracker>();
                 if (wb != null)
@@ -214,6 +214,12 @@ namespace Timberbot
                     totalWellbeing += wb.Wellbeing;
                     beaverCount++;
                 }
+                var mech = ec.GetComponent<MechanicalNode>();
+                if (mech != null && mech.IsConsumer && !mech.Active)
+                    alertUnpowered++;
+                var reach = ec.GetComponent<EntityReachabilityStatus>();
+                if (reach != null && reach.IsAnyUnreachable())
+                    alertUnreachable++;
             }
             int homeless = System.Math.Max(0, beaverCount - occupiedBeds);
             int unemployed = System.Math.Max(0, beaverCount - assignedWorkers);
@@ -228,7 +234,8 @@ namespace Timberbot
                 housing = new { occupiedBeds, totalBeds, homeless },
                 employment = new { assigned = assignedWorkers, vacancies = totalVacancies, unemployed },
                 wellbeing = System.Math.Round(avgWellbeing, 1),
-                science = _scienceService.SciencePoints
+                science = _scienceService.SciencePoints,
+                alerts = new { unstaffed = alertUnstaffed, unpowered = alertUnpowered, unreachable = alertUnreachable }
             };
         }
 
