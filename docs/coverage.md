@@ -24,7 +24,8 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 | Pause/unpause | YES | YES | `pause_building`, `unpause_building` |
 | Workers | YES | YES | `set_workers` |
 | Priority | YES | YES | `set_priority` |
-| Paths/stairs/platforms | YES | YES | `place_building` |
+| Paths/stairs/platforms | YES | YES | `place_building`, `place_path` (auto-stairs at z-changes) |
+| Placement validation | YES | YES | `find_placement` (scans area, returns valid spots with path access + power adjacency) |
 | Ziplines/tubeways | YES | NO | Visible as buildings |
 | Power network | YES | NO | `powered`, `isGenerator`, `isConsumer`, `powerDemand`, `powerSupply` |
 | Science points | YES | NO | `science` |
@@ -42,7 +43,7 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 | Map/terrain | YES | NO | `map`, `scan`, `visual` |
 | Game speed | YES | YES | `speed`, `set_speed` (0-3) |
 | Soil contamination | YES | NO | `contaminated` field on map tiles |
-| District migration | YES | YES | `migrate from:X to:Y count:N` |
+| District migration | YES | YES | `migrate from_district:X to_district:Y count:N` |
 | Clutch status | YES | NO | `isClutch`, `clutchEngaged` on buildings |
 | Per-building power | YES | NO | `nominalPowerInput`, `nominalPowerOutput` on buildings |
 | Automation levers | NO | NO | Use Timberborn's built-in HTTP API (port 8080) directly |
