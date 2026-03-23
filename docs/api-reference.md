@@ -485,7 +485,7 @@ All placed buildings with state.
 
 **CLI:** `python timberbot.py buildings` | `python timberbot.py --json buildings`
 
-Supports pagination: `?limit=N&offset=N`
+Pagination available in Python client only: `bot.buildings(limit=10, offset=20)`
 
 #### Response (format=json)
 
@@ -561,7 +561,7 @@ All trees (alive and dead).
 
 **CLI:** `python timberbot.py trees`
 
-Supports pagination: `?limit=N&offset=N`
+Pagination available in Python client only: `bot.trees(limit=50)`
 
 #### Response
 
@@ -612,7 +612,7 @@ All beavers with wellbeing and needs.
 
 **CLI:** `python timberbot.py beavers` | `python timberbot.py --json beavers`
 
-Supports pagination: `?limit=N&offset=N`
+Pagination available in Python client only: `bot.beavers(limit=10)`
 
 #### Response (format=json)
 
@@ -959,7 +959,9 @@ Place a building in the world. Validates all tiles before placing: occupancy, te
 
 #### Response (success)
 
-Returns the placed building entity with full building fields (same shape as `GET /api/buildings` JSON format entry).
+```json
+{"id": 12340, "name": "LumberjackFlag", "x": 120, "y": 130, "z": 2, "orientation": 0}
+```
 
 #### Response (error)
 
@@ -972,7 +974,15 @@ Returns the placed building entity with full building fields (same shape as `GET
 ```
 
 ```json
-{"error": "occupied", "prefab": "LumberjackFlag", "x": 120, "y": 130, "z": 2}
+{"error": "tile (121,131,2) already occupied", "prefab": "LumberjackFlag", "x": 120, "y": 130, "z": 2, "orientation": 0}
+```
+
+```json
+{"error": "tile (120,130) is water", "prefab": "LumberjackFlag", "x": 120, "y": 130, "z": 2, "orientation": 0}
+```
+
+```json
+{"error": "terrain too low at (120,130): height 1 < 2", "prefab": "LumberjackFlag", "x": 120, "y": 130, "z": 2, "orientation": 0}
 ```
 
 ---
@@ -1355,7 +1365,7 @@ Clear planting marks from an area.
 #### Response
 
 ```json
-{"x1": 110, "y1": 130, "x2": 115, "y2": 135, "z": 2, "cleared": 28}
+{"x1": 110, "y1": 130, "x2": 115, "y2": 135, "z": 2, "cleared": true, "tiles": 36}
 ```
 
 ---
@@ -1391,33 +1401,9 @@ Route a straight-line path from point A to point B, auto-placing stairs at z-lev
 
 ## Python CLI Helpers
 
-These are convenience methods in `timberbot.py` that are not direct HTTP endpoints.
+These are convenience methods in `timberbot.py` that have no direct HTTP equivalent.
 
-### beavers (CLI-only)
-
-Beaver wellbeing with critical needs, flattened to tabular TOON.
-
-```bash
-python timberbot.py beavers
-```
-
-### tree_clusters (CLI-only)
-
-Top 5 clusters of grown trees with coordinates and counts.
-
-```bash
-python timberbot.py tree_clusters
-```
-
-### scan (CLI-only)
-
-Occupied tiles and water around a point, skipping empty ground.
-
-```bash
-python timberbot.py scan x:122 y:136 radius:10
-```
-
-### visual (CLI-only)
+### visual
 
 Colored ASCII grid with terrain height display. Background shading encodes z-level, foreground characters represent entities.
 
@@ -1427,26 +1413,41 @@ python timberbot.py visual x:122 y:136 radius:10
 
 | Char | Color | Meaning |
 |------|-------|---------|
-| `0`-`9` | dim | Empty ground (digit = z % 10, background band = tens) |
+| `0`-`9` | dim (green if moist) | Empty ground (digit = z % 10, background band = tens) |
 | `~` | blue | Water |
 | `@` | white | Entrance |
 | `=` | yellow | Path |
 | `D` | bright yellow | District center |
-| `H` | yellow | Housing |
+| `H` | yellow | Housing (Rowhouse, Barrack, Lodge) |
+| `R` | yellow | Breeding pod |
 | `F` | cyan | Farmhouse |
-| `M` | white | Lumber mill |
-| `E` | bright yellow | Power |
+| `f` | green | Forester |
+| `M` | white | Lumber mill / wood workshop |
+| `S` | white | Science (Inventor, Numbercruncher) |
+| `E` | bright yellow | Power (wheel, shaft) |
 | `L` | red | Lumberjack |
 | `G` | magenta | Gatherer |
 | `K` | red | Hauling |
+| `$` | yellow | Warehouse / pile |
 | `P` | bright blue | Pump |
 | `W` | bright blue | Tank |
-| `X` | cyan | Floodgate/dam |
-| `T` | green | Grown tree |
+| `X` | cyan | Floodgate / dam / levee / sluice |
+| `C` | red | Campfire |
+| `T` | green | Grown tree (Pine, Birch, Oak, Maple, Chestnut) |
 | `t` | dim green | Seedling |
 | `B` | magenta | Berry bush |
 | `k` | bright green | Kohlrabi |
 | `c` | bright green | Carrot |
+| `p` | bright green | Potato |
+| `w` | bright green | Wheat |
+| `a` | bright green | Cassava |
+| `s` | bright green | Sunflower |
+| `n` | bright green | Corn |
+| `e` | bright green | Eggplant |
+| `y` | bright green | Soybean |
+| `o` | bright green | Canola |
+| `l` | bright green | Cattail |
+| `d` | bright green | Spadderdock |
 
 Background bands: z=0-9 (dark grays), z=10-19 (medium grays), z=20-22 (bright).
 
