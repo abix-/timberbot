@@ -1220,25 +1220,29 @@ namespace Timberbot
         {
             try
             {
-                var buildingSpec = _buildingService.GetBuildingTemplate(buildingName);
-                if (buildingSpec == null)
-                    return new { error = "building not found", building = buildingName };
-
-                _buildingUnlockingService.Unlock(buildingSpec);
-
-                // update UI toolbar (pattern from BeaverBuddies)
+                // find the tool button by template name and unlock via its BuildingSpec
                 foreach (var toolButton in _toolButtonService.ToolButtons)
                 {
                     var blockObjectTool = toolButton.Tool as BlockObjectTool;
                     if (blockObjectTool == null) continue;
                     var toolBuilding = blockObjectTool.Template.GetSpec<BuildingSpec>();
-                    if (toolBuilding == buildingSpec)
+                    if (toolBuilding == null) continue;
+                    var templateSpec = blockObjectTool.Template.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
+                    if (templateSpec != null && templateSpec.TemplateName == buildingName)
                     {
+                        _buildingUnlockingService.Unlock(toolBuilding);
                         _unlockedPlantableGroupsRegistry.AddUnlockedPlantableGroups(toolBuilding);
                         toolButton.OnToolUnlocked(new ToolUnlockedEvent(toolButton.Tool));
+                        return new { building = buildingName, unlocked = true,
+                                     remaining = _scienceService.SciencePoints };
                     }
                 }
 
+                // fallback: unlock via BuildingService template
+                var buildingSpec = _buildingService.GetBuildingTemplate(buildingName);
+                if (buildingSpec == null)
+                    return new { error = "building not found", building = buildingName };
+                _buildingUnlockingService.Unlock(buildingSpec);
                 return new { building = buildingName, unlocked = true,
                              remaining = _scienceService.SciencePoints };
             }
