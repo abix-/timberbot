@@ -60,8 +60,7 @@ extra:
       link: https://steamcommunity.com/sharedfiles/filedetails/?id=YOUR_WORKSHOP_ID
 
 nav:
-  - Home: index.md
-  - Getting Started: getting-started.md
+  - Getting Started: index.md
   - API Reference: api-reference.md
   - AI Prompt: timberbot.md
   - Coverage: coverage.md
