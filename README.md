@@ -56,6 +56,6 @@ Learned from these Timberborn modding projects:
 - [thomaswp/BeaverBuddies](https://github.com/thomaswp/BeaverBuddies) -- `BlockObjectPlacerService.Place()` for building placement, `TemplateInstantiator` + `MarkAsPreviewAndInitialize` + `IsValid()` for game-native placement validation, `BuildingUnlockingService.Unlock()` for science, `WorkingHoursManager` for work schedules
 - [datvm/TimberbornMods](https://github.com/datvm/TimberbornMods) -- `TreeCuttingArea.AddCoordinates()` for tree marking, `IAlertFragment` patterns for building alerts
 - [ihsoft/TimberbornMods](https://github.com/ihsoft/TimberbornMods) -- `Inventories.AllInventories` for building inventory, `BuildingUnlockingService.Unlocked()` for science checks
-- [CordialGnom/timberborn-unity-modding](https://github.com/CordialGnom/timberborn-unity-modding) -- `PlantingService.SetPlantingCoordinates()` for crop planting
+- [CordialGnom/timberborn-unity-modding](https://github.com/CordialGnom/timberborn-unity-modding) -- `PlantingService.SetPlantingCoordinates()` for crop planting, `PlantingAreaValidator.CanPlant()` for planting validation
 - [Timberborn-KyP-Mods/TimberPrint](https://github.com/Timberborn-KyP-Mods/TimberPrint) -- `PreviewFactory` + `BlockValidator` patterns for placement validation
 - [toon-format/toon](https://github.com/toon-format/toon) -- Token-Oriented Object Notation for compact AI output
