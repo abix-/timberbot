@@ -2,7 +2,7 @@
 
 What Timberbot can and can't do, audited against every Timberborn 1.0 game system.
 
-## Full coverage
+## Supported systems
 
 | System | Read | Write | How |
 |---|---|---|---|
@@ -59,7 +59,7 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 
 | Gap | Severity | Notes |
 |---|---|---|
-| Bot condition/fuel | Untested | Bots use same NeedManager, needs should show via `beavers` endpoint. Needs save with bots |
+| Bot condition/fuel | In-Progress | Bots use same NeedManager, needs should show via `beavers` endpoint. Needs verification with bots |
 
 ## By design (not gaps)
 

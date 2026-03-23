@@ -57,10 +57,10 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/abix-/TimberbornMods
     - icon: fontawesome/brands/steam
-      link: https://steamcommunity.com/sharedfiles/filedetails/?id=YOUR_WORKSHOP_ID
+      link: https://steamcommunity.com/sharedfiles/filedetails/?id=3689670088
 
 nav:
-  - Getting Started: index.md
+  - Getting Started: getting-started.md
   - API Reference: api-reference.md
   - AI Prompt: timberbot.md
   - Features: features.md

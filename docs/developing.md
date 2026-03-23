@@ -14,7 +14,6 @@ TimberbornMods/
       thumbnail.png           Steam Workshop image
     script/
       timberbot.py            Python client (API + CLI + dashboard)
-    script/
       release.py              build + package + GitHub release script
   docs/                   documentation
   README.md

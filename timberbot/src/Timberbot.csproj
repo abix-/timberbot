@@ -350,6 +350,7 @@
     <MakeDir Directories="$(ModDir)\docs" />
     <Copy SourceFiles="..\..\docs\api-reference.md" DestinationFolder="$(ModDir)\docs" />
     <Copy SourceFiles="..\..\docs\getting-started.md" DestinationFolder="$(ModDir)\docs" />
+    <Copy SourceFiles="..\..\docs\features.md" DestinationFolder="$(ModDir)\docs" />
     <Copy SourceFiles="..\..\docs\developing.md" DestinationFolder="$(ModDir)\docs" />
     <Copy SourceFiles="..\..\docs\timberbot.md" DestinationFolder="$(ModDir)\docs" />
     <Message Text="Deployed to $(ModDir)" Importance="high" />
