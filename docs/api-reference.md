@@ -11,7 +11,7 @@
 
 ### Output Format
 
-All endpoints support two output formats via `?format=` query param or `"format"` in POST body:
+Some endpoints support two output formats via `?format=` query param or `"format"` in POST body. Endpoints that support both formats are noted in their sections. All others return a single JSON shape.
 
 | Format | Description |
 |--------|-------------|
@@ -222,7 +222,7 @@ Current work schedule.
 
 Set when beavers stop working.
 
-**CLI:** `python timberbot.py set_workhours endHours:14`
+**CLI:** `python timberbot.py set_workhours end_hours:14`
 
 #### Request Body
 
@@ -420,7 +420,7 @@ Import/export settings per good per district.
 
 Set import/export for a specific good in a district.
 
-**CLI:** `python timberbot.py set_distribution district:"District 1" good:Log import:Forced exportThreshold:50`
+**CLI:** `python timberbot.py set_distribution district:"District 1" good:Log import_option:Forced export_threshold:50`
 
 #### Request Body
 
@@ -449,7 +449,7 @@ Set import/export for a specific good in a district.
 
 Move adult beavers between districts.
 
-**CLI:** `python timberbot.py migrate from:"District 1" to:"District 2" count:3`
+**CLI:** `python timberbot.py migrate from_district:"District 1" to_district:"District 2" count:3`
 
 #### Request Body
 
@@ -886,7 +886,7 @@ Unlock a building using science points. Matches the exact UI flow (cost deductio
 
 Pause or unpause a building.
 
-**CLI:** `python timberbot.py pause_building id:12340` | `python timberbot.py unpause_building id:12340`
+**CLI:** `python timberbot.py pause_building building_id:12340` | `python timberbot.py unpause_building building_id:12340`
 
 #### Request Body
 
@@ -917,7 +917,7 @@ Pause or unpause a building.
 
 Remove a building from the world.
 
-**CLI:** `python timberbot.py demolish_building id:12340`
+**CLI:** `python timberbot.py demolish_building building_id:12340`
 
 #### Request Body
 
@@ -1040,7 +1040,7 @@ Find valid placements for a building within a rectangular area. Results sorted b
 
 Set floodgate water gate height. Value is clamped to max.
 
-**CLI:** `python timberbot.py set_floodgate id:12340 height:1.5`
+**CLI:** `python timberbot.py set_floodgate building_id:12340 height:1.5`
 
 #### Request Body
 
@@ -1067,7 +1067,7 @@ Set floodgate water gate height. Value is clamped to max.
 
 Set construction or workplace priority.
 
-**CLI:** `python timberbot.py set_priority id:12340 priority:VeryHigh`
+**CLI:** `python timberbot.py set_priority building_id:12340 priority:VeryHigh`
 
 #### Request Body
 
@@ -1099,7 +1099,7 @@ Set construction or workplace priority.
 
 Set desired worker count for a workplace.
 
-**CLI:** `python timberbot.py set_workers id:12340 count:2`
+**CLI:** `python timberbot.py set_workers building_id:12340 count:2`
 
 #### Request Body
 
@@ -1126,7 +1126,7 @@ Set desired worker count for a workplace.
 
 Prioritize hauling deliveries to a building.
 
-**CLI:** `python timberbot.py set_haul_priority id:12340 prioritized:true`
+**CLI:** `python timberbot.py set_haul_priority building_id:12340 prioritized:true`
 
 #### Request Body
 
@@ -1153,7 +1153,7 @@ Prioritize hauling deliveries to a building.
 
 Set which recipe a manufactory produces.
 
-**CLI:** `python timberbot.py set_recipe id:12340 recipe:PlankRecipe`
+**CLI:** `python timberbot.py set_recipe building_id:12340 recipe:PlankRecipe`
 
 #### Request Body
 
@@ -1184,7 +1184,7 @@ Set which recipe a manufactory produces.
 
 Prioritize planting or harvesting for a farmhouse.
 
-**CLI:** `python timberbot.py set_farmhouse_action id:12340 action:planting`
+**CLI:** `python timberbot.py set_farmhouse_action building_id:12340 action:planting`
 
 #### Request Body
 
@@ -1219,7 +1219,7 @@ Prioritize planting or harvesting for a farmhouse.
 
 Prioritize which tree/resource type a forester plants.
 
-**CLI:** `python timberbot.py set_plantable_priority id:12340 plantable:Pine`
+**CLI:** `python timberbot.py set_plantable_priority building_id:12340 plantable:Pine`
 
 #### Request Body
 
@@ -1250,7 +1250,7 @@ Prioritize which tree/resource type a forester plants.
 
 Set maximum capacity on a stockpile.
 
-**CLI:** `python timberbot.py set_capacity id:12340 capacity:100`
+**CLI:** `python timberbot.py set_capacity building_id:12340 capacity:100`
 
 #### Request Body
 
@@ -1271,7 +1271,7 @@ Set maximum capacity on a stockpile.
 
 Set which good a single-good stockpile accepts.
 
-**CLI:** `python timberbot.py set_good id:12340 good:Log`
+**CLI:** `python timberbot.py set_good building_id:12340 good:Log`
 
 #### Request Body
 
@@ -1325,7 +1325,7 @@ Mark or clear a rectangular area for tree cutting.
 
 Mark an area for crop planting. Validates tiles: skips occupied, water, and wrong terrain.
 
-**CLI:** `python timberbot.py mark_planting x1:110 y1:130 x2:115 y2:135 z:2 crop:Carrot`
+**CLI:** `python timberbot.py plant_crop x1:110 y1:130 x2:115 y2:135 z:2 crop:Carrot`
 
 #### Request Body
 
