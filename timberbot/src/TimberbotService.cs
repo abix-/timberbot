@@ -148,14 +148,21 @@ namespace Timberbot
             _server?.DrainRequests();
         }
 
+        private Dictionary<int, EntityComponent> _entityCache;
+        private int _entityCacheFrame = -1;
+
         private EntityComponent FindEntity(int id)
         {
-            foreach (var ec in _entityRegistry.Entities)
+            int frame = Time.frameCount;
+            if (_entityCache == null || _entityCacheFrame != frame)
             {
-                if (ec.GameObject.GetInstanceID() == id)
-                    return ec;
+                _entityCache = new Dictionary<int, EntityComponent>();
+                foreach (var ec in _entityRegistry.Entities)
+                    _entityCache[ec.GameObject.GetInstanceID()] = ec;
+                _entityCacheFrame = frame;
             }
-            return null;
+            _entityCache.TryGetValue(id, out var result);
+            return result;
         }
 
         // ================================================================
@@ -527,13 +534,12 @@ namespace Timberbot
             return results;
         }
 
-        public object CollectTrees()
+        private List<object> CollectNaturalResources<T>(System.Action<EntityComponent, Dictionary<string, object>> enrich = null) where T : class
         {
             var results = new List<object>();
             foreach (var ec in _entityRegistry.Entities)
             {
-                var cuttable = ec.GetComponent<Cuttable>();
-                if (cuttable == null) continue;
+                if (ec.GetComponent<T>() == null) continue;
 
                 var go = ec.GameObject;
                 var bo = ec.GetComponent<BlockObject>();
@@ -551,60 +557,36 @@ namespace Timberbot
                     entry["x"] = coords.x;
                     entry["y"] = coords.y;
                     entry["z"] = coords.z;
-                    entry["marked"] = _treeCuttingArea.IsInCuttingArea(coords);
                 }
 
                 if (living != null)
-                {
                     entry["alive"] = !living.IsDead;
-                }
 
+                enrich?.Invoke(ec, entry);
+                results.Add(entry);
+            }
+            return results;
+        }
+
+        public object CollectTrees()
+        {
+            return CollectNaturalResources<Cuttable>((ec, entry) =>
+            {
+                var bo = ec.GetComponent<BlockObject>();
+                if (bo != null)
+                    entry["marked"] = _treeCuttingArea.IsInCuttingArea(bo.Coordinates);
                 var growable = ec.GetComponent<Timberborn.Growing.Growable>();
                 if (growable != null)
                 {
                     entry["grown"] = growable.IsGrown;
                     entry["growth"] = growable.GrowthProgress;
                 }
-
-                results.Add(entry);
-            }
-            return results;
+            });
         }
 
         public object CollectGatherables()
         {
-            var results = new List<object>();
-            foreach (var ec in _entityRegistry.Entities)
-            {
-                var gatherable = ec.GetComponent<Gatherable>();
-                if (gatherable == null) continue;
-
-                var go = ec.GameObject;
-                var bo = ec.GetComponent<BlockObject>();
-                var living = ec.GetComponent<LivingNaturalResource>();
-
-                var entry = new Dictionary<string, object>
-                {
-                    ["id"] = go.GetInstanceID(),
-                    ["name"] = go.name
-                };
-
-                if (bo != null)
-                {
-                    var coords = bo.Coordinates;
-                    entry["x"] = coords.x;
-                    entry["y"] = coords.y;
-                    entry["z"] = coords.z;
-                }
-
-                if (living != null)
-                {
-                    entry["alive"] = !living.IsDead;
-                }
-
-                results.Add(entry);
-            }
-            return results;
+            return CollectNaturalResources<Gatherable>();
         }
 
         public object CollectBeavers()
