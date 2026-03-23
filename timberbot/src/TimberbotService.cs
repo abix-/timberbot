@@ -15,7 +15,6 @@ using Timberborn.WaterSystem;
 using Timberborn.EntitySystem;
 using Timberborn.Forestry;
 using Timberborn.Planting;
-using Timberborn.NaturalResources;
 using Timberborn.Gathering;
 using Timberborn.GameCycleSystem;
 using Timberborn.GameDistricts;
@@ -100,7 +99,8 @@ namespace Timberbot
         private readonly DistrictPathNavRangeDrawerRegistrar _districtPathNavRegistrar; // district road connectivity
         private readonly Timberborn.Navigation.INavMeshService _navMeshService;   // road/terrain nav mesh connectivity
         private readonly ISoilMoistureService _soilMoistureService;       // soil moisture/irrigation
-        private readonly SpawnValidationService _spawnValidationService;   // planting spot validation
+        private readonly PlantingAreaValidator _plantingAreaValidator;     // planting spot validation (same as player UI green/red)
+        private readonly PlantablePreviewFactory _plantablePreviewFactory; // crop preview for placement validation
         private readonly FactionNeedService _factionNeedService;           // need specs per faction (beaver/bot)
         private readonly NeedGroupSpecService _needGroupSpecService;       // need group categories (Social, Hygiene, etc)
         private readonly PreviewFactory _previewFactory;                       // create preview entities for placement validation
@@ -137,7 +137,8 @@ namespace Timberbot
             Timberborn.Navigation.INavMeshService navMeshService,
             ISoilMoistureService soilMoistureService,
             StackableBlockService stackableBlockService,
-            SpawnValidationService spawnValidationService,
+            PlantingAreaValidator plantingAreaValidator,
+            PlantablePreviewFactory plantablePreviewFactory,
             FactionNeedService factionNeedService,
             NeedGroupSpecService needGroupSpecService,
             PreviewFactory previewFactory)
@@ -172,7 +173,8 @@ namespace Timberbot
             _navMeshService = navMeshService;
             _soilMoistureService = soilMoistureService;
             _stackableBlockService = stackableBlockService;
-            _spawnValidationService = spawnValidationService;
+            _plantingAreaValidator = plantingAreaValidator;
+            _plantablePreviewFactory = plantablePreviewFactory;
             _factionNeedService = factionNeedService;
             _needGroupSpecService = needGroupSpecService;
             _previewFactory = previewFactory;
@@ -1623,7 +1625,8 @@ namespace Timberbot
             int planted = 0, skipped = 0;
             foreach (var c in coords)
             {
-                if (!_spawnValidationService.SpotIsValid(c, crop))
+                // PlantingAreaValidator.CanPlant -- same check the player UI uses for green/red tiles
+                if (!_plantingAreaValidator.CanPlant(c, crop))
                 {
                     skipped++;
                     continue;
