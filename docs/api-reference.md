@@ -2,7 +2,11 @@
 
 Base URL: `http://localhost:8085`
 
-CLI output uses [TOON format](https://github.com/toon-format/toon) (Token-Oriented Object Notation) for compact, token-efficient output. Requires `pip install toons`. Falls back to JSON if not installed.
+Two output formats controlled by `?format=` query param or `format` in POST body:
+- `toon` (default): flat tabular data for [TOON format](https://github.com/toon-format/toon) output. Requires `pip install toons`
+- `json`: full nested data for programmatic access
+
+CLI: `python timberbot.py summary` (TOON) or `python timberbot.py --json summary` (JSON)
 
 ## Read (GET)
 

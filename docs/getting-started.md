@@ -39,9 +39,9 @@ pip install requests
 ### CLI
 
 ```bash
-python timberbot.py summary                              # full colony snapshot
-python timberbot.py buildings                            # list all buildings with IDs
-python timberbot.py speed                                # check game speed
+python timberbot.py summary                              # colony dashboard (TOON format)
+python timberbot.py --json summary                       # full JSON output
+python timberbot.py buildings                            # list all buildings
 python timberbot.py set_speed speed:3                    # fast forward
 python timberbot.py place_building prefab:Path x:100 y:130 z:2
 python timberbot.py                                      # list all methods with usage
