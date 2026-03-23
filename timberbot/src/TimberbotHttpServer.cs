@@ -24,6 +24,7 @@ namespace Timberbot
             public string Route;
             public string Method;
             public JObject Body;
+            public string Format;
         }
 
         public TimberbotHttpServer(int port, TimberbotService service)
@@ -63,7 +64,7 @@ namespace Timberbot
                 processed++;
                 try
                 {
-                    var data = RouteRequest(req.Route, req.Method, req.Body);
+                    var data = RouteRequest(req.Route, req.Method, req.Body, req.Format);
                     Respond(req.Context, 200, data);
                 }
                 catch (Exception ex)
@@ -129,17 +130,21 @@ namespace Timberbot
                     }
                 }
 
+                // extract format from query string or body
+                var format = ctx.Request.QueryString["format"] ?? body?.Value<string>("format") ?? "toon";
+
                 _pending.Enqueue(new PendingRequest
                 {
                     Context = ctx,
                     Route = path,
                     Method = method,
-                    Body = body
+                    Body = body,
+                    Format = format
                 });
             }
         }
 
-        private object RouteRequest(string path, string method, JObject body)
+        private object RouteRequest(string path, string method, JObject body, string format = "toon")
         {
             // GET endpoints (read)
             if (method == "GET")
@@ -147,13 +152,13 @@ namespace Timberbot
                 switch (path)
                 {
                     case "/api/summary":
-                        return _service.CollectSummary();
+                        return _service.CollectSummary(format);
                     case "/api/alerts":
                         return _service.CollectAlerts();
                     case "/api/tree_clusters":
-                        return _service.CollectTreeClusters(); // default params, POST can override
+                        return _service.CollectTreeClusters();
                     case "/api/resources":
-                        return _service.CollectResources();
+                        return _service.CollectResources(format);
                     case "/api/population":
                         return _service.CollectPopulation();
                     case "/api/time":
@@ -161,15 +166,15 @@ namespace Timberbot
                     case "/api/weather":
                         return _service.CollectWeather();
                     case "/api/districts":
-                        return _service.CollectDistricts();
+                        return _service.CollectDistricts(format);
                     case "/api/buildings":
-                        return _service.CollectBuildings();
+                        return _service.CollectBuildings(format);
                     case "/api/trees":
                         return _service.CollectTrees();
                     case "/api/gatherables":
                         return _service.CollectGatherables();
                     case "/api/beavers":
-                        return _service.CollectBeavers();
+                        return _service.CollectBeavers(format);
                     case "/api/distribution":
                         return _service.CollectDistribution();
                     case "/api/science":

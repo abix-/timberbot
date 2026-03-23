@@ -27,17 +27,19 @@ import requests
 class Timberbot:
     """Client for Timberbot API (port 8085)."""
 
-    def __init__(self, host="localhost", port=8085):
+    def __init__(self, host="localhost", port=8085, json_mode=False):
         self.url = f"http://{host}:{port}"
+        self._format = "json" if json_mode else "toon"
         self.s = requests.Session()
         self.s.headers["Accept"] = "application/json"
 
     def _get(self, path):
-        r = self.s.get(f"{self.url}{path}", timeout=5)
+        r = self.s.get(f"{self.url}{path}", params={"format": self._format}, timeout=5)
         r.raise_for_status()
         return r.json()
 
     def _post(self, path, data):
+        data["format"] = self._format
         r = self.s.post(f"{self.url}{path}", json=data, timeout=5)
         return r.json()
 
@@ -525,143 +527,8 @@ import inspect
 
 
 
-def _flatten_for_toon(method, data):
-    """Flatten nested structures so TOON renders them as tables."""
-    if method == "summary" and isinstance(data, dict):
-        t = data.get("time", {})
-        w = data.get("weather", {})
-        tr = data.get("trees", {})
-        flat = {
-            "day": t.get("dayNumber", 0),
-            "dayProgress": round(t.get("dayProgress", 0), 2),
-            "cycle": w.get("cycle", 0),
-            "cycleDay": w.get("cycleDay", 0),
-            "isHazardous": w.get("isHazardous", False),
-            "tempDays": w.get("temperateWeatherDuration", 0),
-            "hazardDays": w.get("hazardousWeatherDuration", 0),
-            "markedGrown": tr.get("markedGrown", 0),
-            "markedSeedling": tr.get("markedSeedling", 0),
-            "unmarkedGrown": tr.get("unmarkedGrown", 0),
-        }
-        for d in data.get("districts", []):
-            pop = d.get("population", {})
-            flat["adults"] = pop.get("adults", 0)
-            flat["children"] = pop.get("children", 0)
-            flat["bots"] = pop.get("bots", 0)
-            for good, val in d.get("resources", {}).items():
-                flat[good] = val.get("available", 0) if isinstance(val, dict) else val
-        h = data.get("housing", {})
-        if h:
-            flat["beds"] = f"{h.get('occupiedBeds', 0)}/{h.get('totalBeds', 0)}"
-            flat["homeless"] = h.get("homeless", 0)
-        e = data.get("employment", {})
-        if e:
-            flat["workers"] = f"{e.get('assigned', 0)}/{e.get('vacancies', 0)}"
-            flat["unemployed"] = e.get("unemployed", 0)
-        wb = data.get("wellbeing", {})
-        if isinstance(wb, dict):
-            flat["wellbeing"] = wb.get("average", 0)
-            flat["miserable"] = wb.get("miserable", 0)
-            flat["critical"] = wb.get("critical", 0)
-        elif wb:
-            flat["wellbeing"] = wb
-        if "science" in data:
-            flat["science"] = data["science"]
-        a = data.get("alerts", {})
-        if a:
-            alert_parts = []
-            if a.get("unstaffed", 0): alert_parts.append(f"{a['unstaffed']} unstaffed")
-            if a.get("unpowered", 0): alert_parts.append(f"{a['unpowered']} unpowered")
-            if a.get("unreachable", 0): alert_parts.append(f"{a['unreachable']} unreachable")
-            flat["alerts"] = ", ".join(alert_parts) if alert_parts else "none"
-        return flat
 
-    if method == "map" and isinstance(data, dict) and "tiles" in data:
-        tiles = data.get("tiles", [])
-        flat = []
-        for t in tiles:
-            row = {"x": t["x"], "y": t["y"],
-                   "terrain": t.get("terrain", 0),
-                   "water": t.get("water", 0)}
-            row["occupant"] = t.get("occupant", "")
-            if t.get("entrance"):
-                row["entrance"] = True
-            if t.get("seedling"):
-                row["seedling"] = True
-            flat.append(row)
-        if flat:
-            # make uniform -- add missing keys
-            all_keys = set()
-            for r in flat:
-                all_keys.update(r.keys())
-            for r in flat:
-                for k in all_keys:
-                    if k not in r:
-                        r[k] = False if k in ("entrance", "seedling") else ""
-        return {"mapSize": data.get("mapSize", {}), "region": data.get("region", {}), "tiles": flat} if not flat else flat
 
-    if method == "resources" and isinstance(data, dict):
-        flat = []
-        for district, goods in data.items():
-            if isinstance(goods, dict):
-                for good, val in goods.items():
-                    if isinstance(val, dict):
-                        flat.append({"district": district, "good": good,
-                                     "available": val.get("available", 0),
-                                     "all": val.get("all", 0)})
-        return flat or data
-
-    if method == "districts" and isinstance(data, list):
-        flat = []
-        for d in data:
-            row = {"name": d.get("name", "?")}
-            pop = d.get("population", {})
-            row["adults"] = pop.get("adults", 0)
-            row["children"] = pop.get("children", 0)
-            row["bots"] = pop.get("bots", 0)
-            for good, val in d.get("resources", {}).items():
-                row[good] = val.get("available", 0) if isinstance(val, dict) else val
-            flat.append(row)
-        return flat or data
-
-    if method == "buildings" and isinstance(data, list):
-        flat = []
-        for b in data:
-            row = {"id": b["id"], "name": b.get("name", ""),
-                   "x": b.get("x", 0), "y": b.get("y", 0), "z": b.get("z", 0),
-                   "orientation": b.get("orientation", 0),
-                   "finished": b.get("finished", False),
-                   "paused": b.get("paused", False),
-                   "priority": b.get("priority", "")}
-            if "desiredWorkers" in b:
-                row["workers"] = f"{b.get('assignedWorkers', 0)}/{b.get('desiredWorkers', 0)}"
-            else:
-                row["workers"] = ""
-            flat.append(row)
-        return flat or data
-
-    if method == "beavers" and isinstance(data, list):
-        flat = []
-        for b in data:
-            critical = [k for k, v in b.get("needs", {}).items() if v.get("isBelowWarning") or v.get("isBelowWarningThreshold")]
-            wb = round(b.get("wellbeing", 0), 2)
-            # wellbeing tiers: 0-3=miserable, 4-7=unhappy, 8-11=okay, 12-15=happy, 16+=ecstatic
-            if wb >= 16: tier = "ecstatic"
-            elif wb >= 12: tier = "happy"
-            elif wb >= 8: tier = "okay"
-            elif wb >= 4: tier = "unhappy"
-            else: tier = "miserable"
-            wp = b.get("workplace", "")
-            flat.append({"id": b["id"],
-                         "name": b.get("name", ""),
-                         "wellbeing": wb,
-                         "tier": tier,
-                         "isBot": b.get("isBot", False),
-                         "workplace": wp,
-                         "critical": "+".join(critical) if critical else ""})
-        return flat or data
-
-    return data
 
 
 def _cast(a):
@@ -717,7 +584,8 @@ def main():
         print(f"\n  {'watch':30s} live terminal dashboard")
         sys.exit(1)
 
-    raw_args = [a for a in sys.argv[1:] if a != "--"]
+    json_mode = "--json" in sys.argv
+    raw_args = [a for a in sys.argv[1:] if a not in ("--", "--json")]
     method_name = raw_args[0]
     args = raw_args[1:]
 
@@ -725,7 +593,7 @@ def main():
         _watch()
         return
 
-    bot = Timberbot()
+    bot = Timberbot(json_mode=json_mode)
 
     if not hasattr(bot, method_name):
         print(f"error: unknown method '{method_name}'", file=sys.stderr)
@@ -752,8 +620,9 @@ def main():
         print(result)
     elif isinstance(result, dict) and result.get("rendered"):
         pass  # visual() already printed
+    elif json_mode:
+        print(json.dumps(result, indent=2))
     else:
-        result = _flatten_for_toon(method_name, result)
         try:
             import toons
             print(toons.dumps(result))

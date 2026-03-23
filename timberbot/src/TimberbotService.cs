@@ -172,7 +172,7 @@ namespace Timberbot
         // READ ENDPOINTS
         // ================================================================
 
-        public object CollectSummary()
+        public object CollectSummary(string format = "toon")
         {
             // single pass over all entities
             int markedGrown = 0, markedSeedling = 0, unmarkedGrown = 0;
@@ -256,18 +256,85 @@ namespace Timberbot
             int unemployed = System.Math.Max(0, beaverCount - assignedWorkers);
             float avgWellbeing = beaverCount > 0 ? totalWellbeing / beaverCount : 0;
 
-            return new
+            if (format == "json")
             {
-                time = CollectTime(),
-                weather = CollectWeather(),
-                districts = CollectDistricts(),
-                trees = new { markedGrown, markedSeedling, unmarkedGrown },
-                housing = new { occupiedBeds, totalBeds, homeless },
-                employment = new { assigned = assignedWorkers, vacancies = totalVacancies, unemployed },
-                wellbeing = new { average = System.Math.Round(avgWellbeing, 1), miserable, critical },
-                science = _scienceService.SciencePoints,
-                alerts = new { unstaffed = alertUnstaffed, unpowered = alertUnpowered, unreachable = alertUnreachable }
-            };
+                return new
+                {
+                    time = CollectTime(),
+                    weather = CollectWeather(),
+                    districts = CollectDistricts("json"),
+                    trees = new { markedGrown, markedSeedling, unmarkedGrown },
+                    housing = new { occupiedBeds, totalBeds, homeless },
+                    employment = new { assigned = assignedWorkers, vacancies = totalVacancies, unemployed },
+                    wellbeing = new { average = System.Math.Round(avgWellbeing, 1), miserable, critical },
+                    science = _scienceService.SciencePoints,
+                    alerts = new { unstaffed = alertUnstaffed, unpowered = alertUnpowered, unreachable = alertUnreachable }
+                };
+            }
+
+            // build flat summary matching TOON output format
+            var flat = new Dictionary<string, object>();
+
+            // time
+            flat["day"] = _dayNightCycle.DayNumber;
+            flat["dayProgress"] = System.Math.Round(_dayNightCycle.DayProgress, 2);
+
+            // weather
+            flat["cycle"] = _gameCycleService.Cycle;
+            flat["cycleDay"] = _gameCycleService.CycleDay;
+            flat["isHazardous"] = _weatherService.IsHazardousWeather;
+            flat["tempDays"] = _weatherService.TemperateWeatherDuration;
+            flat["hazardDays"] = _weatherService.HazardousWeatherDuration;
+
+            // trees
+            flat["markedGrown"] = markedGrown;
+            flat["markedSeedling"] = markedSeedling;
+            flat["unmarkedGrown"] = unmarkedGrown;
+
+            // population + resources (first district)
+            var goods = _goodService.Goods;
+            foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+            {
+                var pop = dc.DistrictPopulation;
+                flat["adults"] = pop.NumberOfAdults;
+                flat["children"] = pop.NumberOfChildren;
+                flat["bots"] = pop.NumberOfBots;
+                var counter = dc.GetComponent<DistrictResourceCounter>();
+                if (counter != null)
+                {
+                    foreach (var goodId in goods)
+                    {
+                        var rc = counter.GetResourceCount(goodId);
+                        if (rc.AllStock > 0)
+                            flat[goodId] = rc.AvailableStock;
+                    }
+                }
+            }
+
+            // housing
+            flat["beds"] = $"{occupiedBeds}/{totalBeds}";
+            flat["homeless"] = homeless;
+
+            // employment
+            flat["workers"] = $"{assignedWorkers}/{totalVacancies}";
+            flat["unemployed"] = unemployed;
+
+            // wellbeing
+            flat["wellbeing"] = System.Math.Round(avgWellbeing, 1);
+            flat["miserable"] = miserable;
+            flat["critical"] = critical;
+
+            // science
+            flat["science"] = _scienceService.SciencePoints;
+
+            // alerts
+            var alertParts = new List<string>();
+            if (alertUnstaffed > 0) alertParts.Add($"{alertUnstaffed} unstaffed");
+            if (alertUnpowered > 0) alertParts.Add($"{alertUnpowered} unpowered");
+            if (alertUnreachable > 0) alertParts.Add($"{alertUnreachable} unreachable");
+            flat["alerts"] = alertParts.Count > 0 ? string.Join(", ", alertParts) : "none";
+
+            return flat;
         }
 
         public object CollectAlerts()
@@ -463,7 +530,7 @@ namespace Timberbot
             };
         }
 
-        public object CollectDistricts()
+        public object CollectDistricts(string format = "toon")
         {
             var goods = _goodService.Goods;
             var results = new List<object>();
@@ -473,65 +540,90 @@ namespace Timberbot
                 var counter = dc.GetComponent<DistrictResourceCounter>();
                 var pop = dc.DistrictPopulation;
 
-                var resources = new Dictionary<string, object>();
-                if (counter != null)
+                if (format == "toon")
                 {
-                    foreach (var goodId in goods)
+                    var row = new Dictionary<string, object>
                     {
-                        var rc = counter.GetResourceCount(goodId);
-                        if (rc.AllStock > 0)
+                        ["name"] = dc.DistrictName,
+                        ["adults"] = pop != null ? pop.NumberOfAdults : 0,
+                        ["children"] = pop != null ? pop.NumberOfChildren : 0,
+                        ["bots"] = pop != null ? pop.NumberOfBots : 0
+                    };
+                    if (counter != null)
+                    {
+                        foreach (var goodId in goods)
                         {
-                            resources[goodId] = new
-                            {
-                                available = rc.AvailableStock,
-                                all = rc.AllStock
-                            };
+                            var rc = counter.GetResourceCount(goodId);
+                            if (rc.AllStock > 0)
+                                row[goodId] = rc.AvailableStock;
                         }
                     }
+                    results.Add(row);
                 }
-
-                results.Add(new
+                else
                 {
-                    name = dc.DistrictName,
-                    population = new
+                    var resources = new Dictionary<string, object>();
+                    if (counter != null)
                     {
-                        adults = pop != null ? pop.NumberOfAdults : 0,
-                        children = pop != null ? pop.NumberOfChildren : 0,
-                        bots = pop != null ? pop.NumberOfBots : 0
-                    },
-                    resources
-                });
+                        foreach (var goodId in goods)
+                        {
+                            var rc = counter.GetResourceCount(goodId);
+                            if (rc.AllStock > 0)
+                                resources[goodId] = new { available = rc.AvailableStock, all = rc.AllStock };
+                        }
+                    }
+                    results.Add(new
+                    {
+                        name = dc.DistrictName,
+                        population = new
+                        {
+                            adults = pop != null ? pop.NumberOfAdults : 0,
+                            children = pop != null ? pop.NumberOfChildren : 0,
+                            bots = pop != null ? pop.NumberOfBots : 0
+                        },
+                        resources
+                    });
+                }
             }
 
             return results;
         }
 
-        public object CollectResources()
+        public object CollectResources(string format = "toon")
         {
             var goods = _goodService.Goods;
-            var results = new Dictionary<string, object>();
 
+            if (format == "toon")
+            {
+                var flat = new List<object>();
+                foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+                {
+                    var counter = dc.GetComponent<DistrictResourceCounter>();
+                    if (counter == null) continue;
+                    foreach (var goodId in goods)
+                    {
+                        var rc = counter.GetResourceCount(goodId);
+                        if (rc.AllStock > 0)
+                            flat.Add(new { district = dc.DistrictName, good = goodId, available = rc.AvailableStock, all = rc.AllStock });
+                    }
+                }
+                return flat;
+            }
+
+            var results = new Dictionary<string, object>();
             foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
             {
                 var counter = dc.GetComponent<DistrictResourceCounter>();
                 if (counter == null) continue;
-
                 var distResources = new Dictionary<string, object>();
                 foreach (var goodId in goods)
                 {
                     var rc = counter.GetResourceCount(goodId);
                     if (rc.AllStock > 0)
-                    {
-                        distResources[goodId] = new
-                        {
-                            available = rc.AvailableStock,
-                            all = rc.AllStock
-                        };
-                    }
+                        distResources[goodId] = new { available = rc.AvailableStock, all = rc.AllStock };
                 }
                 results[dc.DistrictName] = distResources;
             }
-
             return results;
         }
 
@@ -552,7 +644,7 @@ namespace Timberbot
             return results;
         }
 
-        public object CollectBuildings()
+        public object CollectBuildings(string format = "toon")
         {
             var results = new List<object>();
             foreach (var ec in _entityRegistry.Entities)
@@ -717,7 +809,27 @@ namespace Timberbot
                     entry["clutchEngaged"] = clutch.IsEngaged;
                 }
 
-                results.Add(entry);
+                if (format == "toon")
+                {
+                    // flat format for TOON: only key fields
+                    string workers = "";
+                    if (entry.ContainsKey("desiredWorkers"))
+                        workers = $"{entry.GetValueOrDefault("assignedWorkers", 0)}/{entry.GetValueOrDefault("desiredWorkers", 0)}";
+                    results.Add(new Dictionary<string, object>
+                    {
+                        ["id"] = entry["id"], ["name"] = entry["name"],
+                        ["x"] = entry.GetValueOrDefault("x", 0), ["y"] = entry.GetValueOrDefault("y", 0), ["z"] = entry.GetValueOrDefault("z", 0),
+                        ["orientation"] = entry.GetValueOrDefault("orientation", 0),
+                        ["finished"] = entry.GetValueOrDefault("finished", false),
+                        ["paused"] = entry.GetValueOrDefault("paused", false),
+                        ["priority"] = entry.GetValueOrDefault("priority", ""),
+                        ["workers"] = workers
+                    });
+                }
+                else
+                {
+                    results.Add(entry);
+                }
             }
             return results;
         }
@@ -777,7 +889,7 @@ namespace Timberbot
             return CollectNaturalResources<Gatherable>();
         }
 
-        public object CollectBeavers()
+        public object CollectBeavers(string format = "toon")
         {
             var results = new List<object>();
             foreach (var ec in _entityRegistry.Entities)
@@ -840,7 +952,50 @@ namespace Timberbot
                 if (dweller != null)
                     entry["hasHome"] = dweller.HasHome;
 
-                results.Add(entry);
+                if (format == "toon")
+                {
+                    float wb = entry.ContainsKey("wellbeing") ? System.Convert.ToSingle(entry["wellbeing"]) : 0f;
+                    string tier = wb >= 16 ? "ecstatic" : wb >= 12 ? "happy" : wb >= 8 ? "okay" : wb >= 4 ? "unhappy" : "miserable";
+                    var criticalNeeds = new List<string>();
+                    if (entry.ContainsKey("needs") && entry["needs"] is Dictionary<string, object> nd)
+                    {
+                        foreach (var kv in nd)
+                        {
+                            if (kv.Value is Dictionary<string, object>) continue; // skip non-flat
+                            // needs are anonymous objects, check via reflection
+                        }
+                    }
+                    // build critical string from raw needs
+                    var critList = new List<string>();
+                    try
+                    {
+                        var needsDict = entry["needs"] as Dictionary<string, object>;
+                        if (needsDict != null)
+                        {
+                            foreach (var kv in needsDict)
+                            {
+                                var nv = kv.Value;
+                                var belowProp = nv.GetType().GetProperty("isBelowWarning");
+                                if (belowProp != null && (bool)belowProp.GetValue(nv))
+                                    critList.Add(kv.Key);
+                            }
+                        }
+                    }
+                    catch { }
+                    results.Add(new Dictionary<string, object>
+                    {
+                        ["id"] = entry["id"], ["name"] = entry.GetValueOrDefault("name", ""),
+                        ["wellbeing"] = System.Math.Round(wb, 2),
+                        ["tier"] = tier,
+                        ["isBot"] = entry.GetValueOrDefault("isBot", false),
+                        ["workplace"] = entry.GetValueOrDefault("workplace", ""),
+                        ["critical"] = critList.Count > 0 ? string.Join("+", critList) : ""
+                    });
+                }
+                else
+                {
+                    results.Add(entry);
+                }
             }
             return results;
         }
