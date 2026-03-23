@@ -1238,13 +1238,7 @@ namespace Timberbot
                     }
                 }
 
-                // fallback: unlock via BuildingService template
-                var buildingSpec = _buildingService.GetBuildingTemplate(buildingName);
-                if (buildingSpec == null)
-                    return new { error = "building not found", building = buildingName };
-                _buildingUnlockingService.Unlock(buildingSpec);
-                return new { building = buildingName, unlocked = true,
-                             remaining = _scienceService.SciencePoints };
+                return new { error = "building not found in toolbar", building = buildingName };
             }
             catch (System.Exception ex)
             {
