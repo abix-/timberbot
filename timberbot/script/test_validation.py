@@ -566,14 +566,17 @@ class TestRunner:
         if stair_spot:
             sx1, sy1, sx2, sy2 = stair_spot
             result3 = self.bot.place_path(sx1, sy1, sx2, sy2)
-            self.check("path with z-change places stairs",
-                       self.has(result3, "stairs") and result3.get("stairs", 0) > 0,
-                       json.dumps(result3)[:100])
+            if self.has(result3, "errors") and result3["errors"] and "not unlocked" in str(result3["errors"]):
+                self.skip("path with z-change", "stairs not unlocked")
+            else:
+                self.check("path with z-change places stairs",
+                           self.has(result3, "stairs") and result3.get("stairs", 0) > 0,
+                           json.dumps(result3)[:100])
 
-            # verify stairs on map
-            region = self.bot.map(sx1, sy1, sx2, sy2)
-            has_stairs = any("Stairs" in str(t.get("occupant", "")) for t in region.get("tiles", []))
-            self.check("verify stairs on map", has_stairs)
+                # verify stairs on map
+                region = self.bot.map(sx1, sy1, sx2, sy2)
+                has_stairs = any("Stairs" in str(t.get("occupant", "")) for t in region.get("tiles", []))
+                self.check("verify stairs on map", has_stairs)
 
             # cleanup
             buildings = self.bot.buildings()

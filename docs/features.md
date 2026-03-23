@@ -24,8 +24,8 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 | Pause/unpause | YES | YES | `pause_building`, `unpause_building` |
 | Workers | YES | YES | `set_workers` |
 | Priority | YES | YES | `set_priority` |
-| Paths/stairs/platforms | YES | YES | `place_building`, `place_path` (auto-stairs at z-changes) |
-| Placement validation | YES | YES | `find_placement` (scans area, returns valid spots with path access + power adjacency) |
+| Paths/stairs/platforms | YES | YES | `place_building`, `place_path` (auto-stairs + platforms for multi-level z-changes) |
+| Placement validation | YES | YES | `find_placement` (reachability, path access, power adjacency) |
 | Ziplines/tubeways | YES | NO | Visible as buildings |
 | Power network | YES | NO | `powered`, `isGenerator`, `isConsumer`, `powerDemand`, `powerSupply` |
 | Science points | YES | NO | `science` |

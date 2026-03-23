@@ -28,7 +28,7 @@ Use both together: the built-in API handles real-time automation (sensor -> leve
 [tr][td]Read[/td][td]Distribution settings and game notifications[/td][td]Yes[/td][/tr]
 [tr][td]Build[/td][td]Place any building with named orientation. Validates tiles + unlock + z-level[/td][td]Yes[/td][/tr]
 [tr][td]Build[/td][td]Find valid placement spots with district reachability, path access, and power adjacency[/td][td]Yes[/td][/tr]
-[tr][td]Build[/td][td]Demolish buildings, route paths with auto-stairs at z-level changes[/td][td]Yes[/td][/tr]
+[tr][td]Build[/td][td]Demolish buildings, route paths with auto-stairs + platforms for multi-level z-changes[/td][td]Yes[/td][/tr]
 [tr][td]Manage[/td][td]Workers, priority (construction + workplace), speed, pause/unpause[/td][td]Yes[/td][/tr]
 [tr][td]Manage[/td][td]Unlock buildings with UI update, set import/export per good[/td][td]Yes[/td][/tr]
 [tr][td]Manage[/td][td]Hauler priority, manufactory recipes, farmhouse action, plantable priority[/td][td]Yes[/td][/tr]
