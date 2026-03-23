@@ -99,7 +99,7 @@ Pick the direction that points FROM the building TOWARD the path. If the path is
 - Gatherers only collect wild berries. Berries WILL run out
 - Build Farmhouse EARLY (by day 3-4), plant Kohlrabi (3-day cycle, no processing)
 - Need ~1 farmhouse per 8 beavers with full kohlrabi fields
-- If food drops below 30, prioritize farming
+- Check `foodDays` in summary -- if below 3, prioritize farming
 - Crops grow during drought as long as soil is irrigated (near standing water). Keep planting and farming year-round on oasis maps
 - Set VeryHigh priority on food and water buildings
 
@@ -109,7 +109,7 @@ Pick the direction that points FROM the building TOWARD the path. If the path is
 - Set tank good to Water immediately after placing
 - Water pumps need workers
 - 2 pumps serve ~15 beavers. Add a third pump before population exceeds 15
-- During drought, slow to speed 1 if water below 50
+- Check `waterDays` in summary -- if below 2 during drought, slow to speed 1
 
 ## Tree rules
 

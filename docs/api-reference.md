@@ -1463,6 +1463,20 @@ Find entities by name and/or proximity.
 python timberbot.py find source:buildings name:Pump x:120 y:130 radius:20
 ```
 
+### debug (CLI + HTTP)
+
+Generic reflection endpoint for inspecting and calling methods on any game service. Supports object chaining with `$`.
+
+```bash
+python timberbot.py debug target:help                              # list targets and services
+python timberbot.py debug target:fields path:_navMeshService       # list members on a service
+python timberbot.py debug target:get path:_scienceService.SciencePoints  # read a value
+python timberbot.py debug target:call path:_navMeshService._nodeIdService method:GridToId arg0:120,142,2  # call a method
+python timberbot.py debug target:call path:$ method:HasNode arg0:12345   # chain: call method on last result
+```
+
+Targets: `help`, `get`, `fields`, `call`. Path navigation supports `.field`, `.Property`, `.[N]` (list index), `.~TypeName` (GetComponent), `$` (last result). Args auto-parse to int, float, bool, string, Vector3Int, Vector3.
+
 ### place_path (CLI-only)
 
 Route a straight-line path with auto-stairs. Wraps `POST /api/path/route`.

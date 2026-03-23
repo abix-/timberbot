@@ -27,7 +27,7 @@ Use both together: the built-in API handles real-time automation (sensor -> leve
 [tr][td]Read[/td][td]Science points and unlockable buildings with costs[/td][td]Yes[/td][/tr]
 [tr][td]Read[/td][td]Distribution settings and game notifications[/td][td]Yes[/td][/tr]
 [tr][td]Build[/td][td]Place any building with named orientation. Validates tiles + unlock + z-level[/td][td]Yes[/td][/tr]
-[tr][td]Build[/td][td]Find valid placement spots in an area with path access + power adjacency scoring[/td][td]Yes[/td][/tr]
+[tr][td]Build[/td][td]Find valid placement spots with district reachability, path access, and power adjacency[/td][td]Yes[/td][/tr]
 [tr][td]Build[/td][td]Demolish buildings, route paths with auto-stairs at z-level changes[/td][td]Yes[/td][/tr]
 [tr][td]Manage[/td][td]Workers, priority (construction + workplace), speed, pause/unpause[/td][td]Yes[/td][/tr]
 [tr][td]Manage[/td][td]Unlock buildings with UI update, set import/export per good[/td][td]Yes[/td][/tr]
@@ -35,7 +35,7 @@ Use both together: the built-in API handles real-time automation (sensor -> leve
 [tr][td]Manage[/td][td]Migrate beavers between districts[/td][td]In-Progress[/td][/tr]
 [tr][td]Resources[/td][td]Plant crops, mark trees, configure stockpiles, set floodgate heights[/td][td]Yes[/td][/tr]
 [tr][td]Resources[/td][td]Bot condition and fuel via beaver needs[/td][td]In-Progress[/td][/tr]
-[tr][td]Tools[/td][td]TOON output for AI, ASCII map with terrain height shading, live dashboard, search[/td][td]Yes[/td][/tr]
+[tr][td]Tools[/td][td]TOON output for AI, ASCII map with terrain height + moisture, debug reflection endpoint, live dashboard[/td][td]Yes[/td][/tr]
 [/table]
 
 [h1]How it works[/h1]
