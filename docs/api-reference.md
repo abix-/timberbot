@@ -845,6 +845,47 @@ Science points and unlockable buildings.
 
 ---
 
+## Wellbeing
+
+### GET /api/wellbeing
+
+Population wellbeing breakdown by category. Shows current vs max score for each need group across all beavers.
+
+**CLI:** `python timberbot.py wellbeing`
+
+#### Response
+
+| Field | Type | Description |
+|-------|------|-------------|
+| beavers | int | Number of beavers counted |
+| categories | array | Wellbeing categories |
+| categories[].group | string | Category name (BasicNeeds, SocialLife, Fun, Nutrition, Aesthetics, Awe) |
+| categories[].current | float | Average current wellbeing for this category |
+| categories[].max | float | Average max possible wellbeing for this category |
+| categories[].needs | array | Individual needs in this category |
+| categories[].needs[].id | string | Need/building name |
+| categories[].needs[].favorableWellbeing | float | Wellbeing bonus when satisfied |
+| categories[].needs[].unfavorableWellbeing | float | Wellbeing penalty when unmet |
+
+```json
+{
+  "beavers": 42,
+  "categories": [
+    {
+      "group": "SocialLife",
+      "current": 0,
+      "max": 2,
+      "needs": [
+        {"id": "Campfire", "favorableWellbeing": 1, "unfavorableWellbeing": 0},
+        {"id": "RooftopTerrace", "favorableWellbeing": 1, "unfavorableWellbeing": 0}
+      ]
+    }
+  ]
+}
+```
+
+---
+
 ### POST /api/science/unlock
 
 Unlock a building using science points. Matches the exact UI flow (cost deduction + events + UI refresh).

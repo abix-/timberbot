@@ -169,12 +169,24 @@ WoodWorkshop 2x4, HaulingPost 3x2, Barrack 3x2, DC 3x3, Rowhouse 1x2, FarmHouse 
 
 ## Wellbeing rules
 
-Wellbeing can go up to 77. Target 15+ for a thriving colony.
+Wellbeing can go up to 77. Target 15+ for a thriving colony. Use `wellbeing` endpoint to see per-category breakdown.
 
-- **Amenity buildings** are key: Scratcher (no workers), Bench (no workers), Lantern (no workers), Brazier (no workers), DoubleShower (1 worker), SwimmingPool (needs water edge)
-- Place amenities near housing and paths where beavers walk
-- Decorations (Bench, Lantern, Brazier) don't need workers -- free wellbeing
-- Higher-tier amenities need science: ExercisePlaza (400), WindTunnel (700), Motivatorium (1200)
+**Categories and what satisfies them:**
+
+| Category | Max | How to improve |
+|---|---|---|
+| BasicNeeds | 5 | Food, water, sleep, shelter -- keep these full first |
+| SocialLife | 2 | Campfire (+1), RooftopTerrace (+1) |
+| Fun | 17 | Scratcher (+1), SwimmingPool (+1), ExercisePlaza (+3), MudBath (+3), WindTunnel (+3), Motivatorium (+5) |
+| Nutrition | 17 | Each unique food type: Kohlrabi (+1), Coffee (+3), FermentedSoybean (+2), CornRation (+2), etc. |
+| Aesthetics | 10 | Lantern (+1), Brazier (+1), Roof (+1), BeaverBust (+1), BeaverStatue (+2), Bell (+1), DecorativeClock (+2) |
+| Awe | 26 | Wonders: LaborerMonument (+3), FlameOfUnity (+5), TributeToIngenuity (+8), EarthRepopulator (+10) |
+
+**Workflow:**
+1. Run `wellbeing` to see which categories are low
+2. Pick the category with the biggest gap between current and max
+3. Build/unlock the cheapest building that satisfies that category
+4. Nutrition requires food VARIETY -- not just more kohlrabi, but different food types (need processing buildings)
 - During crises, wellbeing drops fast (-12 possible). Recovery takes many days
 - Do NOT neglect wellbeing for economy -- miserable beavers work slower and may die
 
