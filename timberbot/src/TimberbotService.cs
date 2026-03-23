@@ -189,12 +189,13 @@ namespace Timberbot
             _server?.DrainRequests();
         }
 
-        // Per-frame entity cache: write endpoints call FindEntity() often.
-        // Without this, each call scans all entities O(n). With cache, O(1) after first call per frame.
+        // PERF: per-frame entity ID->component cache. O(n) build once, O(1) lookup after.
+        // Used by all write endpoints (PlaceBuilding, SetWorkers, SetPriority, etc.)
         private Dictionary<int, EntityComponent> _entityCache;
         private int _entityCacheFrame = -1;
 
-        // Per-frame occupied tiles cache: built once, reused by PlaceBuilding + FindPlacement
+        // PERF: per-frame occupied tiles cache. O(n) build once, O(1) contains-check after.
+        // Used by PlaceBuilding + ValidateFootprint (called 100s of times in FindPlacement)
         private HashSet<long> _occupiedCache;
         private int _occupiedCacheFrame = -1;
 
@@ -223,8 +224,8 @@ namespace Timberbot
         //   json: full nested data for programmatic access (--json flag)
         // ================================================================
 
-        // single-pass dashboard: trees + housing + employment + wellbeing + alerts in one entity loop
-        // the bot only needs this one call per turn
+        // PERF: O(n) single-pass over all entities. Collects trees + housing + employment +
+        // wellbeing + alerts in one loop instead of separate endpoints. Called once per bot turn.
         public object CollectSummary(string format = "toon")
         {
             // single pass over all entities
@@ -412,6 +413,7 @@ namespace Timberbot
             return flat;
         }
 
+        // PERF: O(n) entity scan. Called once per bot turn when alerts > 0.
         public object CollectAlerts()
         {
             var alerts = new List<object>();
@@ -448,6 +450,7 @@ namespace Timberbot
             return alerts;
         }
 
+        // PERF: O(n) entity scan + grid bucketing. Called occasionally for tree management.
         public object CollectTreeClusters(int cellSize = 10, int top = 5)
         {
             var cells = new Dictionary<long, int[]>(); // key -> [grown, total, centerX, centerY, z]
@@ -484,6 +487,7 @@ namespace Timberbot
             return results;
         }
 
+        // PERF: O(n) entity scan filtered by radius. Rarely called.
         public object CollectScan(int cx, int cy, int radius)
         {
             int x1 = cx - radius, y1 = cy - radius, x2 = cx + radius, y2 = cy + radius;
@@ -719,6 +723,7 @@ namespace Timberbot
             return results;
         }
 
+        // PERF: O(n) entity scan. Called once per bot turn at most.
         public object CollectBuildings(string format = "toon")
         {
             var results = new List<object>();
@@ -909,6 +914,7 @@ namespace Timberbot
             return results;
         }
 
+        // PERF: O(n) entity scan. Used by trees, gatherables endpoints. Called once per request.
         private List<object> CollectNaturalResources<T>(System.Action<EntityComponent, Dictionary<string, object>> enrich = null) where T : class
         {
             var results = new List<object>();
@@ -964,6 +970,7 @@ namespace Timberbot
             return CollectNaturalResources<Gatherable>();
         }
 
+        // PERF: O(n) entity scan. Called once per bot turn when critical/miserable > 0.
         public object CollectBeavers(string format = "toon")
         {
             var results = new List<object>();
@@ -1133,6 +1140,8 @@ namespace Timberbot
             }
         }
 
+        // PERF: O(n) entity scan to build occupant lookup, then O(region) tile iteration.
+        // Region-bounded so cost depends on area size, not map size. Called occasionally.
         public object CollectMap(int x1, int y1, int x2, int y2)
         {
             var size = _terrainService.Size;
@@ -1729,8 +1738,8 @@ namespace Timberbot
             }
         }
 
+        // PERF: O(n) entity scan x O(needs) per beaver. Called occasionally for wellbeing analysis.
         // population wellbeing breakdown by need group (Social, Hygiene, etc)
-        // aggregates all beaver needs into per-category current/max scores
         public object CollectWellbeing()
         {
             try
@@ -2075,6 +2084,7 @@ namespace Timberbot
                     int rampOrient = goingUp ? stairsOrient : (stairsOrient + 2) % 4;
 
                     // helper: demolish any path at a tile position
+                    // O(n) scan but only called once per z-level change (max ~6 times per route)
                     void DemolishPathAt(int px, int py, int pz)
                     {
                         foreach (var ec in _entityRegistry.Entities)
@@ -2469,7 +2479,8 @@ namespace Timberbot
             return null;
         }
 
-        // find all valid placements for a building in an area, with best orientation toward paths
+        // PERF: O(n) entity scan for path/power tiles + O(area * 4) validation loop.
+        // GetOccupiedTiles is cached per-frame. Called once per bot turn.
         public object FindPlacement(string prefabName, int x1, int y1, int x2, int y2)
         {
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
