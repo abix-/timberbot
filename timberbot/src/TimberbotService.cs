@@ -63,31 +63,32 @@ namespace Timberbot
     // entity lookup: FindEntity() uses per-frame dictionary cache for O(1) writes
     public class TimberbotService : ILoadableSingleton, IUpdatableSingleton
     {
-        private readonly IGoodService _goodService;
-        private readonly DistrictCenterRegistry _districtCenterRegistry;
-        private readonly GameCycleService _gameCycleService;
-        private readonly WeatherService _weatherService;
-        private readonly IDayNightCycle _dayNightCycle;
-        private readonly SpeedManager _speedManager;
-        private readonly EntityRegistry _entityRegistry;
-        private readonly TreeCuttingArea _treeCuttingArea;
-        private readonly PlantingService _plantingService;
-        private readonly BuildingService _buildingService;
-        private readonly BlockObjectPlacerService _blockObjectPlacerService;
-        private readonly EntityService _entityService;
-        private readonly ITerrainService _terrainService;
-        private readonly IThreadSafeWaterMap _waterMap;
-        private readonly MapIndexService _mapIndexService;
-        private readonly IThreadSafeColumnTerrainMap _terrainMap;
-        private readonly ScienceService _scienceService;
-        private readonly BuildingUnlockingService _buildingUnlockingService;
-        private readonly NotificationSaver _notificationSaver;
-        private readonly WorkingHoursManager _workingHoursManager;
-        private readonly ISoilContaminationService _soilContaminationService;
-        private readonly PopulationDistributorRetriever _populationDistributorRetriever;
-        private readonly ToolButtonService _toolButtonService;
-        private readonly UnlockedPlantableGroupsRegistry _unlockedPlantableGroupsRegistry;
-        private readonly RecipeSpecService _recipeSpecService;
+        // -- game services (injected via Bindito constructor) --
+        private readonly IGoodService _goodService;                         // list of all good types (Water, Log, Plank, etc)
+        private readonly DistrictCenterRegistry _districtCenterRegistry;    // all district centers -> population + resources
+        private readonly GameCycleService _gameCycleService;                // cycle number, day within cycle
+        private readonly WeatherService _weatherService;                    // drought/temperate durations
+        private readonly IDayNightCycle _dayNightCycle;                     // day number, progress (0-1)
+        private readonly SpeedManager _speedManager;                        // game speed (raw values: 0,1,3,7 mapped to levels 0-3)
+        private readonly EntityRegistry _entityRegistry;                    // ALL entities in game -- buildings, beavers, trees, everything
+        private readonly TreeCuttingArea _treeCuttingArea;                  // which tiles are marked for tree cutting
+        private readonly PlantingService _plantingService;                  // mark/clear crop planting areas
+        private readonly BuildingService _buildingService;                  // building templates/specs (not placed buildings)
+        private readonly BlockObjectPlacerService _blockObjectPlacerService;// Place() to create buildings in world
+        private readonly EntityService _entityService;                      // Delete() to remove entities
+        private readonly ITerrainService _terrainService;                   // terrain height queries
+        private readonly IThreadSafeWaterMap _waterMap;                     // water height + column contamination
+        private readonly MapIndexService _mapIndexService;                  // 2D/3D index math for water columns
+        private readonly IThreadSafeColumnTerrainMap _terrainMap;           // column terrain heights
+        private readonly ScienceService _scienceService;                    // science points
+        private readonly BuildingUnlockingService _buildingUnlockingService;// unlock buildings with science
+        private readonly NotificationSaver _notificationSaver;              // game event history
+        private readonly WorkingHoursManager _workingHoursManager;          // work schedule (end hours)
+        private readonly ISoilContaminationService _soilContaminationService;// soil contamination from badwater
+        private readonly PopulationDistributorRetriever _populationDistributorRetriever; // migrate beavers between districts
+        private readonly ToolButtonService _toolButtonService;              // UI toolbar buttons (for unlock UI update)
+        private readonly UnlockedPlantableGroupsRegistry _unlockedPlantableGroupsRegistry; // plantable groups (for unlock UI)
+        private readonly RecipeSpecService _recipeSpecService;              // manufactory recipe lookup
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -664,15 +665,15 @@ namespace Timberbot
             var results = new List<object>();
             foreach (var ec in _entityRegistry.Entities)
             {
-                var building = ec.GetComponent<Building>();
+                var building = ec.GetComponent<Building>();       // filter: only buildings (not trees, beavers, etc)
                 if (building == null) continue;
 
                 var go = ec.GameObject;
-                var bo = ec.GetComponent<BlockObject>();
-                var pausable = ec.GetComponent<PausableBuilding>();
-                var floodgate = ec.GetComponent<Floodgate>();
-                var prio = ec.GetComponent<BuilderPrioritizable>();
-                var workplace = ec.GetComponent<Workplace>();
+                var bo = ec.GetComponent<BlockObject>();            // position, orientation, entrance, finished state
+                var pausable = ec.GetComponent<PausableBuilding>(); // can be paused/unpaused
+                var floodgate = ec.GetComponent<Floodgate>();       // water gate with adjustable height
+                var prio = ec.GetComponent<BuilderPrioritizable>(); // construction priority (while being built)
+                var workplace = ec.GetComponent<Workplace>();       // worker slots (desiredWorkers, assignedWorkers)
 
                 var entry = new Dictionary<string, object>
                 {
@@ -714,7 +715,7 @@ namespace Timberbot
                 if (prio != null)
                     entry["constructionPriority"] = prio.Priority.ToString();
 
-                var wpPrio = ec.GetComponent<WorkplacePriority>();
+                var wpPrio = ec.GetComponent<WorkplacePriority>(); // workplace priority (after built) -- separate from construction priority
                 if (wpPrio != null)
                     entry["workplacePriority"] = wpPrio.Priority.ToString();
 
@@ -725,15 +726,15 @@ namespace Timberbot
                     entry["assignedWorkers"] = workplace.NumberOfAssignedWorkers;
                 }
 
-                var reachability = ec.GetComponent<EntityReachabilityStatus>();
+                var reachability = ec.GetComponent<EntityReachabilityStatus>(); // connected to district center via paths
                 if (reachability != null)
                     entry["reachable"] = !reachability.IsAnyUnreachable();
 
-                var mechanical = ec.GetComponent<MechanicalBuilding>();
+                var mechanical = ec.GetComponent<MechanicalBuilding>();     // powered by adjacent power buildings
                 if (mechanical != null)
                     entry["powered"] = mechanical.ActiveAndPowered;
 
-                var statusSubject = ec.GetComponent<StatusSubject>();
+                var statusSubject = ec.GetComponent<StatusSubject>();       // status messages shown in game UI
                 if (statusSubject != null)
                 {
                     var statuses = new List<string>();
@@ -747,7 +748,7 @@ namespace Timberbot
                         entry["statuses"] = statuses;
                 }
 
-                var node = ec.GetComponent<MechanicalNode>();
+                var node = ec.GetComponent<MechanicalNode>();               // power grid: generator/consumer, nominal power values
                 if (node != null)
                 {
                     entry["isGenerator"] = node.IsGenerator;
@@ -1032,6 +1033,7 @@ namespace Timberbot
             };
         }
 
+        // set when beavers stop working (1-24 hours)
         public object SetWorkHours(int endHours)
         {
             if (endHours < 1 || endHours > 24)
@@ -1040,6 +1042,7 @@ namespace Timberbot
             return new { endHours = _workingHoursManager.EndHours };
         }
 
+        // move adult beavers between districts
         public object MigratePopulation(string fromDistrict, string toDistrict, int count)
         {
             Timberborn.GameDistricts.DistrictCenter fromDc = null, toDc = null;
@@ -1229,6 +1232,7 @@ namespace Timberbot
 
         private static readonly int[] SpeedScale = { 0, 1, 3, 7 };
 
+        // game speed 0-3, mapped to internal values 0,1,3,7
         public object SetSpeed(int speed)
         {
             if (speed < 0 || speed > 3)
@@ -1238,6 +1242,7 @@ namespace Timberbot
             return new { speed };
         }
 
+        // pause/unpause a building
         public object PauseBuilding(int buildingId, bool paused)
         {
             var ec = FindEntity(buildingId);
@@ -1252,6 +1257,7 @@ namespace Timberbot
             return new { id = buildingId, name = CleanName(ec.GameObject.name), paused = pausable.Paused };
         }
 
+        // adjust floodgate water gate height (clamped to max)
         public object SetFloodgateHeight(int buildingId, float height)
         {
             var ec = FindEntity(buildingId);
@@ -1273,6 +1279,7 @@ namespace Timberbot
             };
         }
 
+        // set construction or workplace priority (VeryLow/Normal/VeryHigh)
         public object SetBuildingPriority(int buildingId, string priorityStr, string type)
         {
             var ec = FindEntity(buildingId);
@@ -1305,6 +1312,7 @@ namespace Timberbot
             return new { error = "building has no priority of that type", id = buildingId, type };
         }
 
+        // haulers deliver goods to this building first
         public object SetHaulPriority(int buildingId, bool prioritized)
         {
             var ec = FindEntity(buildingId);
@@ -1319,6 +1327,7 @@ namespace Timberbot
             return new { id = buildingId, name = CleanName(ec.GameObject.name), haulPrioritized = hp.Prioritized };
         }
 
+        // set which recipe a manufactory produces
         public object SetRecipe(int buildingId, string recipeId)
         {
             var ec = FindEntity(buildingId);
@@ -1349,6 +1358,7 @@ namespace Timberbot
             return new { id = buildingId, name = CleanName(ec.GameObject.name), recipe = recipe.Id };
         }
 
+        // prioritize planting vs default (harvest when ready)
         public object SetFarmhouseAction(int buildingId, string action)
         {
             var ec = FindEntity(buildingId);
@@ -1373,6 +1383,7 @@ namespace Timberbot
             return new { error = "invalid action, use: planting or harvesting", action };
         }
 
+        // forester/gatherer prioritizes this resource type
         public object SetPlantablePriority(int buildingId, string plantableName)
         {
             var ec = FindEntity(buildingId);
@@ -1413,6 +1424,7 @@ namespace Timberbot
         // WRITE ENDPOINTS -- Tier 2
         // ================================================================
 
+        // set desired worker count (0 to maxWorkers)
         public object SetWorkers(int buildingId, int count)
         {
             var ec = FindEntity(buildingId);
@@ -1435,6 +1447,7 @@ namespace Timberbot
             };
         }
 
+        // mark/clear rectangular area for tree cutting
         public object MarkCuttingArea(int x1, int y1, int x2, int y2, int z, bool marked)
         {
             var minX = Mathf.Min(x1, x2);
@@ -1464,6 +1477,7 @@ namespace Timberbot
             };
         }
 
+        // set max capacity on a stockpile building
         public object SetStockpileCapacity(int buildingId, int capacity)
         {
             var ec = FindEntity(buildingId);
@@ -1488,6 +1502,7 @@ namespace Timberbot
             };
         }
 
+        // set which good a single-good stockpile accepts
         public object SetStockpileGood(int buildingId, string goodId)
         {
             var ec = FindEntity(buildingId);
@@ -1507,6 +1522,7 @@ namespace Timberbot
             };
         }
 
+        // mark area for crop planting (validates tiles: skip occupied, water, wrong terrain)
         public object MarkPlanting(int x1, int y1, int x2, int y2, int z, string crop)
         {
             var minX = Mathf.Min(x1, x2);
@@ -1701,6 +1717,7 @@ namespace Timberbot
             return results;
         }
 
+        // set import/export settings for a good in a district
         public object SetDistribution(string districtName, string goodId, string importOption, int exportThreshold)
         {
             foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
@@ -1852,6 +1869,7 @@ namespace Timberbot
             return results;
         }
 
+        // remove a building from the world
         public object DemolishBuilding(int buildingId)
         {
             var ec = FindEntity(buildingId);
