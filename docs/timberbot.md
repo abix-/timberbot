@@ -29,12 +29,14 @@ Every turn:
 
 ## Placement workflow (MANDATORY every time)
 
-1. `scan` the area -- find paths, buildings, open ground. Tiles with `.dead` suffix are buildable (dead stumps)
+1. `visual` the area -- see the map with colored tiles. Find a clear rectangle that fits the building footprint (e.g. 3x2 for Barrack)
 2. Check terrain height with `map` -- z MUST match terrain height or building clips underground
-3. Pick orientation so entrance FACES the path
-4. `place_building` with correct coords, z, and orientation
-5. `scan` again -- confirm entrance faces the path. If not, demolish and redo
-- **NEVER skip steps 1, 2, or 5**
+3. Verify every tile in the footprint is open (ground dots or .dead stumps). Count the tiles against building size
+4. Pick orientation so entrance FACES the path
+5. `place_building` with correct coords, z, and orientation
+6. `visual` again -- confirm entrance faces the path. If not, demolish and redo
+- **NEVER skip steps 1, 2, 3, or 6**
+- **NEVER guess placement** -- always visually confirm the footprint fits before placing
 - Scan suffixes: `.dead` = buildable stump, `.seedling` = growing (blocked), `.entrance` = door tile
 
 ## Z-level rules
@@ -95,8 +97,9 @@ Pick the direction that points FROM the building TOWARD the path. If the path is
 - Gatherers only collect wild berries. Berries WILL run out
 - Build Farmhouse EARLY (by day 3-4), plant Kohlrabi (3-day cycle, no processing)
 - Need ~1 farmhouse per 8 beavers with full kohlrabi fields
-- If food drops below 30, slow to speed 1
+- If food drops below 30, prioritize farming
 - If food hits 0, beavers die. Pause non-food buildings to free haulers
+- Crops grow during drought as long as soil is irrigated (near standing water). Keep planting and farming year-round on oasis maps
 - Set VeryHigh priority on food and water buildings
 
 ## Water rules
@@ -142,6 +145,8 @@ WoodWorkshop 2x4, HaulingPost 3x2, Barrack 3x2, DC 3x3, Rowhouse 1x2, FarmHouse 
 - Use `scan` before and after every placement
 - Set VeryHigh priority on food and water buildings (BOTH construction and workplace)
 - Set haul priority on breeding pods so beavers deliver food there
+- ALWAYS keep 1-2 idle haulers (unassigned beavers) -- breeding pods and construction need haulers to deliver materials
+- If breeding halted, pause non-essential buildings (power wheel, lumber mill, lumberjack) to free haulers
 - One action per turn, verify it worked, then next action
 - Goods are hauled by idle beavers. Don't over-employ the colony early
 - Oasis maps have standing water (no flow). Use Large Power Wheel, not Compact Water Wheel
