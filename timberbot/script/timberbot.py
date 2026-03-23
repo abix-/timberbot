@@ -605,7 +605,7 @@ import inspect
 
 
 def _clean_name(name):
-    """Strip Unity suffixes from entity names."""
+    """Strip Unity suffixes from entity names. C# now does this server-side but kept for safety."""
     return name.replace("(Clone)", "").replace(".IronTeeth", "").replace(".Folktails", "")
 
 

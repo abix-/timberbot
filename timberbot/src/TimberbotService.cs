@@ -151,6 +151,9 @@ namespace Timberbot
         private Dictionary<int, EntityComponent> _entityCache;
         private int _entityCacheFrame = -1;
 
+        private static string CleanName(string name) =>
+            name.Replace("(Clone)", "").Replace(".IronTeeth", "").Replace(".Folktails", "").Trim();
+
         private EntityComponent FindEntity(int id)
         {
             int frame = Time.frameCount;
@@ -397,7 +400,7 @@ namespace Timberbot
                 var entry = new Dictionary<string, object>
                 {
                     ["id"] = go.GetInstanceID(),
-                    ["name"] = go.name
+                    ["name"] = CleanName(go.name)
                 };
 
                 if (bo != null)
@@ -563,7 +566,7 @@ namespace Timberbot
                 var entry = new Dictionary<string, object>
                 {
                     ["id"] = go.GetInstanceID(),
-                    ["name"] = go.name
+                    ["name"] = CleanName(go.name)
                 };
 
                 if (bo != null)
@@ -616,7 +619,7 @@ namespace Timberbot
                 var entry = new Dictionary<string, object>
                 {
                     ["id"] = go.GetInstanceID(),
-                    ["name"] = go.name
+                    ["name"] = CleanName(go.name)
                 };
 
                 // overall wellbeing
@@ -654,7 +657,7 @@ namespace Timberbot
 
                 var worker = ec.GetComponent<Worker>();
                 if (worker != null && worker.Workplace != null)
-                    entry["workplace"] = worker.Workplace.GameObject.name;
+                    entry["workplace"] = CleanName(worker.Workplace.GameObject.name);
 
                 var bot = ec.GetComponent<Bot>();
                 entry["isBot"] = bot != null;
@@ -756,7 +759,7 @@ namespace Timberbot
             {
                 var bo = ec.GetComponent<BlockObject>();
                 if (bo == null) continue;
-                var name = ec.GameObject.name;
+                var name = CleanName(ec.GameObject.name);
 
                 // track seedlings vs grown trees
                 var growable = ec.GetComponent<Timberborn.Growing.Growable>();
@@ -906,7 +909,7 @@ namespace Timberbot
                 return new { error = "building is not pausable", id = buildingId };
 
             pausable.Paused = paused;
-            return new { id = buildingId, name = ec.GameObject.name, paused = pausable.Paused };
+            return new { id = buildingId, name = CleanName(ec.GameObject.name), paused = pausable.Paused };
         }
 
         public object SetFloodgateHeight(int buildingId, float height)
@@ -924,7 +927,7 @@ namespace Timberbot
             return new
             {
                 id = buildingId,
-                name = ec.GameObject.name,
+                name = CleanName(ec.GameObject.name),
                 height = floodgate.Height,
                 maxHeight = floodgate.MaxHeight
             };
@@ -945,7 +948,7 @@ namespace Timberbot
                 if (prio != null)
                 {
                     prio.SetPriority(parsed);
-                    return new { id = buildingId, name = ec.GameObject.name, constructionPriority = prio.Priority.ToString() };
+                    return new { id = buildingId, name = CleanName(ec.GameObject.name), constructionPriority = prio.Priority.ToString() };
                 }
             }
 
@@ -955,7 +958,7 @@ namespace Timberbot
                 if (wpPrio != null)
                 {
                     wpPrio.SetPriority(parsed);
-                    return new { id = buildingId, name = ec.GameObject.name, workplacePriority = wpPrio.Priority.ToString() };
+                    return new { id = buildingId, name = CleanName(ec.GameObject.name), workplacePriority = wpPrio.Priority.ToString() };
                 }
             }
 
@@ -973,7 +976,7 @@ namespace Timberbot
                 return new { error = "building has no haul priority", id = buildingId };
 
             hp.Prioritized = prioritized;
-            return new { id = buildingId, name = ec.GameObject.name, haulPrioritized = hp.Prioritized };
+            return new { id = buildingId, name = CleanName(ec.GameObject.name), haulPrioritized = hp.Prioritized };
         }
 
         public object SetRecipe(int buildingId, string recipeId)
@@ -989,7 +992,7 @@ namespace Timberbot
             if (string.IsNullOrEmpty(recipeId) || recipeId == "none")
             {
                 manufactory.SetRecipe(null);
-                return new { id = buildingId, name = ec.GameObject.name, recipe = "none" };
+                return new { id = buildingId, name = CleanName(ec.GameObject.name), recipe = "none" };
             }
 
             RecipeSpec recipe = null;
@@ -1003,7 +1006,7 @@ namespace Timberbot
             }
 
             manufactory.SetRecipe(recipe);
-            return new { id = buildingId, name = ec.GameObject.name, recipe = recipe.Id };
+            return new { id = buildingId, name = CleanName(ec.GameObject.name), recipe = recipe.Id };
         }
 
         public object SetFarmhouseAction(int buildingId, string action)
@@ -1019,12 +1022,12 @@ namespace Timberbot
             if (action == "planting")
             {
                 farmhouse.PrioritizePlanting();
-                return new { id = buildingId, name = ec.GameObject.name, action = "planting" };
+                return new { id = buildingId, name = CleanName(ec.GameObject.name), action = "planting" };
             }
             else if (action == "harvesting" || action == "none")
             {
                 farmhouse.UnprioritizePlanting();
-                return new { id = buildingId, name = ec.GameObject.name, action = "default" };
+                return new { id = buildingId, name = CleanName(ec.GameObject.name), action = "default" };
             }
 
             return new { error = "invalid action, use: planting or harvesting", action };
@@ -1043,7 +1046,7 @@ namespace Timberbot
             if (string.IsNullOrEmpty(plantableName) || plantableName == "none")
             {
                 prioritizer.PrioritizePlantable(null);
-                return new { id = buildingId, name = ec.GameObject.name, prioritized = "none" };
+                return new { id = buildingId, name = CleanName(ec.GameObject.name), prioritized = "none" };
             }
 
             var planterBuilding = ec.GetComponent<PlanterBuilding>();
@@ -1063,7 +1066,7 @@ namespace Timberbot
                 return new { error = "plantable not found", plantableName, available };
 
             prioritizer.PrioritizePlantable(match);
-            return new { id = buildingId, name = ec.GameObject.name, prioritized = match.TemplateName };
+            return new { id = buildingId, name = CleanName(ec.GameObject.name), prioritized = match.TemplateName };
         }
 
         // ================================================================
@@ -1085,7 +1088,7 @@ namespace Timberbot
             return new
             {
                 id = buildingId,
-                name = ec.GameObject.name,
+                name = CleanName(ec.GameObject.name),
                 desiredWorkers = workplace.DesiredWorkers,
                 maxWorkers = workplace.MaxWorkers,
                 assignedWorkers = workplace.NumberOfAssignedWorkers
@@ -1140,7 +1143,7 @@ namespace Timberbot
             return new
             {
                 id = buildingId,
-                name = ec.GameObject.name,
+                name = CleanName(ec.GameObject.name),
                 capacity
             };
         }
@@ -1159,7 +1162,7 @@ namespace Timberbot
             return new
             {
                 id = buildingId,
-                name = ec.GameObject.name,
+                name = CleanName(ec.GameObject.name),
                 good = sga.AllowedGood
             };
         }
@@ -1396,7 +1399,7 @@ namespace Timberbot
                 var bo = ec.GetComponent<BlockObject>();
                 if (bo == null) continue;
                 // skip temporary debris from demolished buildings
-                var name = ec.GameObject.name;
+                var name = CleanName(ec.GameObject.name);
                 if (name.Contains("RecoveredGoodStack") || name.Contains("GoodStack")) continue;
                 // skip dead trees/plants -- game allows building on them
                 var living = ec.GetComponent<LivingNaturalResource>();
@@ -1510,7 +1513,7 @@ namespace Timberbot
             if (ec == null)
                 return new { error = "entity not found", id = buildingId };
 
-            var name = ec.GameObject.name;
+            var name = CleanName(ec.GameObject.name);
             _entityService.Delete(ec);
             return new { id = buildingId, name, demolished = true };
         }
@@ -1610,7 +1613,7 @@ namespace Timberbot
             placer.Place(blockObjectSpec, placement, (entity) =>
             {
                 placedId = entity.GameObject.GetInstanceID();
-                placedName = entity.GameObject.name;
+                placedName = CleanName(entity.GameObject.name);
             });
 
             if (placedId == 0)
