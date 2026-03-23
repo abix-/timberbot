@@ -64,7 +64,7 @@ namespace Timberbot
     // entity access: no typed queries in Timberborn, so we iterate _entityRegistry.Entities + GetComponent<T>()
     // names: CleanName() strips "(Clone)", ".IronTeeth", ".Folktails" from all output
     // entity lookup: FindEntity() uses per-frame dictionary cache for O(1) writes
-    public class TimberbotService : ILoadableSingleton, IUpdatableSingleton
+    public class TimberbotService : ILoadableSingleton, IUpdatableSingleton, IUnloadableSingleton
     {
         // -- game services (injected via Bindito constructor) --
         private readonly IGoodService _goodService;                         // list of all good types (Water, Log, Plank, etc)
@@ -164,6 +164,13 @@ namespace Timberbot
         {
             _server = new TimberbotHttpServer(8085, this);
             Debug.Log("[Timberbot] HTTP server started on port 8085");
+        }
+
+        public void Unload()
+        {
+            _server?.Stop();
+            _server = null;
+            Debug.Log("[Timberbot] HTTP server stopped");
         }
 
         public void UpdateSingleton()
@@ -1692,8 +1699,9 @@ namespace Timberbot
                                          building = buildingName,
                                          scienceCost = cost,
                                          currentPoints = _scienceService.SciencePoints };
-                        _scienceService.SubtractPoints(cost);
+                        _buildingUnlockingService.Unlock(buildingSpec);
                         _toolUnlockingService.UnlockInternal(blockObjectTool, () => {});
+                        _scienceService.SubtractPoints(cost);
                         return new { building = buildingName, unlocked = true,
                                      remaining = _scienceService.SciencePoints };
                     }
@@ -1952,46 +1960,87 @@ namespace Timberbot
                 }
 
                 int zDiff = tz - prevZ;
-                if (zDiff > 1 || zDiff < -1)
-                {
-                    errors.Add($"z jump too large at ({cx},{cy}): {prevZ} -> {tz}");
-                    if (cx == x2 && cy == y2) break;
-                    prevZ = tz;
-                    cx += dx; cy += dy;
-                    continue;
-                }
 
-                if (zDiff == 1)
+                if (zDiff != 0)
                 {
-                    // going up: place stairs on the LOWER tile (previous position)
-                    int sx = cx - dx, sy = cy - dy;
-                    var stairResult = PlaceBuilding("Stairs.IronTeeth", sx, sy, prevZ, stairsOrient);
-                    if (stairResult.GetType().GetProperty("id") != null)
-                        stairs++;
-                    else
+                    int levels = System.Math.Abs(zDiff);
+                    int baseZ = System.Math.Min(prevZ, tz);
+                    bool goingUp = zDiff > 0;
+                    int rampOrient = goingUp ? stairsOrient : (stairsOrient + 2) % 4;
+
+                    // helper: demolish any path at a tile position
+                    void DemolishPathAt(int px, int py, int pz)
                     {
-                        var err = stairResult.GetType().GetProperty("error")?.GetValue(stairResult);
-                        if (err != null && !err.ToString().Contains("occupied"))
-                            errors.Add($"stairs at ({sx},{sy}): {err}");
-                        else
-                            skipped++;
+                        foreach (var ec in _entityRegistry.Entities)
+                        {
+                            var bo = ec.GetComponent<BlockObject>();
+                            if (bo == null) continue;
+                            var c = bo.Coordinates;
+                            if (c.x == px && c.y == py && c.z == pz && CleanName(ec.GameObject.name).Contains("Path"))
+                            {
+                                DemolishBuilding(ec.GameObject.GetInstanceID());
+                                placed--;
+                                break;
+                            }
+                        }
                     }
-                }
-                else if (zDiff == -1)
-                {
-                    // going down: place stairs on the HIGHER tile (current position)
-                    int downOrient = (stairsOrient + 2) % 4; // reverse direction
-                    var stairResult = PlaceBuilding("Stairs.IronTeeth", cx, cy, tz, downOrient);
-                    if (stairResult.GetType().GetProperty("id") != null)
-                        stairs++;
-                    else
+
+                    // build ramp: N tiles, each with (tileIndex) platforms + 1 stair on top
+                    // going up: ramp starts at previous tile, extends backward
+                    // going down: ramp starts at current tile, extends forward
+                    for (int step = 0; step < levels; step++)
                     {
-                        var err = stairResult.GetType().GetProperty("error")?.GetValue(stairResult);
-                        if (err != null && !err.ToString().Contains("occupied"))
-                            errors.Add($"stairs at ({cx},{cy}): {err}");
+                        int rampTileX, rampTileY;
+                        if (goingUp)
+                        {
+                            // going up: first ramp tile is the previous tile, then go backward
+                            rampTileX = cx - dx * (levels - step);
+                            rampTileY = cy - dy * (levels - step);
+                        }
                         else
-                            skipped++;
+                        {
+                            // going down: ramp tiles go forward from current position
+                            rampTileX = cx + dx * step;
+                            rampTileY = cy + dy * step;
+                        }
+
+                        // demolish any path we placed on this ramp tile
+                        DemolishPathAt(rampTileX, rampTileY, GetTerrainHeight(rampTileX, rampTileY));
+
+                        // stack platforms: step count of them
+                        for (int p = 0; p < step; p++)
+                        {
+                            var platResult = PlaceBuilding("Platform.IronTeeth", rampTileX, rampTileY, baseZ + p, 0);
+                            if (platResult.GetType().GetProperty("id") == null)
+                            {
+                                var err = platResult.GetType().GetProperty("error")?.GetValue(platResult);
+                                if (err != null && !err.ToString().Contains("occupied"))
+                                    errors.Add($"platform at ({rampTileX},{rampTileY},z={baseZ + p}): {err}");
+                            }
+                        }
+
+                        // place stair on top
+                        int stairZ = baseZ + step;
+                        var stairResult = PlaceBuilding("Stairs.IronTeeth", rampTileX, rampTileY, stairZ, rampOrient);
+                        if (stairResult.GetType().GetProperty("id") != null)
+                            stairs++;
+                        else
+                        {
+                            var err = stairResult.GetType().GetProperty("error")?.GetValue(stairResult);
+                            if (err != null && !err.ToString().Contains("occupied"))
+                                errors.Add($"stairs at ({rampTileX},{rampTileY},z={stairZ}): {err}");
+                        }
                     }
+
+                    if (!goingUp)
+                    {
+                        // skip past the ramp tiles we just built
+                        for (int skip = 0; skip < levels - 1; skip++)
+                        {
+                            cx += dx; cy += dy;
+                        }
+                    }
+
                     prevZ = tz;
                     if (cx == x2 && cy == y2) break;
                     cx += dx; cy += dy;
