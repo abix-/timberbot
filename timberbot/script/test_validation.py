@@ -151,9 +151,9 @@ class TestRunner:
             ("off map", lambda: self.bot.place_building("Path", 999, 999, 2), "no terrain"),
             ("unknown prefab", lambda: self.bot.place_building("Fake", 120, 130, 2), "not found"),
             ("invalid orientation", lambda: self.bot.place_building("Path", 120, 127, 2, orientation="bogus"), "invalid orientation"),
-            ("z too high", lambda: self.bot.place_building("Path", 119, 127, 4), "terrain too"),
-            ("z too low", lambda: self.bot.place_building("Path", 119, 127, 1), "terrain too"),
-            ("locked building", lambda: self.bot.place_building("Rowhouse.IronTeeth", 119, 127, 2), "not unlocked"),
+            ("z too high", lambda: self.bot.place_building("Path", 70, 125, 4), "terrain too"),
+            ("z too low", lambda: self.bot.place_building("Path", 70, 125, 1), "terrain too"),
+            ("locked building", lambda: self.bot.place_building("TributeToIngenuity.IronTeeth", 70, 125, 2), "not unlocked"),
         ]
         for name, fn, expect_err in tests:
             result = fn()
@@ -161,14 +161,14 @@ class TestRunner:
                        json.dumps(result)[:100])
 
         # valid placement
-        result = self.bot.place_building("Path", 119, 127, 2)
+        result = self.bot.place_building("Path", 70, 125, 2)
         self.check("valid placement", self.has(result, "id"))
 
         if self.has(result, "id"):
             placed_id = result["id"]
 
             # verify via map that tile is now occupied
-            tile = self.bot.map(119, 127, 119, 127)
+            tile = self.bot.map(70, 125, 70, 125)
             tiles = tile.get("tiles", [])
             has_path = any(t.get("occupant") == "Path" for t in tiles)
             self.check("verify placement via map", has_path)
@@ -178,7 +178,7 @@ class TestRunner:
             self.check("demolish", self.has(dem, "demolished") or not self.err(dem))
 
             # verify gone via map
-            tile2 = self.bot.map(119, 127, 119, 127)
+            tile2 = self.bot.map(70, 125, 70, 125)
             tiles2 = tile2.get("tiles", [])
             no_path = not any(t.get("occupant") == "Path" for t in tiles2)
             self.check("verify demolish via map", no_path)
@@ -401,7 +401,7 @@ class TestRunner:
     def test_find_placement(self):
         print("\n=== find_placement ===\n")
 
-        result = self.bot.find_placement("Inventor.IronTeeth", 120, 135, 155, 155)
+        result = self.bot.find_placement("Inventor.IronTeeth", 100, 115, 155, 155)
         self.check("returns results",
                    self.has(result, "placements") and len(result.get("placements", [])) > 0)
 

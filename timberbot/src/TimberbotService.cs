@@ -1704,7 +1704,6 @@ namespace Timberbot
                                          currentPoints = _scienceService.SciencePoints };
                         _buildingUnlockingService.Unlock(buildingSpec);
                         _toolUnlockingService.UnlockInternal(blockObjectTool, () => {});
-                        _scienceService.SubtractPoints(cost);
                         return new { building = buildingName, unlocked = true,
                                      remaining = _scienceService.SciencePoints };
                     }

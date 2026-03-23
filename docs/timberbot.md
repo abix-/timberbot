@@ -107,9 +107,11 @@ Pick the direction that points FROM the building TOWARD the path. If the path is
 
 - Deep Water Pump must straddle land/water edge
 - Set tank good to Water immediately after placing
-- Water pumps need workers
+- Water pumps need workers -- check staffing regularly, VeryHigh priority doesn't guarantee assignment when colony is small
 - 2 pumps serve ~15 beavers. Add a third pump before population exceeds 15
 - Check `waterDays` in summary -- if below 2 during drought, slow to speed 1
+- Build enough water STORAGE before drought. 3 pumps producing during temperate weather means nothing if tanks are too small. Target waterDays > 5 before drought hits
+- During drought, water is consumed but not produced. Every stored unit counts
 
 ## Tree rules
 
@@ -131,7 +133,7 @@ Pick the direction that points FROM the building TOWARD the path. If the path is
 
 ## Building sizes
 
-WoodWorkshop 2x4, HaulingPost 3x2, Barrack 3x2, DC 3x3, Rowhouse 1x2, FarmHouse 2x2, Inventor 2x2, Forester 2x2, flags 1x1, Path 1x1, LargePowerWheel 3x3, IndustrialLumberMill 2x3, DeepWaterPump 3x2
+WoodWorkshop 2x4, HaulingPost 3x2, Barrack 3x2, DC 3x3, Rowhouse 1x2, FarmHouse 2x2, Inventor 2x2, Forester 2x2, flags 1x1, Path 1x1, LargePowerWheel 3x3, IndustrialLumberMill 2x3, DeepWaterPump 3x2, DoubleShower 1x2 (1 tile on water, 1 tile on land -- straddles water edge like a pump)
 
 ## Building configuration
 
@@ -154,3 +156,24 @@ WoodWorkshop 2x4, HaulingPost 3x2, Barrack 3x2, DC 3x3, Rowhouse 1x2, FarmHouse 
 - Oasis maps have standing water (no flow). Use Large Power Wheel, not Compact Water Wheel
 - When colony is struggling, pause non-essential buildings to free workers for hauling
 - Lumberjacks MUST stay staffed -- no logs means no planks means no construction
+- NEVER use the `/api/debug` endpoint during gameplay -- it is for development and testing only, not for cheating or bypassing game mechanics
+
+## Wellbeing rules
+
+Wellbeing can go up to 77. Target 15+ for a thriving colony.
+
+- **Amenity buildings** are key: Scratcher (no workers), Bench (no workers), Lantern (no workers), Brazier (no workers), DoubleShower (1 worker), SwimmingPool (needs water edge)
+- Place amenities near housing and paths where beavers walk
+- Decorations (Bench, Lantern, Brazier) don't need workers -- free wellbeing
+- Higher-tier amenities need science: ExercisePlaza (400), WindTunnel (700), Motivatorium (1200)
+- During crises, wellbeing drops fast (-12 possible). Recovery takes many days
+- Do NOT neglect wellbeing for economy -- miserable beavers work slower and may die
+
+## Worker management
+
+- **Death spiral warning**: too many buildings competing for too few workers causes starvation. Beavers can't haul food/water if all assigned to workplaces
+- ALWAYS keep 2-4 idle/unemployed beavers for hauling. Check `unemployed` in summary
+- When population drops, immediately pause non-essential buildings: inventors, metalsmith, bot factory, gear workshop, foresters
+- Keep only critical buildings staffed: farmhouses, water pumps, 1 lumberjack
+- Set `set_haul_priority` on breeding pods so food gets delivered for breeding
+- Unpause buildings gradually as population recovers
