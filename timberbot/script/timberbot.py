@@ -730,7 +730,7 @@ def _flatten_for_toon(method, data):
     if method == "beavers" and isinstance(data, list):
         flat = []
         for b in data:
-            critical = [k for k, v in b.get("needs", {}).items() if v.get("isCritical")]
+            critical = [k for k, v in b.get("needs", {}).items() if v.get("isBelowWarning") or v.get("isBelowWarningThreshold")]
             wb = round(b.get("wellbeing", 0), 2)
             # wellbeing tiers: 0-3=miserable, 4-7=unhappy, 8-11=okay, 12-15=happy, 16+=ecstatic
             if wb >= 16: tier = "ecstatic"

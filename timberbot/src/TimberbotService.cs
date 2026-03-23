@@ -640,7 +640,7 @@ namespace Timberbot
                             isCritical = need.IsCritical,
                             isBelowWarning = need.IsBelowWarningThreshold
                         };
-                        if (need.IsCritical) anyCritical = true;
+                        if (need.IsBelowWarningThreshold) anyCritical = true;
                     }
                 }
                 catch { }
