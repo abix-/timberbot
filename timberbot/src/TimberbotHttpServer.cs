@@ -148,6 +148,10 @@ namespace Timberbot
                 {
                     case "/api/summary":
                         return _service.CollectSummary();
+                    case "/api/alerts":
+                        return _service.CollectAlerts();
+                    case "/api/tree_clusters":
+                        return _service.CollectTreeClusters(); // default params, POST can override
                     case "/api/resources":
                         return _service.CollectResources();
                     case "/api/population":
@@ -278,6 +282,11 @@ namespace Timberbot
                             body?.Value<int>("y1") ?? 0,
                             body?.Value<int>("x2") ?? 0,
                             body?.Value<int>("y2") ?? 0);
+                    case "/api/scan":
+                        return _service.CollectScan(
+                            body?.Value<int>("x") ?? 128,
+                            body?.Value<int>("y") ?? 128,
+                            body?.Value<int>("radius") ?? 10);
                     case "/api/building/demolish":
                         return _service.DemolishBuilding(
                             body?.Value<int>("id") ?? 0);

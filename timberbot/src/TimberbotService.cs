@@ -270,6 +270,176 @@ namespace Timberbot
             };
         }
 
+        public object CollectAlerts()
+        {
+            var alerts = new List<object>();
+            foreach (var ec in _entityRegistry.Entities)
+            {
+                var bo = ec.GetComponent<BlockObject>();
+                if (bo == null) continue;
+                var name = CleanName(ec.GameObject.name);
+                int id = ec.GameObject.GetInstanceID();
+
+                var wp = ec.GetComponent<Timberborn.WorkSystem.Workplace>();
+                if (wp != null && wp.DesiredWorkers > 0 && wp.AssignedWorkers.Count < wp.DesiredWorkers)
+                    alerts.Add(new { type = "unstaffed", id, name, workers = $"{wp.AssignedWorkers.Count}/{wp.DesiredWorkers}" });
+
+                var mech = ec.GetComponent<MechanicalNode>();
+                if (mech != null && mech.IsConsumer && !mech.Active)
+                    alerts.Add(new { type = "unpowered", id, name });
+
+                var reach = ec.GetComponent<EntityReachabilityStatus>();
+                if (reach != null && reach.IsAnyUnreachable())
+                    alerts.Add(new { type = "unreachable", id, name });
+
+                var statuses = ec.GetComponent<StatusSubject>();
+                if (statuses != null)
+                {
+                    foreach (var status in statuses.ActiveStatuses)
+                    {
+                        var desc = status.StatusDescription;
+                        if (!string.IsNullOrEmpty(desc) && desc != "Normal")
+                            alerts.Add(new { type = "status", id, name, status = desc });
+                    }
+                }
+            }
+            return alerts;
+        }
+
+        public object CollectTreeClusters(int cellSize = 10, int top = 5)
+        {
+            var cells = new Dictionary<long, int[]>(); // key -> [grown, total, centerX, centerY, z]
+            foreach (var ec in _entityRegistry.Entities)
+            {
+                if (ec.GetComponent<Cuttable>() == null) continue;
+                var living = ec.GetComponent<LivingNaturalResource>();
+                if (living == null || living.IsDead) continue;
+                var bo = ec.GetComponent<BlockObject>();
+                if (bo == null) continue;
+                var growable = ec.GetComponent<Timberborn.Growing.Growable>();
+
+                var c = bo.Coordinates;
+                int cx = c.x / cellSize * cellSize + cellSize / 2;
+                int cy = c.y / cellSize * cellSize + cellSize / 2;
+                long key = (long)cx * 100000 + cy;
+
+                if (!cells.ContainsKey(key))
+                    cells[key] = new int[] { 0, 0, cx, cy, c.z };
+
+                cells[key][1]++;
+                if (growable != null && growable.IsGrown)
+                    cells[key][0]++;
+            }
+
+            var sorted = new List<int[]>(cells.Values);
+            sorted.Sort((a, b) => b[0].CompareTo(a[0]));
+            var results = new List<object>();
+            for (int i = 0; i < System.Math.Min(top, sorted.Count); i++)
+            {
+                var s = sorted[i];
+                results.Add(new { x = s[2], y = s[3], z = s[4], grown = s[0], total = s[1] });
+            }
+            return results;
+        }
+
+        public object CollectScan(int cx, int cy, int radius)
+        {
+            int x1 = cx - radius, y1 = cy - radius, x2 = cx + radius, y2 = cy + radius;
+            var occupied = new List<object>();
+            var water = new List<object>();
+
+            // reuse map's tile-building logic directly
+            var occupants = new Dictionary<long, string>();
+            var entrances = new HashSet<long>();
+            var seedlings = new HashSet<long>();
+            var deadTiles = new HashSet<long>();
+            foreach (var ec in _entityRegistry.Entities)
+            {
+                var bo = ec.GetComponent<BlockObject>();
+                if (bo == null) continue;
+                var name = CleanName(ec.GameObject.name);
+                if (name.Contains("RecoveredGoodStack") || name.Contains("GoodStack")) continue;
+                var living = ec.GetComponent<LivingNaturalResource>();
+                if (living != null && living.IsDead)
+                {
+                    var dc = bo.Coordinates;
+                    deadTiles.Add((long)dc.x * 100000 + dc.y);
+                }
+                var growable = ec.GetComponent<Timberborn.Growing.Growable>();
+                if (growable != null && !growable.IsGrown)
+                    seedlings.Add((long)bo.Coordinates.x * 100000 + bo.Coordinates.y);
+                if (bo.HasEntrance)
+                {
+                    try { var ent = bo.PositionedEntrance.DoorstepCoordinates; entrances.Add((long)ent.x * 100000 + ent.y); } catch { }
+                }
+                try
+                {
+                    foreach (var block in bo.PositionedBlocks.GetAllBlocks())
+                    {
+                        var c = block.Coordinates;
+                        if (c.x >= x1 && c.x <= x2 && c.y >= y1 && c.y <= y2)
+                            occupants[(long)c.x * 100000 + c.y] = name;
+                    }
+                }
+                catch
+                {
+                    var c = bo.Coordinates;
+                    if (c.x >= x1 && c.x <= x2 && c.y >= y1 && c.y <= y2)
+                        occupants[(long)c.x * 100000 + c.y] = name;
+                }
+            }
+
+            for (int x = x1; x <= x2; x++)
+            {
+                for (int y = y1; y <= y2; y++)
+                {
+                    long key = (long)x * 100000 + y;
+                    occupants.TryGetValue(key, out var occ);
+                    bool isEntrance = entrances.Contains(key);
+                    bool isSeedling = seedlings.Contains(key);
+                    bool isDead = deadTiles.Contains(key);
+
+                    int terrainHeight = GetTerrainHeight(x, y);
+                    float waterHeight = 0f;
+                    float waterContamination = 0f;
+                    try { waterHeight = _waterMap.CeiledWaterHeight(new Vector3Int(x, y, terrainHeight)); } catch { }
+                    try
+                    {
+                        int wIdx2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));
+                        int wColCount = _waterMap.ColumnCount(wIdx2D);
+                        for (int ci = wColCount - 1; ci >= 0; ci--)
+                        {
+                            int wIdx3D = ci * _mapIndexService.VerticalStride + wIdx2D;
+                            var col = _waterMap.WaterColumns[wIdx3D];
+                            if (col.WaterDepth > 0 && col.Contamination > 0) { waterContamination = col.Contamination; break; }
+                        }
+                    }
+                    catch { }
+
+                    if (!string.IsNullOrEmpty(occ))
+                    {
+                        string suffix = isDead ? ".dead" : isSeedling ? ".seedling" : "";
+                        if (isEntrance) suffix += ".entrance";
+                        occupied.Add(new { x, y, what = occ + suffix });
+                    }
+                    else if (isEntrance)
+                    {
+                        occupied.Add(new { x, y, what = "entrance" });
+                    }
+
+                    if (waterHeight > 0 && string.IsNullOrEmpty(occ))
+                    {
+                        if (waterContamination > 0)
+                            water.Add(new { x, y, badwater = System.Math.Round(waterContamination, 2) });
+                        else
+                            water.Add(new { x, y });
+                    }
+                }
+            }
+
+            return new { center = $"{cx},{cy}", radius, @default = "ground", occupied, water };
+        }
+
         public object CollectTime()
         {
             return new

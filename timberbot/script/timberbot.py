@@ -131,23 +131,8 @@ class Timberbot:
         return self._get("/api/notifications")
 
     def alerts(self):
-        """Computed alerts from building data: unstaffed, unpowered, unreachable."""
-        buildings = self.buildings()
-        issues = []
-        for b in buildings:
-            name = b.get("name", "")
-            bid = b.get("id", 0)
-            if b.get("desiredWorkers", 0) > 0 and b.get("assignedWorkers", 0) < b.get("desiredWorkers", 0):
-                issues.append({"type": "unstaffed", "id": bid, "name": name,
-                               "workers": f"{b.get('assignedWorkers', 0)}/{b.get('desiredWorkers', 0)}"})
-            if b.get("isConsumer") and not b.get("powered"):
-                issues.append({"type": "unpowered", "id": bid, "name": name})
-            if b.get("reachable") is False:
-                issues.append({"type": "unreachable", "id": bid, "name": name})
-            for s in b.get("statuses", []):
-                if s not in ("", "Normal"):
-                    issues.append({"type": "status", "id": bid, "name": name, "status": s})
-        return issues
+        """Alerts: unstaffed, unpowered, unreachable, status issues."""
+        return self._get("/api/alerts")
 
     def distribution(self):
         """Distribution settings per district: [{district, goods: [{good, importOption, exportThreshold}]}]."""
@@ -284,35 +269,9 @@ class Timberbot:
 
     # -- helpers --
 
-    def tree_clusters(self, radius=10, top=5):
+    def tree_clusters(self):
         """Find clusters of grown trees. Returns top clusters by grown count."""
-        all_trees = self.trees()
-        grown = [t for t in all_trees if t.get("grown") and t.get("alive")]
-        if not grown:
-            return []
-
-        # grid-based clustering: divide map into cells of `radius` size
-        cells = {}
-        for t in grown:
-            cx = t["x"] // radius * radius + radius // 2
-            cy = t["y"] // radius * radius + radius // 2
-            key = (cx, cy, t.get("z", 0))
-            if key not in cells:
-                cells[key] = {"x": cx, "y": cy, "z": key[2], "grown": 0, "total": 0}
-            cells[key]["grown"] += 1
-
-        # count total trees (including seedlings) in each cell
-        for t in all_trees:
-            if not t.get("alive"):
-                continue
-            cx = t["x"] // radius * radius + radius // 2
-            cy = t["y"] // radius * radius + radius // 2
-            key = (cx, cy, t.get("z", 0))
-            if key in cells:
-                cells[key]["total"] += 1
-
-        clusters = sorted(cells.values(), key=lambda c: -c["grown"])
-        return clusters[:top]
+        return self._get("/api/tree_clusters")
 
     @staticmethod
     def near(items, x, y, radius=20):
@@ -334,47 +293,8 @@ class Timberbot:
         return [i for i in items if low in i.get("name", "").lower()]
 
     def scan(self, x, y, radius=10):
-        """Scan an area. Returns structured data: occupied tiles + water tiles, skipping empty ground."""
-        data = self.map(x - radius, y - radius, x + radius, y + radius)
-        tiles = data.get("tiles", [])
-
-        occupied = []
-        water = []
-
-        for t in tiles:
-            tx, ty = t["x"], t["y"]
-            has_occupant = t.get("occupant")
-            has_water = t.get("water", 0) > 0
-            is_entrance = t.get("entrance", False)
-            is_seedling = t.get("seedling", False)
-            is_dead = t.get("dead", False)
-
-            if has_occupant:
-                name = has_occupant
-                if is_dead:
-                    name += ".dead"
-                elif is_seedling:
-                    name += ".seedling"
-                if is_entrance:
-                    name += ".entrance"
-                occupied.append({"x": tx, "y": ty, "what": name})
-            elif is_entrance:
-                occupied.append({"x": tx, "y": ty, "what": "entrance"})
-
-            if has_water and not has_occupant:
-                bw = t.get("badwater", 0)
-                entry = {"x": tx, "y": ty}
-                if bw > 0:
-                    entry["badwater"] = bw
-                water.append(entry)
-
-        return {
-            "center": f"{x},{y}",
-            "radius": radius,
-            "default": "ground",
-            "occupied": occupied,
-            "water": water,
-        }
+        """Scan an area. Returns occupied tiles + water tiles, skipping empty ground."""
+        return self._post("/api/scan", {"x": x, "y": y, "radius": radius})
 
     def visual(self, x, y, radius=10):
         """Colored ASCII map for humans. Same data as scan() but rendered as a roguelike grid."""
