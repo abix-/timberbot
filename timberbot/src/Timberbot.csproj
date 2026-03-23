@@ -204,6 +204,10 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Forestry.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.NaturalResources" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.NaturalResources.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.NaturalResourcesLifecycle" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.NaturalResourcesLifecycle.dll</HintPath>

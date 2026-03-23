@@ -15,6 +15,7 @@ using Timberborn.WaterSystem;
 using Timberborn.EntitySystem;
 using Timberborn.Forestry;
 using Timberborn.Planting;
+using Timberborn.NaturalResources;
 using Timberborn.Gathering;
 using Timberborn.GameCycleSystem;
 using Timberborn.GameDistricts;
@@ -99,6 +100,7 @@ namespace Timberbot
         private readonly DistrictPathNavRangeDrawerRegistrar _districtPathNavRegistrar; // district road connectivity
         private readonly Timberborn.Navigation.INavMeshService _navMeshService;   // road/terrain nav mesh connectivity
         private readonly ISoilMoistureService _soilMoistureService;       // soil moisture/irrigation
+        private readonly SpawnValidationService _spawnValidationService;   // planting spot validation
         private readonly FactionNeedService _factionNeedService;           // need specs per faction (beaver/bot)
         private readonly NeedGroupSpecService _needGroupSpecService;       // need group categories (Social, Hygiene, etc)
         private readonly PreviewFactory _previewFactory;                       // create preview entities for placement validation
@@ -135,6 +137,7 @@ namespace Timberbot
             Timberborn.Navigation.INavMeshService navMeshService,
             ISoilMoistureService soilMoistureService,
             StackableBlockService stackableBlockService,
+            SpawnValidationService spawnValidationService,
             FactionNeedService factionNeedService,
             NeedGroupSpecService needGroupSpecService,
             PreviewFactory previewFactory)
@@ -169,6 +172,7 @@ namespace Timberbot
             _navMeshService = navMeshService;
             _soilMoistureService = soilMoistureService;
             _stackableBlockService = stackableBlockService;
+            _spawnValidationService = spawnValidationService;
             _factionNeedService = factionNeedService;
             _needGroupSpecService = needGroupSpecService;
             _previewFactory = previewFactory;
@@ -1616,26 +1620,10 @@ namespace Timberbot
                 }
             }
 
-            var occupied = GetOccupiedTiles();
             int planted = 0, skipped = 0;
             foreach (var c in coords)
             {
-                long key = (long)c.x * 1000000 + (long)c.y * 1000 + c.z;
-                if (occupied.Contains(key))
-                {
-                    skipped++;
-                    continue;
-                }
-                int th = GetTerrainHeight(c.x, c.y);
-                if (th == 0 || th < c.z)
-                {
-                    skipped++;
-                    continue;
-                }
-                float wh = 0f;
-                try { wh = _waterMap.CeiledWaterHeight(new Vector3Int(c.x, c.y, th)); }
-                catch { }
-                if (wh > 0)
+                if (!_spawnValidationService.SpotIsValid(c, crop))
                 {
                     skipped++;
                     continue;
