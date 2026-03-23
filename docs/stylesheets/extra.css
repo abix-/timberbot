@@ -297,25 +297,3 @@
   background-color: #4a3322;
 }
 
-/* -- light mode: parchment -- */
-
-[data-md-color-scheme="default"] {
-  --md-default-bg-color: #f5efe6;
-  --md-primary-fg-color: #5c3d24;
-  --md-accent-fg-color: #a06820;
-  --md-typeset-a-color: #7a5230;
-}
-
-[data-md-color-scheme="default"] .md-header {
-  background: linear-gradient(180deg, #4a3322 0%, #5c3d24 100%);
-}
-
-[data-md-color-scheme="default"] .md-typeset h1,
-[data-md-color-scheme="default"] .md-typeset h2 {
-  color: #3d2b1a;
-}
-
-[data-md-color-scheme="default"] .md-typeset table:not([class]) th {
-  background-color: #5c3d24;
-  color: #f5efe6;
-}
