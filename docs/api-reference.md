@@ -50,6 +50,10 @@ All write endpoints accept JSON bodies.
 | `/api/stockpile/capacity` | `{"id": N, "capacity": 100}` | set stockpile capacity |
 | `/api/stockpile/good` | `{"id": N, "good": "Log"}` | set allowed good |
 | `/api/map` | `{"x1": N, "y1": N, "x2": N, "y2": N}` | terrain + water + occupants for a region |
+| `/api/hauling/priority` | `{"id": N, "prioritized": true}` | haulers deliver goods here first |
+| `/api/recipe` | `{"id": N, "recipe": "RecipeId"}` | set manufactory recipe (use "none" to clear) |
+| `/api/farmhouse/action` | `{"id": N, "action": "planting"}` | prioritize planting or harvesting (default) |
+| `/api/plantable/priority` | `{"id": N, "plantable": "Pine"}` | prioritize resource on forester (use "none" to clear) |
 
 ## IDs and names
 

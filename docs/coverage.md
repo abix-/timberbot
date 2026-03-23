@@ -47,6 +47,11 @@ What Timberbot can and can't do, audited against every Timberborn 1.0 game syste
 | Per-building power | YES | NO | `nominalPowerInput`, `nominalPowerOutput` on buildings |
 | Automation levers | NO | NO | Use Timberborn's built-in HTTP API (port 8080) directly |
 | Automation adapters | NO | NO | Use Timberborn's built-in HTTP API (port 8080) directly |
+| Hauler priority | YES | YES | `set_haul_priority` on any building that receives goods |
+| Manufactory recipes | YES | YES | `set_recipe` on lumber mills, gear workshops, bot factories |
+| Farmhouse action | YES | YES | `set_farmhouse_action` planting vs default |
+| Plantable priority | YES | YES | `set_plantable_priority` on foresters (tree type) |
+| Water contamination | YES | NO | `badwater` field on water tiles (0-1) |
 | Pagination | YES | N/A | `limit`/`offset` on buildings, trees, gatherables, beavers |
 
 ## Known gaps

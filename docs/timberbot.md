@@ -128,12 +128,20 @@ Pick the direction that points FROM the building TOWARD the path. If the path is
 
 WoodWorkshop 2x4, HaulingPost 3x2, Barrack 3x2, DC 3x3, Rowhouse 1x2, FarmHouse 2x2, Inventor 2x2, Forester 2x2, flags 1x1, Path 1x1, LargePowerWheel 3x3, IndustrialLumberMill 2x3, DeepWaterPump 3x2
 
+## Building configuration
+
+- `set_haul_priority building_id:X prioritized:true` -- haulers deliver goods here first (use on breeding pods, critical buildings)
+- `set_recipe building_id:X recipe:RecipeId` -- set manufactory recipe (lumber mill, gear workshop, bot factory). Use invalid name to list available
+- `set_farmhouse_action building_id:X action:planting` -- prioritize planting over harvesting. Use `action:harvesting` to reset to default
+- `set_plantable_priority building_id:X plantable:Pine` -- forester prioritizes this tree type. Use `plantable:none` to clear
+
 ## General rules
 
 - ALWAYS use `python timberbot/script/timberbot.py <method>` for everything
 - Use `find source:buildings name:X` to look up building IDs
 - Use `scan` before and after every placement
 - Set VeryHigh priority on food and water buildings (BOTH construction and workplace)
+- Set haul priority on breeding pods so beavers deliver food there
 - One action per turn, verify it worked, then next action
 - Goods are hauled by idle beavers. Don't over-employ the colony early
 - Oasis maps have standing water (no flow). Use Large Power Wheel, not Compact Water Wheel
