@@ -300,7 +300,7 @@ class TestRunner:
         print("\n=== crops ===\n")
 
         # plant on open ground -- PlantingAreaValidator.CanPlant decides validity
-        result = self.bot.plant_crop(110, 130, 112, 132, 2, "Kohlrabi")
+        result = self.bot.plant_crop(68, 130, 70, 132, 2, "Kohlrabi")
         self.check("plant crops", self.has(result, "planted") and result["planted"] > 0,
                    json.dumps(result)[:100])
 
@@ -310,7 +310,7 @@ class TestRunner:
                    json.dumps(result2)[:100])
 
         # clear
-        self.bot.clear_planting(110, 130, 112, 132, 2)
+        self.bot.clear_planting(68, 130, 70, 132, 2)
         self.bot.clear_planting(119, 122, 122, 126, 2)
 
     def test_tree_marking(self):
