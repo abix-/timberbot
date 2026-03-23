@@ -208,6 +208,18 @@ namespace Timberbot
                         return _service.SetHaulPriority(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<bool>("prioritized") ?? true);
+                    case "/api/recipe":
+                        return _service.SetRecipe(
+                            body?.Value<int>("id") ?? 0,
+                            body?.Value<string>("recipe") ?? "");
+                    case "/api/farmhouse/action":
+                        return _service.SetFarmhouseAction(
+                            body?.Value<int>("id") ?? 0,
+                            body?.Value<string>("action") ?? "");
+                    case "/api/plantable/priority":
+                        return _service.SetPlantablePriority(
+                            body?.Value<int>("id") ?? 0,
+                            body?.Value<string>("plantable") ?? "");
                     case "/api/workers":
                         return _service.SetWorkers(
                             body?.Value<int>("id") ?? 0,

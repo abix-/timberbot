@@ -44,6 +44,8 @@ using Timberborn.DwellingSystem;
 using Timberborn.PowerManagement;
 using Timberborn.SoilContaminationSystem;
 using Timberborn.Hauling;
+using Timberborn.Workshops;
+using Timberborn.Fields;
 using Timberborn.GameDistrictsMigration;
 using Timberborn.ToolButtonSystem;
 using Timberborn.ToolSystem;
@@ -78,6 +80,7 @@ namespace Timberbot
         private readonly PopulationDistributorRetriever _populationDistributorRetriever;
         private readonly ToolButtonService _toolButtonService;
         private readonly UnlockedPlantableGroupsRegistry _unlockedPlantableGroupsRegistry;
+        private readonly RecipeSpecService _recipeSpecService;
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -104,7 +107,8 @@ namespace Timberbot
             ISoilContaminationService soilContaminationService,
             PopulationDistributorRetriever populationDistributorRetriever,
             ToolButtonService toolButtonService,
-            UnlockedPlantableGroupsRegistry unlockedPlantableGroupsRegistry)
+            UnlockedPlantableGroupsRegistry unlockedPlantableGroupsRegistry,
+            RecipeSpecService recipeSpecService)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -130,6 +134,7 @@ namespace Timberbot
             _populationDistributorRetriever = populationDistributorRetriever;
             _toolButtonService = toolButtonService;
             _unlockedPlantableGroupsRegistry = unlockedPlantableGroupsRegistry;
+            _recipeSpecService = recipeSpecService;
         }
 
         public void Load()
@@ -919,6 +924,95 @@ namespace Timberbot
 
             hp.Prioritized = prioritized;
             return new { id = buildingId, name = ec.GameObject.name, haulPrioritized = hp.Prioritized };
+        }
+
+        public object SetRecipe(int buildingId, string recipeId)
+        {
+            var ec = FindEntity(buildingId);
+            if (ec == null)
+                return new { error = "building not found", id = buildingId };
+
+            var manufactory = ec.GetComponent<Manufactory>();
+            if (manufactory == null)
+                return new { error = "building has no manufactory", id = buildingId };
+
+            if (string.IsNullOrEmpty(recipeId) || recipeId == "none")
+            {
+                manufactory.SetRecipe(null);
+                return new { id = buildingId, name = ec.GameObject.name, recipe = "none" };
+            }
+
+            var recipe = _recipeSpecService.GetRecipe(recipeId);
+            if (recipe == null)
+            {
+                var available = new List<string>();
+                foreach (var r in manufactory.ProductionRecipes)
+                    available.Add(r.Id);
+                return new { error = "recipe not found", recipeId, available };
+            }
+
+            manufactory.SetRecipe(recipe);
+            return new { id = buildingId, name = ec.GameObject.name, recipe = recipe.Id };
+        }
+
+        public object SetFarmhouseAction(int buildingId, string action)
+        {
+            var ec = FindEntity(buildingId);
+            if (ec == null)
+                return new { error = "building not found", id = buildingId };
+
+            var farmhouse = ec.GetComponent<FarmHouse>();
+            if (farmhouse == null)
+                return new { error = "building is not a farmhouse", id = buildingId };
+
+            if (action == "planting")
+            {
+                farmhouse.PrioritizePlanting();
+                return new { id = buildingId, name = ec.GameObject.name, action = "planting" };
+            }
+            else if (action == "harvesting" || action == "none")
+            {
+                farmhouse.UnprioritizePlanting();
+                return new { id = buildingId, name = ec.GameObject.name, action = "default" };
+            }
+
+            return new { error = "invalid action, use: planting or harvesting", action };
+        }
+
+        public object SetPlantablePriority(int buildingId, string plantableName)
+        {
+            var ec = FindEntity(buildingId);
+            if (ec == null)
+                return new { error = "building not found", id = buildingId };
+
+            var prioritizer = ec.GetComponent<PlantablePrioritizer>();
+            if (prioritizer == null)
+                return new { error = "building has no plantable prioritizer", id = buildingId };
+
+            if (string.IsNullOrEmpty(plantableName) || plantableName == "none")
+            {
+                prioritizer.PrioritizePlantable(null);
+                return new { id = buildingId, name = ec.GameObject.name, prioritized = "none" };
+            }
+
+            var planterBuilding = ec.GetComponent<PlanterBuilding>();
+            if (planterBuilding == null)
+                return new { error = "building has no planter", id = buildingId };
+
+            PlantableSpec match = null;
+            var available = new List<string>();
+            foreach (var p in planterBuilding.AllowedPlantables)
+            {
+                available.Add(p.TemplateName);
+                if (p.TemplateName == plantableName)
+                    match = p;
+            }
+
+            if (match == null)
+                return new { error = "plantable not found", plantableName, available };
+
+            prioritizer.PrioritizePlantable(match);
+            return new { id = buildingId, name = ec.GameObject.name, prioritized = match.TemplateName };
         }
 
         // ================================================================

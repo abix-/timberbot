@@ -196,6 +196,18 @@ class Timberbot:
         """Set hauler priority on a building. Haulers will deliver goods here first."""
         return self._post("/api/hauling/priority", {"id": building_id, "prioritized": prioritized})
 
+    def set_recipe(self, building_id, recipe):
+        """Set manufactory recipe. Use 'none' to clear. Lists available recipes on error."""
+        return self._post("/api/recipe", {"id": building_id, "recipe": recipe})
+
+    def set_farmhouse_action(self, building_id, action):
+        """Set farmhouse priority action: 'planting' or 'harvesting'."""
+        return self._post("/api/farmhouse/action", {"id": building_id, "action": action})
+
+    def set_plantable_priority(self, building_id, plantable):
+        """Set prioritized plantable on forester/gatherer. Use 'none' to clear."""
+        return self._post("/api/plantable/priority", {"id": building_id, "plantable": plantable})
+
     def set_workers(self, building_id, count):
         """Set desired worker count (0 to maxWorkers)."""
         return self._post("/api/workers", {"id": building_id, "count": count})

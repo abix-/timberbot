@@ -132,6 +132,14 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.PlantingUI.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.Workshops" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.Workshops.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Fields" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.Fields.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.Hauling" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.Hauling.dll</HintPath>
