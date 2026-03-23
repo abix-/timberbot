@@ -1232,6 +1232,11 @@ namespace Timberbot
                     {
                         _buildingUnlockingService.Unlock(toolBuilding);
                         _unlockedPlantableGroupsRegistry.AddUnlockedPlantableGroups(toolBuilding);
+                        // clear the tool lock via reflection if the property exists
+                        var lockerProp = blockObjectTool.GetType().GetProperty("Locker",
+                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        if (lockerProp != null && lockerProp.CanWrite)
+                            lockerProp.SetValue(blockObjectTool, null);
                         toolButton.OnToolUnlocked(new ToolUnlockedEvent(toolButton.Tool));
                         return new { building = buildingName, unlocked = true,
                                      remaining = _scienceService.SciencePoints };
