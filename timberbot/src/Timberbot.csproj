@@ -128,6 +128,22 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.ToolSystem.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.ToolSystemUI" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.ToolSystemUI.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.InputSystem" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.InputSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.ConstructionMode" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.ConstructionMode.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.ConstructionGuidelines" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.ConstructionGuidelines.dll</HintPath>
+    </Reference>
     <Reference Include="Timberborn.PlantingUI" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.PlantingUI.dll</HintPath>
@@ -255,6 +271,18 @@
     <Reference Include="Timberborn.GameDistrictsMigration" Publicize="true">
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.GameDistrictsMigration.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.BuildingsNavigation" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.BuildingsNavigation.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.Navigation" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.Navigation.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.SoilMoistureSystem" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.SoilMoistureSystem.dll</HintPath>
     </Reference>
     <Reference Include="Timberborn.BuildingsReachability" Publicize="true">
       <Private>false</Private>

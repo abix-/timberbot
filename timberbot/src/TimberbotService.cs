@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Timberborn.BlockSystem;
 using Timberborn.BuilderPrioritySystem;
 using Timberborn.Buildings;
@@ -50,6 +51,8 @@ using Timberborn.GameDistrictsMigration;
 using Timberborn.ToolButtonSystem;
 using Timberborn.ToolSystem;
 using Timberborn.PlantingUI;
+using Timberborn.BuildingsNavigation;
+using Timberborn.SoilMoistureSystem;
 using UnityEngine;
 
 namespace Timberbot
@@ -87,8 +90,12 @@ namespace Timberbot
         private readonly ISoilContaminationService _soilContaminationService;// soil contamination from badwater
         private readonly PopulationDistributorRetriever _populationDistributorRetriever; // migrate beavers between districts
         private readonly ToolButtonService _toolButtonService;              // UI toolbar buttons (for unlock UI update)
+        private readonly ToolUnlockingService _toolUnlockingService;      // full unlock flow (cost + UI + events)
         private readonly UnlockedPlantableGroupsRegistry _unlockedPlantableGroupsRegistry; // plantable groups (for unlock UI)
         private readonly RecipeSpecService _recipeSpecService;              // manufactory recipe lookup
+        private readonly DistrictPathNavRangeDrawerRegistrar _districtPathNavRegistrar; // district road connectivity
+        private readonly Timberborn.Navigation.INavMeshService _navMeshService;   // road/terrain nav mesh connectivity
+        private readonly ISoilMoistureService _soilMoistureService;       // soil moisture/irrigation
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -115,8 +122,12 @@ namespace Timberbot
             ISoilContaminationService soilContaminationService,
             PopulationDistributorRetriever populationDistributorRetriever,
             ToolButtonService toolButtonService,
+            ToolUnlockingService toolUnlockingService,
             UnlockedPlantableGroupsRegistry unlockedPlantableGroupsRegistry,
-            RecipeSpecService recipeSpecService)
+            RecipeSpecService recipeSpecService,
+            DistrictPathNavRangeDrawerRegistrar districtPathNavRegistrar,
+            Timberborn.Navigation.INavMeshService navMeshService,
+            ISoilMoistureService soilMoistureService)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -141,8 +152,12 @@ namespace Timberbot
             _soilContaminationService = soilContaminationService;
             _populationDistributorRetriever = populationDistributorRetriever;
             _toolButtonService = toolButtonService;
+            _toolUnlockingService = toolUnlockingService;
             _unlockedPlantableGroupsRegistry = unlockedPlantableGroupsRegistry;
             _recipeSpecService = recipeSpecService;
+            _districtPathNavRegistrar = districtPathNavRegistrar;
+            _navMeshService = navMeshService;
+            _soilMoistureService = soilMoistureService;
         }
 
         public void Load()
@@ -325,6 +340,28 @@ namespace Timberbot
                             flat[goodId] = rc.AvailableStock;
                     }
                 }
+            }
+
+            // resource projection
+            int totalPop = beaverCount;
+            if (totalPop > 0)
+            {
+                int totalFood = 0;
+                int totalWater = 0;
+                foreach (var kv in flat)
+                {
+                    if (kv.Value is int stock && stock > 0)
+                    {
+                        var g = kv.Key;
+                        if (g == "Water") totalWater += stock;
+                        else if (g == "Berries" || g == "Kohlrabi" || g == "Carrot" || g == "Potato"
+                              || g == "Wheat" || g == "Bread" || g == "Cassava" || g == "Corn"
+                              || g == "Eggplant" || g == "Soybean" || g == "MapleSyrup")
+                            totalFood += stock;
+                    }
+                }
+                flat["foodDays"] = System.Math.Round((double)totalFood / totalPop, 1);
+                flat["waterDays"] = System.Math.Round((double)totalWater / (totalPop * 2.0), 1);
             }
 
             // housing
@@ -1214,6 +1251,12 @@ namespace Timberbot
                             tile["contaminated"] = true;
                     }
                     catch { }
+                    try
+                    {
+                        if (_soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight)))
+                            tile["moist"] = true;
+                    }
+                    catch { }
                     tiles.Add(tile);
                 }
             }
@@ -1625,33 +1668,32 @@ namespace Timberbot
             };
         }
 
-        // unlock via science. three steps for full UI update:
-        // 1. Unlock() - data layer
-        // 2. Locker = null via reflection - removes click-blocking lock
-        // 3. OnToolUnlocked() - toolbar button appearance
-        // matches by TemplateName string, not reference equality (refs diverge between services)
+        // unlock via ToolUnlockingService.TryToUnlock -- matches the exact UI flow
+        // when a player clicks "Unlock" in the science panel (cost deduction + events + UI refresh)
         public object UnlockBuilding(string buildingName)
         {
             try
             {
-                // find the tool button by template name and unlock via its BuildingSpec
                 foreach (var toolButton in _toolButtonService.ToolButtons)
                 {
                     var blockObjectTool = toolButton.Tool as BlockObjectTool;
                     if (blockObjectTool == null) continue;
-                    var toolBuilding = blockObjectTool.Template.GetSpec<BuildingSpec>();
-                    if (toolBuilding == null) continue;
                     var templateSpec = blockObjectTool.Template.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
                     if (templateSpec != null && templateSpec.TemplateName == buildingName)
                     {
-                        _buildingUnlockingService.Unlock(toolBuilding);
-                        _unlockedPlantableGroupsRegistry.AddUnlockedPlantableGroups(toolBuilding);
-                        // clear the tool lock via reflection if the property exists
-                        var lockerProp = blockObjectTool.GetType().GetProperty("Locker",
-                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                        if (lockerProp != null && lockerProp.CanWrite)
-                            lockerProp.SetValue(blockObjectTool, null);
-                        toolButton.OnToolUnlocked(new ToolUnlockedEvent(toolButton.Tool));
+                        var buildingSpec = blockObjectTool.Template.GetSpec<BuildingSpec>();
+                        if (buildingSpec != null && _buildingUnlockingService.Unlocked(buildingSpec))
+                            return new { building = buildingName, unlocked = true,
+                                         remaining = _scienceService.SciencePoints,
+                                         note = "already unlocked" };
+                        var cost = buildingSpec?.ScienceCost ?? 0;
+                        if (cost > _scienceService.SciencePoints)
+                            return new { error = "not enough science",
+                                         building = buildingName,
+                                         scienceCost = cost,
+                                         currentPoints = _scienceService.SciencePoints };
+                        _scienceService.SubtractPoints(cost);
+                        _toolUnlockingService.UnlockInternal(blockObjectTool, () => {});
                         return new { building = buildingName, unlocked = true,
                                      remaining = _scienceService.SciencePoints };
                     }
@@ -1881,10 +1923,607 @@ namespace Timberbot
             return new { id = buildingId, name, demolished = true };
         }
 
+        // route a straight-line path from (x1,y1) to (x2,y2), auto-placing stairs at z-level changes
+        public object RoutePath(int x1, int y1, int x2, int y2)
+        {
+            if (x1 != x2 && y1 != y2)
+                return new { error = "path must be a straight line (x1==x2 or y1==y2)" };
+
+            int dx = x2 > x1 ? 1 : x2 < x1 ? -1 : 0;
+            int dy = y2 > y1 ? 1 : y2 < y1 ? -1 : 0;
+            // stairs orientation: direction of travel when going uphill
+            // south=0, west=1, north=2, east=3
+            int stairsOrient = dx > 0 ? 3 : dx < 0 ? 1 : dy > 0 ? 2 : 0;
+
+            int placed = 0, skipped = 0, stairs = 0;
+            var errors = new List<string>();
+            int cx = x1, cy = y1;
+            int prevZ = GetTerrainHeight(cx, cy);
+
+            while (true)
+            {
+                int tz = GetTerrainHeight(cx, cy);
+                if (tz <= 0)
+                {
+                    errors.Add($"no terrain at ({cx},{cy})");
+                    if (cx == x2 && cy == y2) break;
+                    cx += dx; cy += dy;
+                    continue;
+                }
+
+                int zDiff = tz - prevZ;
+                if (zDiff > 1 || zDiff < -1)
+                {
+                    errors.Add($"z jump too large at ({cx},{cy}): {prevZ} -> {tz}");
+                    if (cx == x2 && cy == y2) break;
+                    prevZ = tz;
+                    cx += dx; cy += dy;
+                    continue;
+                }
+
+                if (zDiff == 1)
+                {
+                    // going up: place stairs on the LOWER tile (previous position)
+                    int sx = cx - dx, sy = cy - dy;
+                    var stairResult = PlaceBuilding("Stairs.IronTeeth", sx, sy, prevZ, stairsOrient);
+                    if (stairResult.GetType().GetProperty("id") != null)
+                        stairs++;
+                    else
+                    {
+                        var err = stairResult.GetType().GetProperty("error")?.GetValue(stairResult);
+                        if (err != null && !err.ToString().Contains("occupied"))
+                            errors.Add($"stairs at ({sx},{sy}): {err}");
+                        else
+                            skipped++;
+                    }
+                }
+                else if (zDiff == -1)
+                {
+                    // going down: place stairs on the HIGHER tile (current position)
+                    int downOrient = (stairsOrient + 2) % 4; // reverse direction
+                    var stairResult = PlaceBuilding("Stairs.IronTeeth", cx, cy, tz, downOrient);
+                    if (stairResult.GetType().GetProperty("id") != null)
+                        stairs++;
+                    else
+                    {
+                        var err = stairResult.GetType().GetProperty("error")?.GetValue(stairResult);
+                        if (err != null && !err.ToString().Contains("occupied"))
+                            errors.Add($"stairs at ({cx},{cy}): {err}");
+                        else
+                            skipped++;
+                    }
+                    prevZ = tz;
+                    if (cx == x2 && cy == y2) break;
+                    cx += dx; cy += dy;
+                    continue;
+                }
+
+                // place path at current tile
+                var result = PlaceBuilding("Path", cx, cy, tz, 0);
+                if (result.GetType().GetProperty("id") != null)
+                    placed++;
+                else
+                {
+                    var err = result.GetType().GetProperty("error")?.GetValue(result);
+                    if (err != null && !err.ToString().Contains("occupied"))
+                        errors.Add($"path at ({cx},{cy}): {err}");
+                    else
+                        skipped++;
+                }
+
+                prevZ = tz;
+                if (cx == x2 && cy == y2) break;
+                cx += dx; cy += dy;
+            }
+
+            var ret = new { placed, stairs, skipped,
+                            errors = errors.Count > 0 ? errors.ToArray() : null };
+            return ret;
+        }
+
+        // general purpose debug endpoint -- navigate, inspect, and call methods on any game object
+        // chain through objects with dot-separated paths: "type._field1._field2.MethodName"
+        // all params passed as args dict from POST body
+        private static object _debugLastResult;
+
+        public object DebugInspect(string target, Dictionary<string, string> args = null)
+        {
+            var info = new Dictionary<string, object>();
+            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public
+                      | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static;
+            args = args ?? new Dictionary<string, string>();
+
+            string Arg(string key, string def = "") => args.ContainsKey(key) ? args[key] : def;
+
+            // parse a string arg into any supported type
+            object ParseArg(string argStr, System.Type pType)
+            {
+                if (argStr == "$") return _debugLastResult;
+                if (pType == typeof(string)) return argStr;
+                if (pType == typeof(int)) return int.Parse(argStr);
+                if (pType == typeof(float)) return float.Parse(argStr);
+                if (pType == typeof(double)) return double.Parse(argStr);
+                if (pType == typeof(bool)) return bool.Parse(argStr);
+                if (pType == typeof(long)) return long.Parse(argStr);
+                if (pType == typeof(Vector3Int))
+                {
+                    var c = argStr.Split(',');
+                    return new Vector3Int(int.Parse(c[0]), int.Parse(c[1]), int.Parse(c[2]));
+                }
+                if (pType == typeof(Vector3))
+                {
+                    var c = argStr.Split(',');
+                    return new Vector3(float.Parse(c[0]), float.Parse(c[1]), float.Parse(c[2]));
+                }
+                if (pType == typeof(Vector2Int))
+                {
+                    var c = argStr.Split(',');
+                    return new Vector2Int(int.Parse(c[0]), int.Parse(c[1]));
+                }
+                // try Convert.ChangeType as fallback
+                try { return System.Convert.ChangeType(argStr, pType); } catch { }
+                return null;
+            }
+
+            // resolve a dot-path from this service to a nested object
+            // supports: fields, properties, parameterless methods, list indexing [N], GetComponent<T>
+            // $ = last debug result (for chaining calls)
+            // e.g. "_districtCenterRegistry.FinishedDistrictCenters.[0].AllComponents"
+            // e.g. "$.HasNode" (call method on last result)
+            object Resolve(string path)
+            {
+                var parts = path.Split('.');
+                object current = parts[0] == "$" ? _debugLastResult : (object)this;
+                if (parts[0] == "$") parts = parts.Skip(1).ToArray();
+                foreach (var part in parts)
+                {
+                    if (current == null) return null;
+
+                    // list/array indexing: [N]
+                    if (part.StartsWith("[") && part.EndsWith("]"))
+                    {
+                        int idx = int.Parse(part.Substring(1, part.Length - 2));
+                        if (current is System.Collections.IList list)
+                        {
+                            current = idx < list.Count ? list[idx] : null;
+                        }
+                        else if (current is System.Collections.IEnumerable enumerable)
+                        {
+                            int i = 0;
+                            current = null;
+                            foreach (var item in enumerable)
+                            {
+                                if (i == idx) { current = item; break; }
+                                i++;
+                            }
+                        }
+                        else return null;
+                        continue;
+                    }
+
+                    // GetComponent<TypeName> syntax: ~TypeName
+                    if (part.StartsWith("~"))
+                    {
+                        var typeName = part.Substring(1);
+                        var getCompMethod = current.GetType().GetMethod("GetComponent",
+                            System.Type.EmptyTypes);
+                        // try finding the right generic overload by iterating AllComponents
+                        var allCompsProp = current.GetType().GetProperty("AllComponents", flags);
+                        if (allCompsProp != null)
+                        {
+                            var allComps = allCompsProp.GetValue(current) as System.Collections.IEnumerable;
+                            if (allComps != null)
+                            {
+                                current = null;
+                                foreach (var comp in allComps)
+                                {
+                                    if (comp.GetType().Name == typeName || comp.GetType().FullName.Contains(typeName))
+                                    { current = comp; break; }
+                                }
+                            }
+                        }
+                        continue;
+                    }
+
+                    var t = current.GetType();
+                    var field = t.GetField(part, flags);
+                    if (field != null) { current = field.GetValue(current); continue; }
+                    var prop = t.GetProperty(part, flags);
+                    if (prop != null) { current = prop.GetValue(current); continue; }
+                    // try as parameterless method
+                    var method = t.GetMethod(part, flags, null, System.Type.EmptyTypes, null);
+                    if (method != null) { current = method.Invoke(current, null); continue; }
+                    return null;
+                }
+                return current;
+            }
+
+            // dump an object's fields and properties
+            void DumpObject(object obj, Dictionary<string, object> into, int maxItems = 5)
+            {
+                if (obj == null) { into["value"] = "null"; return; }
+                into["type"] = obj.GetType().FullName;
+                if (obj is string s) { into["value"] = s; return; }
+                if (obj is System.Collections.IEnumerable enumerable)
+                {
+                    int count = 0;
+                    var samples = new List<string>();
+                    foreach (var item in enumerable)
+                    {
+                        count++;
+                        if (samples.Count < maxItems) samples.Add(item?.ToString() ?? "null");
+                    }
+                    into["count"] = count;
+                    into["samples"] = samples;
+                    return;
+                }
+                into["value"] = obj.ToString();
+            }
+
+            try
+            {
+                switch (target)
+                {
+                    case "help":
+                        info["targets"] = new[]
+                        {
+                            "help -- this message",
+                            "get -- navigate object chain. args: path (dot-separated from TimberbotService)",
+                            "fields -- list members. args: path, filter",
+                            "call -- call method. args: path (to object), method, arg0..argN (string args, Vector3Int as x,y,z)",
+                        };
+                        info["roots"] = new[]
+                        {
+                            "_buildingService", "_entityRegistry", "_districtCenterRegistry",
+                            "_navMeshService", "_soilMoistureService", "_toolButtonService",
+                            "_blockObjectPlacerService", "_scienceService", "_buildingUnlockingService",
+                            "_districtPathNavRegistrar", "_toolUnlockingService"
+                        };
+                        info["examples"] = new[]
+                        {
+                            "debug target:fields path:_navMeshService filter:Road",
+                            "debug target:get path:_scienceService.SciencePoints",
+                            "debug target:call path:_navMeshService method:AreConnectedRoadInstant arg0:120,142,2 arg1:130,142,2",
+                        };
+                        break;
+
+                    case "get":
+                    {
+                        var path = Arg("path", "");
+                        if (string.IsNullOrEmpty(path)) { info["error"] = "pass path:_fieldName.nested.field"; break; }
+                        var obj = Resolve(path);
+                        _debugLastResult = obj;
+                        info["path"] = path;
+                        DumpObject(obj, info);
+                        break;
+                    }
+
+                    case "fields":
+                    {
+                        var path = Arg("path", "");
+                        object obj = string.IsNullOrEmpty(path) ? (object)this : Resolve(path);
+                        if (obj == null) { info["error"] = $"could not resolve '{path}'"; break; }
+                        info["type"] = obj.GetType().FullName;
+                        var filter = Arg("filter", "");
+                        var members = new List<string>();
+                        foreach (var f in obj.GetType().GetFields(flags))
+                            if (string.IsNullOrEmpty(filter) || f.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                                members.Add($"F {f.Name}:{f.FieldType.Name}");
+                        foreach (var p in obj.GetType().GetProperties(flags))
+                            if (string.IsNullOrEmpty(filter) || p.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                                members.Add($"P {p.Name}:{p.PropertyType.Name}");
+                        foreach (var m in obj.GetType().GetMethods(flags))
+                        {
+                            if (m.DeclaringType == typeof(object) || m.IsSpecialName) continue;
+                            if (!string.IsNullOrEmpty(filter) && m.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                            var parms = m.GetParameters();
+                            members.Add($"M {m.Name}({string.Join(",", System.Linq.Enumerable.Select(parms, p => p.ParameterType.Name))})->{m.ReturnType.Name}");
+                        }
+                        info["members"] = members;
+                        break;
+                    }
+
+                    case "call":
+                    {
+                        var path = Arg("path", "");
+                        var methodName = Arg("method", "");
+                        if (string.IsNullOrEmpty(methodName)) { info["error"] = "pass method:MethodName"; break; }
+                        object obj = string.IsNullOrEmpty(path) ? (object)this : Resolve(path);
+                        if (obj == null) { info["error"] = $"could not resolve '{path}'"; break; }
+                        // find all overloads
+                        var methods = obj.GetType().GetMethods(flags);
+                        System.Reflection.MethodInfo bestMethod = null;
+                        foreach (var m in methods)
+                            if (m.Name == methodName) { bestMethod = m; break; }
+                        if (bestMethod == null) { info["error"] = $"method {methodName} not found on {obj.GetType().Name}"; break; }
+                        // build args from arg0, arg1, etc
+                        var methodParams = bestMethod.GetParameters();
+                        var callArgs = new object[methodParams.Length];
+                        for (int i = 0; i < methodParams.Length; i++)
+                        {
+                            var argStr = Arg($"arg{i}", "");
+                            callArgs[i] = ParseArg(argStr, methodParams[i].ParameterType);
+                        }
+                        var result = bestMethod.Invoke(obj, callArgs);
+                        _debugLastResult = result;
+                        DumpObject(result, info);
+                        info["stored"] = "result stored in $ for chaining";
+                        break;
+                    }
+
+                    default:
+                        info["error"] = $"unknown target '{target}'. use: help, get, fields, call";
+                        break;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                info["error"] = ex.ToString();
+            }
+            return info;
+        }
+
         private static readonly HashSet<string> WaterBuildingNames = new HashSet<string>
         {
             "Pump", "Floodgate", "Dam", "Levee", "Sluice", "WaterWheel"
         };
+
+        // check if a building footprint is valid at (x, y, z, orientation)
+        // returns null if valid, error string if invalid
+        private string ValidateFootprint(BlockObjectSpec blockObjectSpec, string prefabName,
+            int x, int y, int z, int orientation, HashSet<long> occupied, bool isWaterBuilding)
+        {
+            var size = blockObjectSpec.Size;
+            int rx = size.x, ry = size.y;
+            if (orientation == 1 || orientation == 3) { rx = size.y; ry = size.x; }
+            int gx = x, gy = y;
+            switch (orientation)
+            {
+                case 1: gy = y + ry - 1; break;
+                case 2: gx = x + rx - 1; gy = y + ry - 1; break;
+                case 3: gx = x + rx - 1; break;
+            }
+
+            var footprint = ComputeFootprint(blockObjectSpec, gx, gy, z, orientation);
+            var mapSize = _terrainService.Size;
+            foreach (var ft in footprint)
+            {
+                var tile = ft.coords;
+                if (tile.x < 0 || tile.x >= mapSize.x || tile.y < 0 || tile.y >= mapSize.y)
+                    return "out of bounds";
+                if (ft.isGroundFloor)
+                {
+                    int terrainHeight = GetTerrainHeight(tile.x, tile.y);
+                    if (!isWaterBuilding)
+                    {
+                        float waterHeight = 0f;
+                        try { waterHeight = _waterMap.CeiledWaterHeight(new Vector3Int(tile.x, tile.y, terrainHeight)); }
+                        catch { }
+                        if (waterHeight > 0) return "water";
+                    }
+                    if (terrainHeight == 0 && !isWaterBuilding) return "no terrain";
+                    if (terrainHeight < tile.z && !isWaterBuilding) return "terrain too low";
+                    if (terrainHeight > tile.z && !isWaterBuilding) return "terrain too high";
+                }
+                long key = (long)tile.x * 1000000 + (long)tile.y * 1000 + tile.z;
+                if (occupied.Contains(key)) return "occupied";
+            }
+            return null;
+        }
+
+        // find all valid placements for a building in an area, with best orientation toward paths
+        public object FindPlacement(string prefabName, int x1, int y1, int x2, int y2)
+        {
+            var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
+            if (buildingSpec == null)
+                return new { error = "unknown prefab", prefab = prefabName };
+            var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
+            if (blockObjectSpec == null)
+                return new { error = "no block object spec", prefab = prefabName };
+
+            var size = blockObjectSpec.Size;
+            bool isWaterBuilding = false;
+            foreach (var w in WaterBuildingNames)
+                if (prefabName.IndexOf(w, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                { isWaterBuilding = true; break; }
+
+            var occupied = GetOccupiedTiles();
+
+            // get all road nodes reachable from DC using the game's own range service
+            // same method the game uses to draw the green-to-red path line
+            var reachableRoadCoords = new HashSet<Vector3Int>();
+            try
+            {
+                var reflFlags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                var nodeIdSvc = _navMeshService.GetType().GetField("_nodeIdService", reflFlags)
+                    ?.GetValue(_navMeshService) as Timberborn.Navigation.NodeIdService;
+
+                foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+                {
+                    var cachingFF = dc.GetComponent<BuildingCachingFlowField>();
+                    if (cachingFF == null || nodeIdSvc == null) continue;
+                    var accessCoords = (Vector3Int)cachingFF.GetType().GetField("_accessCoordinates", reflFlags).GetValue(cachingFF);
+                    int dcNodeId = nodeIdSvc.GridToId(accessCoords);
+                    Vector3 dcWorldPos = nodeIdSvc.IdToWorld(dcNodeId);
+
+                    var drawer = dc.GetComponent<DistrictPathNavRangeDrawer>();
+                    if (drawer == null) continue;
+                    var navRangeSvc = drawer.GetType().GetField("_navigationRangeService", reflFlags)?.GetValue(drawer);
+                    if (navRangeSvc == null) continue;
+
+                    var nodesInRange = navRangeSvc.GetType().GetMethod("GetRoadNodesInRange")
+                        ?.Invoke(navRangeSvc, new object[] { dcWorldPos }) as System.Collections.IEnumerable;
+                    if (nodesInRange == null) continue;
+
+                    foreach (var wc in nodesInRange)
+                    {
+                        var coordsProp = wc.GetType().GetProperty("Coordinates");
+                        if (coordsProp != null)
+                            reachableRoadCoords.Add((Vector3Int)coordsProp.GetValue(wc));
+                    }
+                    break;
+                }
+            }
+            catch { }
+
+            // collect path and power tile positions for placement scoring
+            var pathTiles = new HashSet<long>();
+            var powerTiles = new HashSet<long>();
+            foreach (var ec in _entityRegistry.Entities)
+            {
+                var bo = ec.GetComponent<BlockObject>();
+                if (bo == null) continue;
+                var name = CleanName(ec.GameObject.name);
+                if (name.Contains("Path") || name.Contains("Stairs"))
+                {
+                    foreach (var block in bo.PositionedBlocks.GetAllBlocks())
+                    {
+                        var c = block.Coordinates;
+                        pathTiles.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
+                    }
+                }
+                if (ec.GetComponent<MechanicalNode>() != null)
+                {
+                    foreach (var block in bo.PositionedBlocks.GetAllBlocks())
+                    {
+                        var c = block.Coordinates;
+                        powerTiles.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
+                    }
+                }
+            }
+
+            var orientNames = new[] { "south", "west", "north", "east" };
+            var results = new List<object>();
+
+            for (int ty = y1; ty <= y2; ty++)
+            {
+                for (int tx = x1; tx <= x2; tx++)
+                {
+                    int tz = GetTerrainHeight(tx, ty);
+                    if (tz <= 0) continue;
+
+                    // find best orientation (most path tiles adjacent to entrance side)
+                    int bestOrient = -1;
+                    int bestPathCount = -1;
+
+                    for (int orient = 0; orient < 4; orient++)
+                    {
+                        var err = ValidateFootprint(blockObjectSpec, prefabName, tx, ty, tz, orient, occupied, isWaterBuilding);
+                        if (err != null) continue;
+
+                        // count path tiles on entrance side
+                        int rx = size.x, ry = size.y;
+                        if (orient == 1 || orient == 3) { rx = size.y; ry = size.x; }
+
+                        int pathCount = 0;
+                        switch (orient)
+                        {
+                            case 0: // south: check y-1 row
+                                for (int px = tx; px < tx + rx; px++)
+                                    if (pathTiles.Contains((long)px * 1000000 + (long)(ty - 1) * 1000 + tz)) pathCount++;
+                                break;
+                            case 1: // west: check x-1 column
+                                for (int py = ty; py < ty + ry; py++)
+                                    if (pathTiles.Contains((long)(tx - 1) * 1000000 + (long)py * 1000 + tz)) pathCount++;
+                                break;
+                            case 2: // north: check y+ry row
+                                for (int px = tx; px < tx + rx; px++)
+                                    if (pathTiles.Contains((long)px * 1000000 + (long)(ty + ry) * 1000 + tz)) pathCount++;
+                                break;
+                            case 3: // east: check x+rx column
+                                for (int py = ty; py < ty + ry; py++)
+                                    if (pathTiles.Contains((long)(tx + rx) * 1000000 + (long)py * 1000 + tz)) pathCount++;
+                                break;
+                        }
+
+                        if (pathCount > bestPathCount)
+                        {
+                            bestPathCount = pathCount;
+                            bestOrient = orient;
+                        }
+                    }
+
+                    if (bestOrient >= 0)
+                    {
+                        // check district road reachability on entrance-side path tiles
+                        bool reachable = false;
+                        if (bestPathCount > 0)
+                        {
+                            int erx = size.x, ery = size.y;
+                            if (bestOrient == 1 || bestOrient == 3) { erx = size.y; ery = size.x; }
+                            var checkCoords = new List<Vector3Int>();
+                            switch (bestOrient)
+                            {
+                                case 0:
+                                    for (int px = tx; px < tx + erx; px++)
+                                        checkCoords.Add(new Vector3Int(px, ty - 1, tz));
+                                    break;
+                                case 1:
+                                    for (int py = ty; py < ty + ery; py++)
+                                        checkCoords.Add(new Vector3Int(tx - 1, py, tz));
+                                    break;
+                                case 2:
+                                    for (int px = tx; px < tx + erx; px++)
+                                        checkCoords.Add(new Vector3Int(px, ty + ery, tz));
+                                    break;
+                                case 3:
+                                    for (int py = ty; py < ty + ery; py++)
+                                        checkCoords.Add(new Vector3Int(tx + erx, py, tz));
+                                    break;
+                            }
+                            foreach (var coord in checkCoords)
+                            {
+                                if (reachableRoadCoords.Contains(coord))
+                                { reachable = true; break; }
+                            }
+                        }
+
+                        // check power adjacency on all 4 sides of footprint
+                        int brx = size.x, bry = size.y;
+                        if (bestOrient == 1 || bestOrient == 3) { brx = size.y; bry = size.x; }
+                        bool nearPower = false;
+                        for (int px = tx - 1; px <= tx + brx && !nearPower; px++)
+                            for (int py = ty - 1; py <= ty + bry && !nearPower; py++)
+                            {
+                                if (px >= tx && px < tx + brx && py >= ty && py < ty + bry) continue;
+                                if (powerTiles.Contains((long)px * 1000000 + (long)py * 1000 + tz))
+                                    nearPower = true;
+                            }
+
+                        results.Add(new { x = tx, y = ty, z = tz,
+                                          orientation = orientNames[bestOrient],
+                                          pathAccess = bestPathCount > 0,
+                                          pathCount = bestPathCount,
+                                          reachable,
+                                          nearPower });
+                    }
+                }
+            }
+
+            // sort: reachable > path access > power > path count
+            results.Sort((a, b) =>
+            {
+                var aType = a.GetType();
+                var bType = b.GetType();
+                bool ra = (bool)aType.GetProperty("reachable").GetValue(a);
+                bool rb = (bool)bType.GetProperty("reachable").GetValue(b);
+                if (ra != rb) return rb ? 1 : -1;
+                bool pa = (bool)aType.GetProperty("pathAccess").GetValue(a);
+                bool pb = (bool)bType.GetProperty("pathAccess").GetValue(b);
+                if (pa != pb) return pb ? 1 : -1;
+                bool pwa = (bool)aType.GetProperty("nearPower").GetValue(a);
+                bool pwb = (bool)bType.GetProperty("nearPower").GetValue(b);
+                if (pwa != pwb) return pwb ? 1 : -1;
+                int ca = (int)aType.GetProperty("pathCount").GetValue(a);
+                int cb = (int)bType.GetProperty("pathCount").GetValue(b);
+                return cb - ca;
+            });
+
+            if (results.Count > 10) results = results.GetRange(0, 10);
+
+            return new { prefab = prefabName, sizeX = size.x, sizeY = size.y,
+                         placements = results };
+        }
 
         // place with full validation before calling Place():
         // 1. exists + unlocked

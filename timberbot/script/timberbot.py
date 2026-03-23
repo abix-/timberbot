@@ -218,6 +218,16 @@ class Timberbot:
     _ORIENTATIONS = {"south": 0, "west": 1, "north": 2, "east": 3,
                      "s": 0, "w": 1, "n": 2, "e": 3}
 
+    def debug(self, target="help", **kwargs):
+        """Debug inspect game internals. Targets: help, fields, inspect, preview, entity. Pass extra key:value args."""
+        body = {"target": target}
+        body.update(kwargs)
+        return self._post("/api/debug", body)
+
+    def find_placement(self, prefab, x1, y1, x2, y2):
+        """Find valid placements for a building in an area. Returns spots sorted by path access."""
+        return self._post("/api/placement/find", {"prefab": prefab, "x1": x1, "y1": y1, "x2": x2, "y2": y2})
+
     def place_building(self, prefab, x, y, z, orientation="south"):
         """Place a building. Orientation: south, west, north, east (or s/w/n/e)."""
         o = str(orientation).lower()
@@ -264,22 +274,9 @@ class Timberbot:
         """Set allowed good on a single-good stockpile."""
         return self._post("/api/stockpile/good", {"id": building_id, "good": good})
 
-    def place_path(self, x1, y1, x2, y2, z):
-        """Place a straight line of paths from (x1,y1) to (x2,y2) at height z. Returns list of results."""
-        results = []
-        if x1 == x2:
-            step = 1 if y2 >= y1 else -1
-            for y in range(y1, y2 + step, step):
-                results.append(self.place_building("Path", x1, y, z))
-        elif y1 == y2:
-            step = 1 if x2 >= x1 else -1
-            for x in range(x1, x2 + step, step):
-                results.append(self.place_building("Path", x, y1, z))
-        else:
-            return {"error": "path must be a straight line (x1==x2 or y1==y2)"}
-        placed = sum(1 for r in results if "id" in r)
-        failed = sum(1 for r in results if "error" in r)
-        return {"placed": placed, "failed": failed, "total": len(results)}
+    def place_path(self, x1, y1, x2, y2, z=0):
+        """Route a straight-line path with auto-stairs at z-level changes. z param ignored (auto-detected)."""
+        return self._post("/api/path/route", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
 
     # -- helpers --
 
@@ -407,7 +404,8 @@ class Timberbot:
                     bg = _zbg(t["terrain"])
                     z_levels.add(t["terrain"])
                     zch = str(t["terrain"] % 10)
-                    row += f"{bg}{DIM}{zch}{R}"
+                    zco = GRN if t.get("moist") else DIM
+                    row += f"{bg}{zco}{zch}{R}"
                 else:
                     row += " "
             lines.append(row)

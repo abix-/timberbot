@@ -298,6 +298,26 @@ namespace Timberbot
                     case "/api/building/demolish":
                         return _service.DemolishBuilding(
                             body?.Value<int>("id") ?? 0);
+                    case "/api/debug":
+                        var debugArgs = new System.Collections.Generic.Dictionary<string, string>();
+                        if (body != null)
+                            foreach (var prop in body.Properties())
+                                debugArgs[prop.Name] = prop.Value?.ToString() ?? "";
+                        return _service.DebugInspect(
+                            body?.Value<string>("target") ?? "help", debugArgs);
+                    case "/api/path/route":
+                        return _service.RoutePath(
+                            body?.Value<int>("x1") ?? 0,
+                            body?.Value<int>("y1") ?? 0,
+                            body?.Value<int>("x2") ?? 0,
+                            body?.Value<int>("y2") ?? 0);
+                    case "/api/placement/find":
+                        return _service.FindPlacement(
+                            body?.Value<string>("prefab") ?? "",
+                            body?.Value<int>("x1") ?? 0,
+                            body?.Value<int>("y1") ?? 0,
+                            body?.Value<int>("x2") ?? 0,
+                            body?.Value<int>("y2") ?? 0);
                     case "/api/building/place":
                         return _service.PlaceBuilding(
                             body?.Value<string>("prefab") ?? "",
