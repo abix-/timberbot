@@ -194,6 +194,10 @@ namespace Timberbot
         private Dictionary<int, EntityComponent> _entityCache;
         private int _entityCacheFrame = -1;
 
+        // Per-frame occupied tiles cache: built once, reused by PlaceBuilding + FindPlacement
+        private HashSet<long> _occupiedCache;
+        private int _occupiedCacheFrame = -1;
+
         // strip Unity/faction suffixes so API returns clean names
         private static string CleanName(string name) =>
             name.Replace("(Clone)", "").Replace(".IronTeeth", "").Replace(".Folktails", "").Trim();
@@ -1905,17 +1909,17 @@ namespace Timberbot
 
         private HashSet<long> GetOccupiedTiles()
         {
+            int frame = Time.frameCount;
+            if (_occupiedCache != null && _occupiedCacheFrame == frame)
+                return _occupiedCache;
+
             var occupied = new HashSet<long>();
             foreach (var ec in _entityRegistry.Entities)
             {
                 var bo = ec.GetComponent<BlockObject>();
                 if (bo == null) continue;
-                // skip temporary debris from demolished buildings
-                var name = CleanName(ec.GameObject.name);
-                if (name.Contains("RecoveredGoodStack") || name.Contains("GoodStack")) continue;
-                // skip dead trees/plants -- game allows building on them
-                var living = ec.GetComponent<LivingNaturalResource>();
-                if (living != null && living.IsDead) continue;
+                // skip entities the game marks as buildable-over (empty tree stumps, etc)
+                if (bo.Overridable) continue;
                 try
                 {
                     foreach (var block in bo.PositionedBlocks.GetAllBlocks())
@@ -1930,6 +1934,8 @@ namespace Timberbot
                     occupied.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
                 }
             }
+            _occupiedCache = occupied;
+            _occupiedCacheFrame = frame;
             return occupied;
         }
 

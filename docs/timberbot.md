@@ -11,7 +11,9 @@ Play the game using `python timberbot/script/timberbot.py` commands only. NEVER 
 
 ## When you don't know something
 
-If you're unsure about game mechanics (building ranges, need satisfaction, crop yields, power requirements, breeding, wellbeing categories, etc.), search the Timberborn wiki FIRST before guessing:
+**API reference:** Read `docs/api-reference.md` for all available endpoints, request/response formats, and parameters. Don't guess at endpoint syntax -- look it up.
+
+**Game mechanics:** Search the Timberborn wiki FIRST before guessing:
 
 - Use `WebSearch` for "timberborn wiki <topic>" (e.g. "timberborn wiki farmhouse range", "timberborn wiki wellbeing needs")
 - Use `WebFetch` on wiki pages to read the details
