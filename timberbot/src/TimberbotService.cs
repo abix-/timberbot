@@ -101,7 +101,7 @@ namespace Timberbot
         private readonly ISoilMoistureService _soilMoistureService;       // soil moisture/irrigation
         private readonly FactionNeedService _factionNeedService;           // need specs per faction (beaver/bot)
         private readonly NeedGroupSpecService _needGroupSpecService;       // need group categories (Social, Hygiene, etc)
-        private readonly TemplateInstantiator _templateInstantiator;         // instantiate preview entities for validation
+        private readonly PreviewFactory _previewFactory;                       // create preview entities for placement validation
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -137,7 +137,7 @@ namespace Timberbot
             StackableBlockService stackableBlockService,
             FactionNeedService factionNeedService,
             NeedGroupSpecService needGroupSpecService,
-            TemplateInstantiator templateInstantiator)
+            PreviewFactory previewFactory)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -171,7 +171,7 @@ namespace Timberbot
             _stackableBlockService = stackableBlockService;
             _factionNeedService = factionNeedService;
             _needGroupSpecService = needGroupSpecService;
-            _templateInstantiator = templateInstantiator;
+            _previewFactory = previewFactory;
         }
 
         public void Load()
@@ -2429,9 +2429,9 @@ namespace Timberbot
             return info;
         }
 
-        // validate placement using the game's own validation system (same as player UI)
-        // creates a temporary preview entity, runs all 9 game validators, then deletes it
-        private bool ValidatePlacement(BlockObjectSpec blockObjectSpec, int x, int y, int z, int orientation)
+        // validate placement using the game's own preview system (same as player UI)
+        // PreviewFactory.Create() handles water buildings, terrain, occupancy -- all 9 validators
+        private bool ValidatePlacement(BuildingSpec buildingSpec, BlockObjectSpec blockObjectSpec, int x, int y, int z, int orientation)
         {
             var size = blockObjectSpec.Size;
             int rx = size.x, ry = size.y;
@@ -2444,25 +2444,26 @@ namespace Timberbot
                 case 3: gx = x + rx - 1; break;
             }
 
+            var placeableSpec = buildingSpec.GetSpec<PlaceableBlockObjectSpec>();
+            if (placeableSpec == null) return false;
+            Preview preview = null;
             try
             {
                 var placement = new Placement(new Vector3Int(gx, gy, z),
                     (Timberborn.Coordinates.Orientation)orientation, FlipMode.Unflipped);
-                // same pattern as BeaverBuddies: instantiate, mark as preview, reposition, check IsValid
-                var tempParent = new GameObject("_timberbotPreview");
-                var go = _templateInstantiator.Instantiate(blockObjectSpec.Blueprint, tempParent.transform);
-                go.SetActive(false);
-                var bo = go.GetComponent<BlockObject>();
-                bo.MarkAsPreviewAndInitialize();
-                bo.Reposition(placement);
-                bool valid = bo.IsValid();
-                UnityEngine.Object.Destroy(tempParent);
-                return valid;
+                preview = _previewFactory.Create(placeableSpec);
+                preview.Reposition(placement);
+                return preview.BlockObject.IsValid();
             }
             catch (System.Exception ex)
             {
                 Debug.LogError($"[Timberbot] ValidatePlacement error at ({x},{y},{z}): {ex.Message}\n{ex.StackTrace}");
                 return false;
+            }
+            finally
+            {
+                if (preview != null)
+                    UnityEngine.Object.Destroy(preview.GameObject);
             }
         }
 
@@ -2545,6 +2546,13 @@ namespace Timberbot
             var orientNames = new[] { "south", "west", "north", "east" };
             var results = new List<object>();
 
+            // PERF: create ONE preview, reuse with Reposition for each candidate
+            var placeableSpec = buildingSpec.GetSpec<PlaceableBlockObjectSpec>();
+            Preview cachedPreview = null;
+            try { if (placeableSpec != null) cachedPreview = _previewFactory.Create(placeableSpec); } catch { }
+            try
+            {
+
             for (int ty = y1; ty <= y2; ty++)
             {
                 for (int tx = x1; tx <= x2; tx++)
@@ -2558,7 +2566,21 @@ namespace Timberbot
 
                     for (int orient = 0; orient < 4; orient++)
                     {
-                        if (!ValidatePlacement(blockObjectSpec, tx, ty, tz, orient)) continue;
+                        // validate using cached preview
+                        if (cachedPreview == null) continue;
+                        int vrx = size.x, vry = size.y;
+                        if (orient == 1 || orient == 3) { vrx = size.y; vry = size.x; }
+                        int vgx = tx, vgy = ty;
+                        switch (orient)
+                        {
+                            case 1: vgy = ty + vry - 1; break;
+                            case 2: vgx = tx + vrx - 1; vgy = ty + vry - 1; break;
+                            case 3: vgx = tx + vrx - 1; break;
+                        }
+                        var placement = new Placement(new Vector3Int(vgx, vgy, tz),
+                            (Timberborn.Coordinates.Orientation)orient, FlipMode.Unflipped);
+                        cachedPreview.Reposition(placement);
+                        if (!cachedPreview.BlockObject.IsValid()) continue;
 
                         // count path tiles on entrance side
                         int rx = size.x, ry = size.y;
@@ -2668,6 +2690,13 @@ namespace Timberbot
                 return cb - ca;
             });
 
+            } // end try
+            finally
+            {
+                if (cachedPreview != null)
+                    UnityEngine.Object.Destroy(cachedPreview.GameObject);
+            }
+
             if (results.Count > 10) results = results.GetRange(0, 10);
 
             return new { prefab = prefabName, sizeX = size.x, sizeY = size.y,
@@ -2710,7 +2739,7 @@ namespace Timberbot
             }
 
             // validate using the game's own preview system (same as player UI)
-            if (!ValidatePlacement(blockObjectSpec, x, y, z, orientation))
+            if (!ValidatePlacement(buildingSpec, blockObjectSpec, x, y, z, orientation))
                 return new { error = $"Cannot place BlockObject {prefabName} at ({gx}, {gy}, {z}).",
                              prefab = prefabName, x, y, z, orientation };
 

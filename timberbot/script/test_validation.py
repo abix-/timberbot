@@ -146,18 +146,26 @@ class TestRunner:
     def test_placement_and_demolish(self):
         print("\n=== placement + demolish ===\n")
 
-        # error cases
+        # error cases -- game-native validation returns generic "Cannot place" for most
         tests = [
-            ("occupied tile", lambda: self.bot.place_building("Path", 122, 133, 2), "occupied"),
-            ("on water", lambda: self.bot.place_building("Path", 124, 130, 1), "water"),
-            ("off map", lambda: self.bot.place_building("Path", 999, 999, 2), "no terrain"),
+            ("occupied tile", lambda: self.bot.place_building("Path", 122, 133, 2)),
+            ("on water", lambda: self.bot.place_building("Path", 124, 130, 1)),
+            ("off map", lambda: self.bot.place_building("Path", 999, 999, 2)),
+            ("z too high", lambda: self.bot.place_building("Path", 70, 125, 4)),
+            ("z too low", lambda: self.bot.place_building("Path", 70, 125, 1)),
+        ]
+        for name, fn in tests:
+            result = fn()
+            self.check(name, self.err(result),
+                       json.dumps(result)[:100])
+
+        # these still return specific error messages (checked before preview validation)
+        specific_tests = [
             ("unknown prefab", lambda: self.bot.place_building("Fake", 120, 130, 2), "not found"),
             ("invalid orientation", lambda: self.bot.place_building("Path", 120, 127, 2, orientation="bogus"), "invalid orientation"),
-            ("z too high", lambda: self.bot.place_building("Path", 70, 125, 4), "terrain too"),
-            ("z too low", lambda: self.bot.place_building("Path", 70, 125, 1), "terrain too"),
             ("locked building", lambda: self.bot.place_building("TributeToIngenuity.IronTeeth", 70, 125, 2), "not unlocked"),
         ]
-        for name, fn, expect_err in tests:
+        for name, fn, expect_err in specific_tests:
             result = fn()
             self.check(name, self.err(result) and expect_err in str(result["error"]),
                        json.dumps(result)[:100])
@@ -198,7 +206,7 @@ class TestRunner:
                 z = min(heights)
                 result = self.bot.place_building("Barrack.IronTeeth", tx, 135, z)
                 self.check("multi-tile z mismatch rejected",
-                           self.err(result) and "terrain" in str(result.get("error", "")),
+                           self.err(result),
                            json.dumps(result)[:100])
                 found_mismatch = True
                 break
