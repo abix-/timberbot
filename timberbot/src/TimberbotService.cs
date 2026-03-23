@@ -54,21 +54,13 @@ using UnityEngine;
 
 namespace Timberbot
 {
-    /// <summary>
-    /// Core service for the Timberbot HTTP API. Injected via Bindito DI as a game singleton.
-    ///
-    /// All read/write methods return plain objects serialized to JSON by TimberbotHttpServer.
-    /// Endpoints that return lists support a "format" param:
-    ///   - "toon" (default): flat dicts optimized for TOON tabular output
-    ///   - "json": full nested data for programmatic access
-    ///
-    /// Entity access pattern: Timberborn has no typed entity queries. All data comes from
-    /// iterating _entityRegistry.Entities and calling GetComponent&lt;T&gt;() per entity.
-    /// FindEntity() uses a per-frame dictionary cache to make ID lookups O(1).
-    ///
-    /// Names: all entity names pass through CleanName() to strip Unity suffixes
-    /// like "(Clone)", ".IronTeeth", ".Folktails" before returning to clients.
-    /// </summary>
+    // HTTP API service. Injected via Bindito DI, runs as game singleton.
+    // Returns plain objects serialized to JSON by TimberbotHttpServer.
+    //
+    // format param: "toon" (default) = flat for tabular display, "json" = full nested data
+    // entity access: no typed queries in Timberborn, so we iterate _entityRegistry.Entities + GetComponent<T>()
+    // names: CleanName() strips "(Clone)", ".IronTeeth", ".Folktails" from all output
+    // entity lookup: FindEntity() uses per-frame dictionary cache for O(1) writes
     public class TimberbotService : ILoadableSingleton, IUpdatableSingleton
     {
         private readonly IGoodService _goodService;
@@ -168,7 +160,7 @@ namespace Timberbot
         private Dictionary<int, EntityComponent> _entityCache;
         private int _entityCacheFrame = -1;
 
-        /// <summary>Strip Unity/faction suffixes so API returns human-readable names.</summary>
+        // strip Unity/faction suffixes so API returns clean names
         private static string CleanName(string name) =>
             name.Replace("(Clone)", "").Replace(".IronTeeth", "").Replace(".Folktails", "").Trim();
 
@@ -193,10 +185,8 @@ namespace Timberbot
         //   json: full nested data for programmatic access (--json flag)
         // ================================================================
 
-        /// <summary>
-        /// Single-pass dashboard: iterates all entities once to collect trees, housing,
-        /// employment, wellbeing, and alerts. The bot loop only needs this one call.
-        /// </summary>
+        // single-pass dashboard: trees + housing + employment + wellbeing + alerts in one entity loop
+        // the bot only needs this one call per turn
         public object CollectSummary(string format = "toon")
         {
             // single pass over all entities
@@ -1619,13 +1609,11 @@ namespace Timberbot
             };
         }
 
-        /// <summary>
-        /// Unlock a building via science. Three steps required for full UI update:
-        /// 1. BuildingUnlockingService.Unlock() - marks unlocked in data layer
-        /// 2. Clear the tool's Locker via reflection - removes the click-blocking lock
-        /// 3. OnToolUnlocked() - updates toolbar button appearance
-        /// Matches by TemplateName string (not reference equality) to avoid stale object refs.
-        /// </summary>
+        // unlock via science. three steps for full UI update:
+        // 1. Unlock() - data layer
+        // 2. Locker = null via reflection - removes click-blocking lock
+        // 3. OnToolUnlocked() - toolbar button appearance
+        // matches by TemplateName string, not reference equality (refs diverge between services)
         public object UnlockBuilding(string buildingName)
         {
             try
@@ -1880,14 +1868,11 @@ namespace Timberbot
             "Pump", "Floodgate", "Dam", "Levee", "Sluice", "WaterWheel"
         };
 
-        /// <summary>
-        /// Place a building with full validation:
-        /// 1. Check building exists and is unlocked (science)
-        /// 2. Correct origin for orientation (user coords = bottom-left regardless of rotation)
-        /// 3. Validate every footprint tile: terrain height must match z, no water (unless water building),
-        ///    no occupancy (dead trees are skipped), no underground clipping
-        /// 4. Call BlockObjectPlacerService.Place() only after all checks pass
-        /// </summary>
+        // place with full validation before calling Place():
+        // 1. exists + unlocked
+        // 2. origin correction (user coords = bottom-left regardless of orientation)
+        // 3. per-tile: terrain height == z, no water (unless water building), no occupancy (dead trees ok), no underground clipping
+        // 4. Place() only after all checks pass
         public object PlaceBuilding(string prefabName, int x, int y, int z, int orientation)
         {
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);

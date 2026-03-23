@@ -10,16 +10,9 @@ using UnityEngine;
 
 namespace Timberbot
 {
-    /// <summary>
-    /// HTTP server on port 8085. Runs a background listener thread.
-    ///
-    /// Threading model:
-    /// - GET /api/ping and /api/speed: answered on listener thread (safe, simple reads)
-    /// - All other requests: queued via ConcurrentQueue, drained on Unity main thread (max 10/frame)
-    /// - POST body parsed on listener thread, format param extracted from query string or body
-    ///
-    /// Format param: ?format=toon (default) returns flat TOON-ready data. ?format=json returns full nested data.
-    /// </summary>
+    // HTTP server on port 8085. Background listener thread queues requests,
+    // Unity main thread drains them (max 10/frame). ping + speed answered on listener thread.
+    // format param: ?format=toon (default) = flat, ?format=json = full nested
     class TimberbotHttpServer
     {
         private readonly TimberbotService _service;
