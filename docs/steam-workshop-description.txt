@@ -71,8 +71,8 @@ cp docs/timberbot.md ~/.claude/skills/timberbot/SKILL.md
 The AI will check beaver wellbeing, manage food and water, place buildings, mark trees, and keep your colony alive.
 
 [h1]Docs[/h1]
-[url=https://abix-.github.io/TimberbornMods/getting-started/]Getting Started[/url]. Install, first commands, AI setup
-[url=https://abix-.github.io/TimberbornMods/api-reference/]API Reference[/url]. All endpoints with request/response examples
-[url=https://abix-.github.io/TimberbornMods/timberbot/]AI Prompt[/url]. Teach Claude or ChatGPT to run your colony
-[url=https://abix-.github.io/TimberbornMods/features/]Features[/url]. Full game system compatibility matrix
+[url=https://abix-.github.io/TimberbornMods/getting-started/]Getting Started[/url] Install, first commands, AI setup
+[url=https://abix-.github.io/TimberbornMods/api-reference/]API Reference[/url] All endpoints with request/response examples
+[url=https://abix-.github.io/TimberbornMods/timberbot/]AI Prompt[/url] Teach Claude or ChatGPT to run your colony
+[url=https://abix-.github.io/TimberbornMods/features/]Features[/url] Full game system compatibility matrix
 [url=https://github.com/abix-/TimberbornMods]Source Code[/url]
