@@ -1,322 +1,299 @@
 /* ============================================================
-   TIMBERBORN FOREST THEME
-   Deep forest canopy, mossy bark, river water, campfire glow
-   You're in a beaver lodge at dusk, firelight on timber walls
+   TIMBERBORN THEME
+   Dark wood panels, gold/amber highlights, cream text
+   Inspired by the in-game UI: timber planks + brass fixtures
    ============================================================ */
 
+/* -- palette overrides (dark mode = primary experience) -- */
+
 [data-md-color-scheme="slate"] {
-  /* backgrounds: deep forest floor */
-  --md-default-bg-color: #111a12;
-  --md-default-bg-color--light: #162016;
-  --md-default-bg-color--lighter: #1c261c;
-  --md-default-bg-color--lightest: #243024;
+  /* backgrounds: dark wood tones */
+  --md-default-bg-color: #1e1610;
+  --md-default-bg-color--light: #261c14;
+  --md-default-bg-color--lighter: #2e221a;
+  --md-default-bg-color--lightest: #3a2c20;
 
-  /* text: birch bark / moonlight through canopy */
-  --md-default-fg-color: #d4dcc4;
-  --md-default-fg-color--light: #b0c0a0;
-  --md-default-fg-color--lighter: #889878;
-  --md-default-fg-color--lightest: #607050;
+  /* text: warm cream */
+  --md-default-fg-color: #e8dcc8;
+  --md-default-fg-color--light: #c8b898;
+  --md-default-fg-color--lighter: #a89878;
+  --md-default-fg-color--lightest: #887858;
 
-  /* primary: campfire amber on dark wood */
-  --md-primary-fg-color: #c87828;
-  --md-primary-fg-color--light: #d89038;
-  --md-primary-fg-color--dark: #a06018;
-  --md-primary-bg-color: #111a12;
-  --md-primary-bg-color--light: #162016;
+  /* primary: rich gold */
+  --md-primary-fg-color: #c88830;
+  --md-primary-fg-color--light: #d4a040;
+  --md-primary-fg-color--dark: #a06820;
+  --md-primary-bg-color: #1e1610;
+  --md-primary-bg-color--light: #261c14;
 
-  /* accent: firefly gold */
-  --md-accent-fg-color: #e8a828;
-  --md-accent-fg-color--transparent: rgba(232, 168, 40, 0.1);
-  --md-accent-bg-color: #111a12;
+  /* accent: bright amber */
+  --md-accent-fg-color: #f0a820;
+  --md-accent-fg-color--transparent: rgba(240, 168, 32, 0.1);
+  --md-accent-bg-color: #1e1610;
 
-  /* code: hollow log */
-  --md-code-bg-color: #0c120c;
-  --md-code-fg-color: #c8d4b8;
-  --md-code-hl-color: rgba(232, 168, 40, 0.12);
+  /* code */
+  --md-code-bg-color: #16100c;
+  --md-code-fg-color: #e0d4c0;
+  --md-code-hl-color: rgba(240, 168, 32, 0.15);
 
   /* typeset */
-  --md-typeset-color: #d4dcc4;
-  --md-typeset-a-color: #e8a828;
+  --md-typeset-color: #e8dcc8;
+  --md-typeset-a-color: #e0b040;
 
-  /* footer: river mud */
-  --md-footer-bg-color: #0a100a;
-  --md-footer-bg-color--dark: #080c08;
-  --md-footer-fg-color: #b0c0a0;
-  --md-footer-fg-color--light: #889878;
-  --md-footer-fg-color--lighter: #607050;
+  /* footer */
+  --md-footer-bg-color: #140e0a;
+  --md-footer-bg-color--dark: #0e0a08;
+  --md-footer-fg-color: #c8b898;
+  --md-footer-fg-color--light: #a89878;
+  --md-footer-fg-color--lighter: #887858;
 }
 
-/* -- header: beaver dam log -- */
+/* -- header: dark timber beam -- */
 
 [data-md-color-scheme="slate"] .md-header {
-  background: linear-gradient(180deg, #0e1610 0%, #162014 100%);
-  border-bottom: 2px solid #2a3a20;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  background: linear-gradient(180deg, #1a1208 0%, #221810 100%);
+  border-bottom: 2px solid #3d2b1a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 [data-md-color-scheme="slate"] .md-header__title {
-  color: #d89038;
+  color: #d4a040;
   font-weight: 700;
 }
 
-/* -- navigation: mossy tree bark -- */
+/* -- navigation sidebar: wood panel -- */
 
 [data-md-color-scheme="slate"] .md-sidebar {
-  background-color: #0e1610;
-  border-right: 1px solid #1c2a18;
+  background-color: #1a1208;
+  border-right: 1px solid #3d2b1a;
 }
 
 [data-md-color-scheme="slate"] .md-nav__link {
-  color: #98a888;
+  color: #c8b898;
 }
 
 [data-md-color-scheme="slate"] .md-nav__link:hover {
-  color: #c8d898;
+  color: #f0a820;
 }
 
 [data-md-color-scheme="slate"] .md-nav__link--active,
 [data-md-color-scheme="slate"] .md-nav__link--active:hover {
-  color: #e8a828;
+  color: #f0a820;
   font-weight: 600;
 }
 
 [data-md-color-scheme="slate"] .md-nav__item--active > .md-nav__link {
-  color: #e8a828;
+  color: #f0a820;
 }
 
-/* section labels */
-[data-md-color-scheme="slate"] .md-nav__item--section > .md-nav__link {
-  color: #7a9468;
-  text-transform: uppercase;
-  font-size: 0.65rem;
-  letter-spacing: 0.05em;
-}
-
-/* -- search: looking through the canopy -- */
+/* -- search bar -- */
 
 [data-md-color-scheme="slate"] .md-search__input {
-  background-color: #1c261c;
-  color: #d4dcc4;
-  border: 1px solid #2a3a20;
+  background-color: #2a1f14;
+  color: #e8dcc8;
+  border: 1px solid #4a3322;
 }
 
 [data-md-color-scheme="slate"] .md-search__input::placeholder {
-  color: #607050;
+  color: #887858;
 }
 
-/* -- content: forest clearing -- */
+/* -- content area -- */
 
 [data-md-color-scheme="slate"] .md-content {
-  background-color: #111a12;
+  background-color: #1e1610;
 }
 
-/* headings: sunlight through leaves */
+/* headings: gold gradient */
 [data-md-color-scheme="slate"] .md-typeset h1 {
-  color: #e8a828;
-  border-bottom: 2px solid #2a3a20;
+  color: #e0b040;
+  border-bottom: 2px solid #3d2b1a;
   padding-bottom: 0.4em;
 }
 
 [data-md-color-scheme="slate"] .md-typeset h2 {
-  color: #d89038;
-  border-bottom: 1px solid #1c2a18;
+  color: #d4a040;
+  border-bottom: 1px solid #2e221a;
   padding-bottom: 0.3em;
 }
 
 [data-md-color-scheme="slate"] .md-typeset h3 {
-  color: #c88030;
+  color: #c89030;
 }
 
-/* links: firefly trails */
+/* links: warm gold */
 [data-md-color-scheme="slate"] .md-typeset a {
-  color: #e8a828;
-  text-decoration: none;
+  color: #e0b040;
 }
 
 [data-md-color-scheme="slate"] .md-typeset a:hover {
-  color: #f0c050;
-  text-shadow: 0 0 8px rgba(232, 168, 40, 0.3);
+  color: #f0c860;
 }
 
-/* -- code blocks: inside a hollow log -- */
+/* -- code blocks: dark heartwood -- */
 
 [data-md-color-scheme="slate"] .md-typeset pre {
-  background-color: #0a100a;
-  border: 1px solid #1c2a18;
-  border-left: 3px solid #2a4020;
-  border-radius: 4px;
+  background-color: #120e0a;
+  border: 1px solid #2e221a;
+  border-radius: 6px;
 }
 
 [data-md-color-scheme="slate"] .md-typeset code {
-  background-color: #0c120c;
-  color: #c8d4b8;
+  background-color: #120e0a;
+  color: #e0d4c0;
 }
 
-/* inline code: moss-wrapped */
+/* inline code: brass tag */
 [data-md-color-scheme="slate"] .md-typeset :not(pre) > code {
-  background-color: rgba(42, 64, 32, 0.25);
-  border: 1px solid rgba(42, 64, 32, 0.5);
-  color: #c8d898;
+  background-color: rgba(200, 136, 48, 0.1);
+  border: 1px solid rgba(200, 136, 48, 0.25);
+  color: #e0b848;
   border-radius: 3px;
   padding: 0.1em 0.3em;
 }
 
 /* copy button */
 [data-md-color-scheme="slate"] .md-clipboard {
-  color: #607050;
+  color: #887858;
 }
 
 [data-md-color-scheme="slate"] .md-clipboard:hover {
-  color: #e8a828;
+  color: #f0a820;
 }
 
-/* -- tables: split-log planks -- */
+/* -- tables: plank rows -- */
 
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) {
-  border: 1px solid #2a3a20;
+  border: 1px solid #3d2b1a;
   border-radius: 4px;
   overflow: hidden;
 }
 
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
-  background-color: #1a2818;
-  color: #d89038;
+  background-color: #2a1f14;
+  color: #d4a040;
   font-weight: 700;
-  border-bottom: 2px solid #2a4020;
+  border-bottom: 2px solid #5c3d24;
 }
 
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) td {
-  border-color: #1c2a18;
+  border-color: #2e221a;
 }
 
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) tr:nth-child(even) td {
-  background-color: rgba(26, 40, 24, 0.3);
+  background-color: rgba(42, 31, 20, 0.4);
 }
 
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) tr:hover td {
-  background-color: rgba(232, 168, 40, 0.06);
+  background-color: rgba(200, 136, 48, 0.08);
 }
 
-/* -- admonitions: forest signs nailed to trees -- */
+/* -- admonitions: timber panels with colored trim -- */
 
 [data-md-color-scheme="slate"] .md-typeset .admonition,
 [data-md-color-scheme="slate"] .md-typeset details {
-  background-color: #162016;
+  background-color: #221810;
   border-radius: 4px;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 [data-md-color-scheme="slate"] .md-typeset .admonition-title,
 [data-md-color-scheme="slate"] .md-typeset summary {
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: rgba(255, 255, 255, 0.03);
 }
 
-/* tip: new growth */
+/* tip: green growth */
 [data-md-color-scheme="slate"] .md-typeset .admonition.tip,
 [data-md-color-scheme="slate"] .md-typeset details.tip {
-  border-color: #4a8828;
+  border-color: #5a8a30;
 }
 
-/* warning: drought/dry season */
+/* warning: drought amber */
 [data-md-color-scheme="slate"] .md-typeset .admonition.warning,
 [data-md-color-scheme="slate"] .md-typeset details.warning {
-  border-color: #c88030;
+  border-color: #d4a040;
 }
 
-/* danger: forest fire */
+/* danger: fire/death red */
 [data-md-color-scheme="slate"] .md-typeset .admonition.danger,
 [data-md-color-scheme="slate"] .md-typeset details.danger {
-  border-color: #c83020;
+  border-color: #cc4422;
 }
 
-/* bug: rotting log */
+/* bug: rust orange */
 [data-md-color-scheme="slate"] .md-typeset .admonition.bug,
 [data-md-color-scheme="slate"] .md-typeset details.bug {
-  border-color: #a85020;
+  border-color: #b85820;
 }
 
-/* info: river water */
+/* info: water blue */
 [data-md-color-scheme="slate"] .md-typeset .admonition.info,
 [data-md-color-scheme="slate"] .md-typeset details.info {
-  border-color: #3878a8;
+  border-color: #4488cc;
 }
 
-/* example: campfire embers */
+/* example: brass/gold */
 [data-md-color-scheme="slate"] .md-typeset .admonition.example,
 [data-md-color-scheme="slate"] .md-typeset details.example {
-  border-color: #b87828;
+  border-color: #c88830;
 }
 
-/* note: carved into bark */
-[data-md-color-scheme="slate"] .md-typeset .admonition.note,
-[data-md-color-scheme="slate"] .md-typeset details.note {
-  border-color: #5a7850;
-}
-
-/* -- tabs: notched branches -- */
+/* -- tabs: brass fixtures -- */
 
 [data-md-color-scheme="slate"] .md-typeset .tabbed-labels > label {
-  color: #889878;
+  color: #a89878;
   border-bottom-color: transparent;
 }
 
 [data-md-color-scheme="slate"] .md-typeset .tabbed-labels > label:hover {
-  color: #c8d898;
+  color: #e0b040;
 }
 
 [data-md-color-scheme="slate"] .md-typeset .tabbed-labels > .tabbed-label--active {
-  color: #e8a828;
-  border-bottom-color: #e8a828;
+  color: #f0a820;
+  border-bottom-color: #f0a820;
 }
 
-/* -- horizontal rules: fallen branch -- */
+/* -- horizontal rules: plank divider -- */
 
 [data-md-color-scheme="slate"] .md-typeset hr {
-  border-color: #2a3a20;
+  border-color: #3d2b1a;
 }
 
-/* -- footer: riverbank -- */
+/* -- footer: dark base -- */
 
 [data-md-color-scheme="slate"] .md-footer {
-  border-top: 2px solid #2a3a20;
+  border-top: 2px solid #3d2b1a;
 }
 
-/* -- scrollbar: vine-wrapped -- */
+/* -- scrollbar: timber -- */
 
 [data-md-color-scheme="slate"] ::-webkit-scrollbar {
   width: 8px;
 }
 
 [data-md-color-scheme="slate"] ::-webkit-scrollbar-track {
-  background: #0e1610;
+  background: #1a1208;
 }
 
 [data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb {
-  background: #2a4020;
+  background: #4a3322;
   border-radius: 4px;
 }
 
 [data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb:hover {
-  background: #3a5030;
+  background: #5c3d24;
 }
 
-/* -- back to top: floating log -- */
+/* -- back to top button -- */
 
 [data-md-color-scheme="slate"] .md-top {
-  background-color: #1a2818;
-  color: #d89038;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  border: 1px solid #2a3a20;
+  background-color: #3d2b1a;
+  color: #d4a040;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 [data-md-color-scheme="slate"] .md-top:hover {
-  background-color: #243024;
-  color: #e8a828;
+  background-color: #4a3322;
 }
 
-/* -- selection highlight: dappled sunlight -- */
-
-[data-md-color-scheme="slate"] ::selection {
-  background-color: rgba(232, 168, 40, 0.25);
-  color: #f0e0c0;
-}
