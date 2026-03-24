@@ -379,6 +379,53 @@ class Timberbot:
             "Slope": ("/", DIM),
             "AncientAquiferDrill": ("A", BBLU),
             "Shrub": ("B", MAG), "Geothermal": ("G", RED),
+            # water
+            "CompactWaterWheel": ("P", BBLU), "LargeWaterWheel": ("P", BBLU),
+            "BadwaterDischarge": ("V", BBLU), "Centrifuge": ("V", BBLU),
+            "Valve": ("X", CYN), "FillValve": ("X", CYN),
+            "AquiferDrill": ("A", BBLU), "IrrigationBarrier": ("X", CYN),
+            # power
+            "SteamEngine": ("E", BYEL), "GravityBattery": ("E", BYEL),
+            "Clutch": ("E", BYEL),
+            # production
+            "CoffeeBrewery": ("F", CYN), "OilPress": ("F", CYN),
+            "Fermenter": ("F", CYN), "TappersShack": ("F", CYN),
+            "ExplosivesFactory": ("F", CYN), "HydroponicGarden": ("F", CYN),
+            "EfficientMine": ("F", CYN), "GreaseFactory": ("F", CYN),
+            "WoodWorkshop": ("M", BWHT),
+            # amenities
+            "Detailer": ("~", GRN), "MudBath": ("~", GRN),
+            "WindTunnel": ("~", GRN), "Motivatorium": ("~", GRN),
+            "TeethGrindstone": ("~", GRN), "DecontaminationPod": ("~", GRN),
+            # decorations
+            "BeaverStatue": ("*", YEL), "Bell": ("*", YEL),
+            "DecorativeClock": ("*", YEL), "MetalFence": ("|", DIM),
+            "WoodFence": ("|", DIM), "PoleBanner": ("!", YEL),
+            "SquareBanner": ("!", YEL), "FireworkLauncher": ("!", YEL),
+            "StreamGauge": ("*", DIM),
+            # infrastructure
+            "Gate": ("=", YEL), "Tunnel": ("=", YEL),
+            "DistrictCrossing": ("=", YEL),
+            "Tubeway": ("=", BMAG), "TubewayStation": ("=", BMAG),
+            "VerticalTubeway": ("=", BMAG),
+            "SuspensionBridge": ("=", YEL), "Overhang": ("_", DIM),
+            "ImpermeableFloor": ("_", DIM), "TerrainBlock": ("#", DIM),
+            "DirtExcavator": ("#", DIM),
+            # automation
+            "Lever": ("i", DIM), "Sensor": ("i", DIM), "Timer": ("i", DIM),
+            "Memory": ("i", DIM), "Relay": ("i", DIM), "Indicator": ("i", DIM),
+            "Speaker": ("i", DIM), "HttpAdapter": ("i", DIM), "HttpLever": ("i", DIM),
+            "Chronometer": ("i", DIM), "Counter": ("i", DIM),
+            "WeatherStation": ("i", DIM), "PowerMeter": ("i", DIM),
+            # wonders
+            "LaborerMonument": ("Q", BYEL), "FlameOfUnity": ("Q", BYEL),
+            "TributeToIngenuity": ("Q", BYEL), "EarthRepopulator": ("Q", BYEL),
+            # explosives
+            "Dynamite": ("x", RED), "DoubleDynamite": ("x", RED),
+            "TripleDynamite": ("x", RED), "Detonator": ("x", RED),
+            # misc
+            "BuildersHut": ("K", RED), "ControlTower": ("b", BMAG),
+            "Numbercruncher": ("S", BWHT),
         }
 
         def _zbg(z):
