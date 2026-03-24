@@ -1,7 +1,7 @@
 ---
 name: timberbot
 description: Play Timberborn autonomously via timberbot.py. Keep beavers alive, wellbeing high, needs met.
-version: "4.3"
+version: "4.4"
 ---
 # Timberbot - Game Reference
 
@@ -26,9 +26,9 @@ Beavers die if food or water hits 0.
 |---|---|
 | **Read state** | |
 | `summary` | Colony snapshot: population, resources, weather, alerts, wellbeing |
-| `beavers` | Per-beaver wellbeing, unmet needs, workplace |
+| `beavers` | Per-beaver wellbeing, unmet needs, workplace, activity status |
 | `wellbeing` | Wellbeing by category with current/max |
-| `buildings` | All buildings with workers, power, priority, inventory |
+| `buildings` | All buildings with workers, power, priority, inventory, recipes, breeding status, clutch state |
 | `alerts` | Unstaffed, unpowered, unreachable buildings |
 | `trees` | All cuttable trees with growth and marking status |
 | `tree_clusters` | Densest grown tree clusters |
@@ -43,7 +43,7 @@ Beavers die if food or water hits 0.
 | `distribution` | Import/export settings per district per good |
 | `notifications` | Game event history |
 | `workhours` | Current work schedule |
-| `prefabs` | Available building templates with sizes |
+| `prefabs` | Building templates with sizes, material costs, science cost |
 | `ping` | Health check -- is the game running? |
 | **Search/filter** | |
 | `find source:buildings name:X` | Look up building IDs by name |
@@ -77,6 +77,7 @@ Beavers die if food or water hits 0.
 | `set_farmhouse_action building_id:X action:planting` | Prioritize planting or harvesting |
 | `set_plantable_priority building_id:X plantable:Pine` | Forester/gatherer prioritizes this type |
 | `set_floodgate building_id:X height:N` | Set floodgate water height |
+| `set_clutch building_id:X engaged:true` | Engage/disengage power clutch |
 | **Colony config** | |
 | `set_speed speed:3` | Game speed: 0=pause, 1/2/3 |
 | `set_workhours end_hours:20` | When work ends (1-24) |
@@ -139,6 +140,7 @@ WoodWorkshop 2x4, HaulingPost 3x2, Barrack 3x2, DC 3x3, Rowhouse 1x2, FarmHouse 
 - Powered buildings must form an unbroken chain to the power source
 - Large Power Wheel: 300hp, needs workers. Compact Water Wheel needs flowing water
 - Oasis maps have standing water (no flow) -- use Large Power Wheel
+- Clutch: engages/disengages power transmission. Can segment power networks. Use `set_clutch` to control
 - `find_placement` results include `nearPower` for adjacency checking
 
 ### Workers
