@@ -241,26 +241,20 @@ namespace Timberbot
                     }
                     if (c.Floodgate != null)
                     {
-                        c.HasFloodgate = true;
                         c.FloodgateHeight = c.Floodgate.Height;
-                        c.FloodgateMaxHeight = c.Floodgate.MaxHeight;
                     }
-                    c.ConstructionPriority = c.BuilderPrio != null ? c.BuilderPrio.Priority.ToString() : null;
-                    c.WorkplacePriorityStr = c.WorkplacePrio != null ? c.WorkplacePrio.Priority.ToString() : null;
+                    c.ConstructionPriority = c.BuilderPrio != null ? GetPriorityName(c.BuilderPrio.Priority) : null;
+                    c.WorkplacePriorityStr = c.WorkplacePrio != null ? GetPriorityName(c.WorkplacePrio.Priority) : null;
                     if (c.Site != null)
                     {
                         c.BuildProgress = c.Site.BuildTimeProgress;
                         c.MaterialProgress = c.Site.MaterialProgress;
                         c.HasMaterials = c.Site.HasMaterialsToResumeBuilding;
                     }
-                    if (c.Clutch != null) { c.HasClutch = true; c.ClutchEngaged = c.Clutch.IsEngaged; }
-                    if (c.Wonder != null) { c.HasWonder = true; c.WonderActive = c.Wonder.IsActive; }
+                    if (c.Clutch != null) c.ClutchEngaged = c.Clutch.IsEngaged;
+                    if (c.Wonder != null) c.WonderActive = c.Wonder.IsActive;
                     if (c.PowerNode != null)
                     {
-                        c.IsGenerator = c.PowerNode.IsGenerator;
-                        c.IsConsumer = c.PowerNode.IsConsumer;
-                        c.NominalPowerInput = c.PowerNode._nominalPowerInput;
-                        c.NominalPowerOutput = c.PowerNode._nominalPowerOutput;
                         try { var g = c.PowerNode.Graph; if (g != null) { c.PowerDemand = (int)g.PowerDemand; c.PowerSupply = (int)g.PowerSupply; } } catch { }
                     }
                     if (c.Manufactory != null)
@@ -274,14 +268,15 @@ namespace Timberbot
                         c.NeedsNutrients = c.BreedingPod.NeedsNutrients;
                         try
                         {
-                            var ns = new Dictionary<string, int>();
+                            if (c.NutrientStock == null) c.NutrientStock = new Dictionary<string, int>();
+                            c.NutrientStock.Clear();
                             foreach (var ga in c.BreedingPod.Nutrients)
-                                if (ga.Amount > 0) ns[ga.GoodId] = ga.Amount;
-                            c.NutrientStock = ns.Count > 0 ? ns : null;
+                                if (ga.Amount > 0) c.NutrientStock[ga.GoodId] = ga.Amount;
                         }
                         catch { }
                     }
-                    if (c.RangedEffect != null) c.EffectRadius = c.RangedEffect.EffectRadius;
+                    // EffectRadius, IsGenerator, IsConsumer, NominalPower, HasFloodgate,
+                    // HasClutch, HasWonder, FloodgateMaxHeight set at add-time (static values)
                     if (c.Inventories != null)
                     {
                         int totalStock = 0, totalCapacity = 0;
@@ -434,6 +429,7 @@ namespace Timberbot
         private List<EntityComponent> _beaversWrite = new List<EntityComponent>();
         private List<EntityComponent> _beaversRead = new List<EntityComponent>();
         private readonly Dictionary<int, EntityComponent> _entityCache = new Dictionary<int, EntityComponent>();
+        private readonly System.Text.StringBuilder _sb = new System.Text.StringBuilder(500000); // reusable, zero alloc per request
 
         private void BuildAllIndexes()
         {
@@ -472,7 +468,17 @@ namespace Timberbot
                     Clutch = ec.GetComponent<Clutch>(),
                     Manufactory = ec.GetComponent<Manufactory>(),
                     BreedingPod = ec.GetComponent<BreedingPod>(),
-                    RangedEffect = ec.GetComponent<RangedEffectBuildingSpec>()
+                    RangedEffect = ec.GetComponent<RangedEffectBuildingSpec>(),
+                    // static values -- set once at add-time, never refreshed
+                    HasFloodgate = ec.GetComponent<Floodgate>() != null,
+                    FloodgateMaxHeight = ec.GetComponent<Floodgate>()?.MaxHeight ?? 0f,
+                    HasClutch = ec.GetComponent<Clutch>() != null,
+                    HasWonder = ec.GetComponent<Wonder>() != null,
+                    IsGenerator = ec.GetComponent<MechanicalNode>()?.IsGenerator ?? false,
+                    IsConsumer = ec.GetComponent<MechanicalNode>()?.IsConsumer ?? false,
+                    NominalPowerInput = ec.GetComponent<MechanicalNode>()?._nominalPowerInput ?? 0,
+                    NominalPowerOutput = ec.GetComponent<MechanicalNode>()?._nominalPowerOutput ?? 0,
+                    EffectRadius = ec.GetComponent<RangedEffectBuildingSpec>()?.EffectRadius ?? 0
                 });
             }
             else if (ec.GetComponent<LivingNaturalResource>() != null)
@@ -1012,12 +1018,9 @@ namespace Timberbot
             return results;
         }
 
-        // PERF: O(n) entity scan. Called once per bot turn at most.
+        // PERF: StringBuilder serialization for buildings. Zero Dictionary alloc.
         public object CollectBuildings(string format = "toon", string detail = "basic")
         {
-            // detail=basic (default): compact TOON rows with key fields only
-            // detail=full: all fields per building
-            // detail=id:<id>: single building by ID, all fields
             int? singleId = null;
             if (detail != null && detail.StartsWith("id:"))
             {
@@ -1026,68 +1029,80 @@ namespace Timberbot
             }
             bool fullDetail = detail == "full" || singleId.HasValue;
 
-
-            var results = new List<object>();
+            var sb = _sb;
+            sb.Clear();
+            sb.Append('[');
+            bool first = true;
             foreach (var c in _buildingsRead)
             {
                 if (singleId.HasValue && c.Id != singleId.Value)
                     continue;
+                if (!first) sb.Append(',');
+                first = false;
 
-                if (format == "toon" && !fullDetail)
+                sb.Append("{\"id\":"); sb.Append(c.Id);
+                sb.Append(",\"name\":\""); sb.Append(c.Name);
+                sb.Append("\",\"x\":"); sb.Append(c.X);
+                sb.Append(",\"y\":"); sb.Append(c.Y);
+                sb.Append(",\"z\":"); sb.Append(c.Z);
+                sb.Append(",\"orientation\":\""); sb.Append(c.Orientation ?? ""); sb.Append('"');
+                sb.Append(",\"finished\":"); sb.Append(c.Finished ? "true" : "false");
+                sb.Append(",\"paused\":"); sb.Append(c.Paused ? "true" : "false");
+
+                if (!fullDetail)
                 {
-                    string workers = c.Workplace != null ? $"{c.AssignedWorkers}/{c.DesiredWorkers}" : "";
-                    results.Add(new Dictionary<string, object>
-                    {
-                        ["id"] = c.Id, ["name"] = c.Name,
-                        ["x"] = c.X, ["y"] = c.Y, ["z"] = c.Z,
-                        ["orientation"] = c.Orientation ?? "",
-                        ["finished"] = c.Finished,
-                        ["paused"] = c.Paused,
-                        ["priority"] = c.ConstructionPriority ?? "",
-                        ["workers"] = workers
-                    });
+                    // basic: priority + workers only
+                    sb.Append(",\"priority\":\""); sb.Append(c.ConstructionPriority ?? ""); sb.Append('"');
+                    sb.Append(",\"workers\":\"");
+                    if (c.Workplace != null) { sb.Append(c.AssignedWorkers); sb.Append('/'); sb.Append(c.DesiredWorkers); }
+                    sb.Append('"');
+                    sb.Append('}');
                     continue;
                 }
 
-                // full detail -- all cached primitives
-                var entry = new Dictionary<string, object>
-                {
-                    ["id"] = c.Id, ["name"] = c.Name,
-                    ["finished"] = c.Finished,
-                    ["x"] = c.X, ["y"] = c.Y, ["z"] = c.Z,
-                    ["orientation"] = c.Orientation ?? ""
-                };
-
-                if (c.Pausable != null) { entry["pausable"] = true; entry["paused"] = c.Paused; }
-                if (c.HasFloodgate) { entry["floodgate"] = true; entry["height"] = c.FloodgateHeight; entry["maxHeight"] = c.FloodgateMaxHeight; }
-                if (c.ConstructionPriority != null) entry["constructionPriority"] = c.ConstructionPriority;
-                if (c.WorkplacePriorityStr != null) entry["workplacePriority"] = c.WorkplacePriorityStr;
-                if (c.Workplace != null) { entry["maxWorkers"] = c.MaxWorkers; entry["desiredWorkers"] = c.DesiredWorkers; entry["assignedWorkers"] = c.AssignedWorkers; }
-                if (c.Reachability != null) entry["reachable"] = !c.Unreachable;
-                if (c.Mechanical != null) entry["powered"] = c.Powered;
+                // full detail
+                if (c.Pausable != null) { sb.Append(",\"pausable\":true"); }
+                if (c.HasFloodgate) { sb.Append(",\"floodgate\":true,\"height\":"); sb.Append(c.FloodgateHeight.ToString("F1")); sb.Append(",\"maxHeight\":"); sb.Append(c.FloodgateMaxHeight.ToString("F1")); }
+                if (c.ConstructionPriority != null) { sb.Append(",\"constructionPriority\":\""); sb.Append(c.ConstructionPriority); sb.Append('"'); }
+                if (c.WorkplacePriorityStr != null) { sb.Append(",\"workplacePriority\":\""); sb.Append(c.WorkplacePriorityStr); sb.Append('"'); }
+                if (c.Workplace != null) { sb.Append(",\"maxWorkers\":"); sb.Append(c.MaxWorkers); sb.Append(",\"desiredWorkers\":"); sb.Append(c.DesiredWorkers); sb.Append(",\"assignedWorkers\":"); sb.Append(c.AssignedWorkers); }
+                if (c.Reachability != null) { sb.Append(",\"reachable\":"); sb.Append(!c.Unreachable ? "true" : "false"); }
+                if (c.Mechanical != null) { sb.Append(",\"powered\":"); sb.Append(c.Powered ? "true" : "false"); }
                 if (c.PowerNode != null)
                 {
-                    entry["isGenerator"] = c.IsGenerator; entry["isConsumer"] = c.IsConsumer;
-                    entry["nominalPowerInput"] = c.NominalPowerInput; entry["nominalPowerOutput"] = c.NominalPowerOutput;
-                    if (c.PowerDemand > 0 || c.PowerSupply > 0) { entry["powerDemand"] = c.PowerDemand; entry["powerSupply"] = c.PowerSupply; }
+                    sb.Append(",\"isGenerator\":"); sb.Append(c.IsGenerator ? "true" : "false");
+                    sb.Append(",\"isConsumer\":"); sb.Append(c.IsConsumer ? "true" : "false");
+                    sb.Append(",\"nominalPowerInput\":"); sb.Append(c.NominalPowerInput);
+                    sb.Append(",\"nominalPowerOutput\":"); sb.Append(c.NominalPowerOutput);
+                    if (c.PowerDemand > 0 || c.PowerSupply > 0) { sb.Append(",\"powerDemand\":"); sb.Append(c.PowerDemand); sb.Append(",\"powerSupply\":"); sb.Append(c.PowerSupply); }
                 }
-                if (c.Site != null) { entry["buildProgress"] = c.BuildProgress; entry["materialProgress"] = c.MaterialProgress; entry["hasMaterials"] = c.HasMaterials; }
-                if (c.Capacity > 0) { entry["stock"] = c.Stock; entry["capacity"] = c.Capacity; }
-                if (c.HasWonder) { entry["isWonder"] = true; entry["wonderActive"] = c.WonderActive; }
-                if (c.Dwelling != null) { entry["dwellers"] = c.Dwellers; entry["maxDwellers"] = c.MaxDwellers; }
-                if (c.HasClutch) { entry["isClutch"] = true; entry["clutchEngaged"] = c.ClutchEngaged; }
-                if (c.Manufactory != null)
+                if (c.Site != null) { sb.Append(",\"buildProgress\":"); sb.Append(c.BuildProgress.ToString("F2")); sb.Append(",\"materialProgress\":"); sb.Append(c.MaterialProgress.ToString("F2")); sb.Append(",\"hasMaterials\":"); sb.Append(c.HasMaterials ? "true" : "false"); }
+                if (c.Capacity > 0) { sb.Append(",\"stock\":"); sb.Append(c.Stock); sb.Append(",\"capacity\":"); sb.Append(c.Capacity); }
+                if (c.HasWonder) { sb.Append(",\"isWonder\":true,\"wonderActive\":"); sb.Append(c.WonderActive ? "true" : "false"); }
+                if (c.Dwelling != null) { sb.Append(",\"dwellers\":"); sb.Append(c.Dwellers); sb.Append(",\"maxDwellers\":"); sb.Append(c.MaxDwellers); }
+                if (c.HasClutch) { sb.Append(",\"isClutch\":true,\"clutchEngaged\":"); sb.Append(c.ClutchEngaged ? "true" : "false"); }
+                if (c.Manufactory != null) { sb.Append(",\"currentRecipe\":\""); sb.Append(c.CurrentRecipe ?? ""); sb.Append("\",\"productionProgress\":"); sb.Append(c.ProductionProgress.ToString("F2")); sb.Append(",\"readyToProduce\":"); sb.Append(c.ReadyToProduce ? "true" : "false"); }
+                if (c.BreedingPod != null)
                 {
-                    entry["currentRecipe"] = c.CurrentRecipe ?? "";
-                    entry["productionProgress"] = c.ProductionProgress;
-                    entry["readyToProduce"] = c.ReadyToProduce;
+                    sb.Append(",\"needsNutrients\":"); sb.Append(c.NeedsNutrients ? "true" : "false");
+                    if (c.NutrientStock != null && c.NutrientStock.Count > 0)
+                    {
+                        sb.Append(",\"nutrients\":{");
+                        bool nfirst = true;
+                        foreach (var kvp in c.NutrientStock)
+                        {
+                            if (!nfirst) sb.Append(',');
+                            nfirst = false;
+                            sb.Append('"'); sb.Append(kvp.Key); sb.Append("\":"); sb.Append(kvp.Value);
+                        }
+                        sb.Append('}');
+                    }
                 }
-                if (c.BreedingPod != null) { entry["needsNutrients"] = c.NeedsNutrients; if (c.NutrientStock != null) entry["nutrients"] = c.NutrientStock; }
-                if (c.EffectRadius > 0) entry["effectRadius"] = c.EffectRadius;
-
-                results.Add(entry);
+                if (c.EffectRadius > 0) { sb.Append(",\"effectRadius\":"); sb.Append(c.EffectRadius); }
+                sb.Append('}');
             }
-            return results;
+            sb.Append(']');
+            return sb.ToString();
         }
 
         // PERF: cached component refs -- zero GetComponent per item.
@@ -1095,7 +1110,8 @@ namespace Timberbot
         // PERF: StringBuilder serialization -- 2ms for 3000 trees. No Dictionary, no Newtonsoft.
         public object CollectTrees()
         {
-            var sb = new System.Text.StringBuilder(4000 * 100);
+            var sb = _sb;
+            sb.Clear();
             sb.Append('[');
             bool first = true;
             foreach (var c in _naturalResourcesRead)
@@ -3040,6 +3056,13 @@ namespace Timberbot
         // 3. per-tile: terrain height == z, no water (unless water building), no occupancy (dead trees ok), no underground clipping
         // 4. Place() only after all checks pass
         private static readonly string[] OrientNames = { "south", "west", "north", "east" };
+        private static readonly string[] PriorityNames = { "VeryLow", "Low", "Normal", "High", "VeryHigh" };
+
+        private static string GetPriorityName(Timberborn.PrioritySystem.Priority p)
+        {
+            int i = (int)p;
+            return (i >= 0 && i < PriorityNames.Length) ? PriorityNames[i] : "Normal";
+        }
 
         private static int ParseOrientation(string orient)
         {

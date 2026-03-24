@@ -75,19 +75,19 @@ All reads served on the listener thread from double-buffered read lists. Zero ma
 
 | Source | Lines | Allocs/frame | Severity | Fix |
 |---|---|---|---|---|
-| `Priority.ToString()` x2 per building | 248-249 | ~1000 strings (500 buildings x 2) | **HIGH** -- 60K strings/sec | static `PriorityNames[]` lookup |
-| `new Dictionary<string, int>()` for nutrients | 277 | ~5 dicts (breeding pods only) | low | reuse persistent dict in struct, clear+repopulate |
-| `CurrentRecipe` string from Manufactory | 268 | ~10 strings | low | cache at add-time, refresh only when changed |
+| ~~`Priority.ToString()` x2 per building~~ | 248-249 | ~~60K strings/sec~~ | **FIXED** | static `PriorityNames[]` lookup, zero alloc |
+| ~~`new Dictionary` for nutrients~~ | 277 | ~~5 dicts/frame~~ | **FIXED** | persistent dict in struct, `.Clear()` + repopulate |
+| ~~Static values re-read every frame~~ | various | ~~wasted cycles~~ | **FIXED** | moved to add-time only |
 | `Orientation` from `OrientNames[]` | 226 | 0 (array lookup, no alloc) | none | already good |
 
 ### Per-request allocations (only when API called, ~1/minute)
 
 | Source | Count | Severity |
 |---|---|---|
-| `new Dictionary<string, object>` per building | 522 per call | medium -- but only on request |
-| `new List<object>` per endpoint | 1 per call | negligible |
+| ~~`new Dictionary` per building~~ | ~~522 per call~~ | **FIXED** -- StringBuilder like trees |
+| ~~`new List<object>` per endpoint~~ | ~~1 per call~~ | **FIXED** -- StringBuilder returns string |
 | `$"string interpolation"` in alerts/summary | ~20 per call | negligible |
-| Trees `sb.ToString()` | 1 x ~320KB | medium but once per request |
+| `sb.ToString()` for trees/buildings | 1 per request | reusable `_sb` field, pre-allocated 500KB |
 
 ### Static values refreshed needlessly every frame
 
@@ -105,9 +105,9 @@ These don't change between frames but are re-read in `RefreshCachedState`:
 
 | # | Bottleneck | Cost | Root cause | Fix |
 |---|---|---|---|---|
-| 1 | **Priority.ToString() per frame** | 60K string allocs/sec | enum ToString allocates in .NET | static string[] lookup |
-| 2 | **Unity GC spikes** | random 0.5-2s | Unity garbage collector freezes all threads | reduce alloc pressure (above) |
-| 3 | **beavers live reads** | 2.4ms / 65 items | NeedManager iteration still uses GetComponent | cache beaver needs in struct (low priority, only 65 items) |
+| 1 | **Unity GC spikes** | random 0.5-2s | Unity garbage collector freezes all threads | reduced alloc pressure, but unavoidable from mod |
+| 2 | **beavers live reads** | 2.4ms / 65 items | NeedManager iteration still uses GetComponent | cache beaver needs in struct (low priority, only 65 items) |
+| 3 | **sb.ToString() alloc** | 1 string per request (~100-500KB) | StringBuilder must create final string | unavoidable but once per request |
 
 ## Resolved bottlenecks
 
@@ -126,6 +126,10 @@ These don't change between frames but are re-read in `RefreshCachedState`:
 | JSON serialization on main thread | ~1-3ms/response | now serializes on listener thread for GETs |
 | Thread-unsafe property reads from background | game crash (nav mesh recalc) | all mutable state cached as primitives on main thread, double-buffered |
 | Trees Dictionary + Newtonsoft overhead | 23ms for 3000 trees | StringBuilder serialization: 2ms (11.5x faster) |
+| Buildings Dictionary + Newtonsoft overhead | 8ms for 522 buildings | StringBuilder serialization |
+| Priority.ToString() 60K allocs/sec | per-frame GC pressure | static PriorityNames[] lookup, zero alloc |
+| new Dictionary per breeding pod per frame | ~5 allocs/frame | persistent dict, clear+repopulate |
+| Static values refreshed every frame | wasted cycles | moved to add-time only (EffectRadius, IsGenerator, etc.) |
 | Pause/unpause missing UI icon | `.Paused` set directly | use `Pause()`/`Resume()` methods |
 
 ## Optimization history
@@ -138,7 +142,8 @@ These don't change between frames but are re-read in `RefreshCachedState`:
 | Cached component refs | 25ms | 8ms | 13ms | 64ms |
 | GETs on listener thread | 23ms | 6.5ms | 8ms | 39ms |
 | Double buffer + cached primitives | 4.7ms | 2.8ms | 1.3ms | 28ms |
-| StringBuilder (trees) | **2.0ms** | **2.8ms** | **1.3ms** | **28ms** |
+| StringBuilder (trees) | 2.0ms | 2.8ms | 1.3ms | 28ms |
+| Alloc-once + SB buildings | **2.0ms** | **~1ms** | **~1ms** | **~20ms est** |
 
 **A/B test results (trees, 2985 items):** Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), StringBuilder **2.0ms** (winner). StringBuilder skips Newtonsoft entirely -- manual JSON via `sb.Append()`. Main-thread cost for reads is **zero**.
 
