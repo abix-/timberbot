@@ -1724,12 +1724,12 @@ Route a straight-line path with auto-stairs. Wraps `POST /api/path/route`.
 python timberbot.py place_path x1:120 y1:130 x2:120 y2:145
 ```
 
-### watch (CLI-only)
+### top (CLI-only)
 
-Live terminal dashboard that polls every 3 seconds.
+Live colony dashboard. Population, resources, weather, drought countdown, wellbeing breakdown, alerts.
 
 ```bash
-python timberbot.py watch
+python timberbot.py top
 ```
 
 ---

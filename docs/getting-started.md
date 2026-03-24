@@ -124,10 +124,10 @@ timberbot.py visual x:120 y:140 radius:15
 ### Live dashboard
 
 ```bash
-timberbot.py watch
+timberbot.py top
 ```
 
-Polls every 3 seconds. Shows day progress, drought countdown, per-district population and resources with color coding.
+Live colony dashboard. Population, resources, weather, drought countdown, wellbeing breakdown, alerts -- all updating in real time.
 
 ### Write commands
 

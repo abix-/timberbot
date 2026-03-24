@@ -23,7 +23,7 @@ python timberbot.py distribution                         # import/export setting
 python timberbot.py science                               # science points + unlockable buildings
 python timberbot.py tree_clusters                         # find densest tree clusters
 python timberbot.py scan x:120 y:140 radius:10           # compact map for AI
-python timberbot.py watch                                # live dashboard
+python timberbot.py top                                  # live colony dashboard
 python timberbot.py                                      # list all methods
 ```
 
