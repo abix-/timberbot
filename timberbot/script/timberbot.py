@@ -607,6 +607,84 @@ def _top():
         print(f"\n  {_DIM}bye!{_RST}\n")
 
 
+# Workforce manager (manage subcommand)
+# ---------------------------------------------------------------------------
+
+_ESSENTIAL = {"FarmHouse", "DeepWaterPump", "LumberjackFlag", "ScavengerFlag",
+              "GathererFlag", "BreedingPod", "SmallTank", "MediumTank", "LargeTank"}
+_LOW_PRIORITY = ["Inventor", "Metalsmith", "BotPartFactory", "BotAssembler",
+                 "GearWorkshop", "Scratcher", "FluidDump", "Forester",
+                 "IndustrialLumberMill", "LargePowerWheel", "DistrictCenter"]
+
+
+def _is_essential(name):
+    return any(e in name for e in _ESSENTIAL)
+
+
+def _manage():
+    bot = Timberbot(json_mode=True)
+
+    if not bot.ping():
+        print(f"  {_RED}cannot reach Timberbot on port 8085{_RST}")
+        sys.exit(1)
+
+    print(f"  {_BOLD}{_BMAG}timberbot manage{_RST}  {_DIM}keeping 1-4 idle haulers -- ctrl+c to stop{_RST}\n")
+
+    # track what we paused so we unpause in reverse order
+    paused_by_us = []
+
+    try:
+        while True:
+            try:
+                summary = bot.summary()
+                idle = summary.get("employment", {}).get("unemployed", 0)
+                buildings = bot.buildings()
+            except Exception:
+                print(f"  {_RED}-- connection lost --{_RST}")
+                time.sleep(10)
+                continue
+
+            idle_color = _BRED if idle == 0 else _BGRN if idle <= 4 else _BYEL
+            ts = time.strftime("%H:%M:%S")
+
+            if idle == 0:
+                # find something to pause from low-priority list
+                acted = False
+                for prio_name in _LOW_PRIORITY:
+                    for b in buildings:
+                        if (prio_name in b.get("name", "") and
+                                not b.get("paused") and
+                                b.get("assignedWorkers", 0) > 0 and
+                                not _is_essential(b.get("name", ""))):
+                            bot.pause_building(b["id"])
+                            paused_by_us.append(b["id"])
+                            print(f"  {ts}  {_BRED}0 idle{_RST}  paused {_BYEL}{b['name']}{_RST} id:{b['id']}")
+                            acted = True
+                            break
+                    if acted:
+                        break
+                if not acted:
+                    print(f"  {ts}  {_BRED}0 idle{_RST}  {_DIM}nothing left to pause{_RST}")
+
+            elif idle > 4 and paused_by_us:
+                # unpause the last thing we paused
+                bid = paused_by_us.pop()
+                name = "?"
+                for b in buildings:
+                    if b.get("id") == bid:
+                        name = b.get("name", "?")
+                        break
+                bot.unpause_building(bid)
+                print(f"  {ts}  {_BYEL}{idle} idle{_RST}  unpaused {_BGRN}{name}{_RST} id:{bid}")
+
+            else:
+                print(f"  {ts}  {idle_color}{idle} idle{_RST}  {_DIM}ok{_RST}")
+
+            time.sleep(10)
+    except KeyboardInterrupt:
+        print(f"\n  {_DIM}bye!{_RST}\n")
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -670,6 +748,7 @@ def main():
                 if "VALUE" in usage:
                     print(f"    {usage.strip()}")
         print(f"\n  {'top':30s} live colony dashboard")
+        print(f"  {'manager':30s} auto-manage haulers (keep 1-4 idle)")
         sys.exit(1)
 
     json_mode = "--json" in sys.argv
@@ -679,6 +758,10 @@ def main():
 
     if method_name == "top":
         _top()
+        return
+
+    if method_name == "manager":
+        _manage()
         return
 
     bot = Timberbot(json_mode=json_mode)
