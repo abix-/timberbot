@@ -167,40 +167,69 @@ WoodWorkshop 2x4, HaulingPost 3x2, Barrack 3x2, DC 3x3, Rowhouse 1x2, FarmHouse 
 - `set_farmhouse_action building_id:X action:planting` -- prioritize planting over harvesting. Use `action:harvesting` to reset to default
 - `set_plantable_priority building_id:X plantable:Pine` -- forester prioritizes this tree type. Use `plantable:none` to clear
 
-## API quick reference -- when to use each method
+## API quick reference
 
-| Situation | Method |
+| Method | When to use |
 |---|---|
-| Colony status check | `summary` |
-| Beaver needs detail | `beavers` |
-| Wellbeing breakdown | `wellbeing` |
-| Building alerts | `alerts` |
-| Find berry bushes | `gatherables` |
-| Find building by name | `find source:buildings name:X` |
-| Check farmhouse coverage | `building_range building_id:X` |
-| Find irrigated crop spots | `find_planting crop:Kohlrabi building_id:X` |
-| Find building placement | `find_placement prefab:Name x1:X y1:Y x2:X2 y2:Y2` |
-| Place a building | `place_building prefab:Name x:X y:Y z:Z orientation:south` |
-| Place roads/stairs | `place_path x1:X y1:Y x2:X2 y2:Y2` |
-| Remove a building | `demolish_building building_id:X` |
-| Set priority | `set_priority building_id:X priority:VeryHigh type:construction` |
-| Adjust workers | `set_workers building_id:X count:N` |
-| Pause/unpause | `pause_building building_id:X` / `unpause_building building_id:X` |
-| Set tank good | `set_good building_id:X good:Water` |
-| Set hauler priority | `set_haul_priority building_id:X prioritized:true` |
-| Set recipe | `set_recipe building_id:X recipe:RecipeId` |
-| Set farmhouse mode | `set_farmhouse_action building_id:X action:planting` |
-| Set forester tree | `set_plantable_priority building_id:X plantable:Pine` |
-| Mark trees for cutting | `mark_trees x1:X y1:Y x2:X2 y2:Y2 z:Z` |
-| Stop cutting trees | `clear_trees x1:X y1:Y x2:X2 y2:Y2 z:Z` |
-| Plant crops | `plant_crop x1:X y1:Y x2:X2 y2:Y2 z:Z crop:Kohlrabi` |
-| Find tree clusters | `tree_clusters` |
-| Unlock building | `unlock_building building:Name.IronTeeth` |
-| Check science | `science` |
-| Set game speed | `set_speed speed:3` |
-| Extend work hours | `set_workhours end_hours:20` |
-| View area | `visual x:X y:Y radius:10` |
-| Check terrain | `map x1:X y1:Y x2:X2 y2:Y2` |
+| **Read state** | |
+| `summary` | Every turn. Colony snapshot: population, resources, weather, alerts, wellbeing |
+| `beavers` | When critical/miserable > 0. Per-beaver wellbeing, unmet needs, workplace |
+| `wellbeing` | Planning wellbeing improvements. Category breakdown with current/max |
+| `buildings` | Check workers, power, priority, inventory on all buildings |
+| `alerts` | When alerts > 0. Unstaffed, unpowered, unreachable buildings |
+| `trees` | All cuttable trees with growth and marking status |
+| `tree_clusters` | Find densest grown tree clusters for lumberjack placement |
+| `gatherables` | Find berry bushes for gatherer flag placement |
+| `science` | Check science points and unlock costs |
+| `weather` | Drought countdown, hazardous status |
+| `time` | Day number and progress |
+| `speed` | Current game speed |
+| `population` | Beaver/bot counts per district |
+| `resources` | Resource stocks per district |
+| `districts` | Multi-district overview with population and resources |
+| `distribution` | Import/export settings per district per good |
+| `notifications` | Game event history |
+| `workhours` | Current work schedule: end hours, working now? |
+| `prefabs` | Available building templates with sizes |
+| `ping` | Health check -- is the game running? |
+| **Search/filter** | |
+| `find source:buildings name:X` | Look up building IDs by name |
+| `find source:buildings x:X y:Y radius:R` | Find buildings near a point |
+| `find source:trees name:Pine` | Find specific tree types |
+| `building_range building_id:X` | Work radius tiles for farmhouse, lumberjack, forester, gatherer |
+| `scan x:X y:Y radius:10` | Quick area survey -- occupied + water tiles only |
+| **Placement** | |
+| `find_placement prefab:Name x1:X y1:Y x2:X2 y2:Y2` | Find valid building spots sorted by reachability |
+| `find_planting crop:Kohlrabi building_id:X` | Find irrigated spots within farmhouse range |
+| `place_building prefab:Name x:X y:Y z:Z orientation:south` | Place a building (use find_placement first) |
+| `place_path x1:X y1:Y x2:X2 y2:Y2` | Roads + auto-stairs + platforms. Straight line only |
+| `demolish_building building_id:X` | Remove misplaced or unnecessary buildings |
+| **Map** | |
+| `visual x:X y:Y radius:10` | ASCII map with terrain height shading. Before/after placement |
+| `map x1:X y1:Y x2:X2 y2:Y2` | Raw terrain, water, occupants, moisture data |
+| **Crops and trees** | |
+| `plant_crop x1:X y1:Y x2:X2 y2:Y2 z:Z crop:Kohlrabi` | Mark area for planting |
+| `clear_planting x1:X y1:Y x2:X2 y2:Y2 z:Z` | Clear planting marks |
+| `mark_trees x1:X y1:Y x2:X2 y2:Y2 z:Z` | Mark trees for cutting |
+| `clear_trees x1:X y1:Y x2:X2 y2:Y2 z:Z` | Unmark trees (stop cutting) |
+| **Building config** | |
+| `set_priority building_id:X priority:VeryHigh type:construction` | Set construction or workplace priority |
+| `set_workers building_id:X count:N` | Set desired worker count (0 to max) |
+| `pause_building building_id:X` | Pause a building to free workers |
+| `unpause_building building_id:X` | Resume a paused building |
+| `set_good building_id:X good:Water` | Set allowed good on a tank/stockpile |
+| `set_capacity building_id:X capacity:N` | Set stockpile max capacity |
+| `set_haul_priority building_id:X prioritized:true` | Haulers deliver here first (breeding pods, critical) |
+| `set_recipe building_id:X recipe:RecipeId` | Set manufactory recipe. Use invalid name to list available |
+| `set_farmhouse_action building_id:X action:planting` | Prioritize planting or harvesting |
+| `set_plantable_priority building_id:X plantable:Pine` | Forester/gatherer prioritizes this type |
+| `set_floodgate building_id:X height:N` | Set floodgate water height |
+| **Colony config** | |
+| `set_speed speed:3` | Game speed: 0=pause, 1/2/3 |
+| `set_workhours end_hours:20` | When work ends (1-24). Extend during crises |
+| `set_distribution district:X good:Water import_option:Forced` | Import/export per good per district |
+| `unlock_building building:Name.IronTeeth` | Unlock building with science points |
+| `migrate from_district:X to_district:Y count:N` | Move beavers between districts |
 
 ## General rules
 
