@@ -59,6 +59,7 @@ Full [url=https://abix-.github.io/TimberbornMods/api-reference/]API Reference[/u
 [tr][td]Power networks[/td][td]Connected building groups with supply vs demand[/td][td]Yes[/td][/tr]
 [tr][td]Bot durability[/td][td]Deterioration progress on mechanical beavers[/td][td]Yes[/td][/tr]
 [tr][td]Resource projection[/td][td]Projected days of logs, planks, gears in summary[/td][td]Yes[/td][/tr]
+[tr][td]Webhooks[/td][td]Push notifications for game events (drought, death, construction complete)[/td][td]Planned[/td][/tr]
 [/table]
 
 [h1]How it works[/h1]

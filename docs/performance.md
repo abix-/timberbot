@@ -46,6 +46,15 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 | `weather` | none | 1 | **0.8ms** | 0 | Listener thread |
 | `prefabs` | building templates | 157 | **3.8ms** | 0 | Listener thread |
 
+### New endpoints (0.5.6+)
+
+| Endpoint | Iterates | Notes |
+|---|---|---|
+| `beavers` (position, district, carrying) | `_beaversRead` | x,y,z from transform, district from Citizen, GoodCarrier for carried goods |
+| `beavers detail:full` (all needs + groups) | `_beaversRead` | shows all 38 needs with NeedGroupId, liftingCapacity, deterioration |
+| `power` | all entities | groups buildings by MechanicalNode.Graph identity. Per-request only, no caching |
+| `map` (stacking) | all entities | occupants now `List<(name, z)>` per tile instead of last-wins string |
+
 ### Still scan all entities (by design)
 
 | Endpoint | What it does | Frequency | Why not indexed |
@@ -53,6 +62,7 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 | `BuildAllIndexes` | Initial index build | **once on load** | populates all indexes |
 | `CollectScan` | Radius-filtered survey | rare | needs all entity types in region |
 | `CollectMap` | Region tile occupants | rare | needs all entity types in region |
+| `CollectPowerNetworks` | Group by power graph | rare | needs MechanicalNode on all buildings |
 
 ## Thread model
 
@@ -69,18 +79,21 @@ All reads served on the listener thread from double-buffered read lists. Zero ma
 
 ## GC pressure audit
 
-`RefreshCachedState` runs every frame (60fps). Allocations here directly cause GC spikes.
+`RefreshCachedState` runs every 1s (cadenced, configurable via settings.json). Allocations here cause GC pressure proportional to refresh rate.
 
-### Per-frame allocations (RefreshCachedState)
+### Per-refresh allocations (RefreshCachedState, every 1s)
 
-| Source | Lines | Allocs/frame | Severity | Fix |
+| Source | Lines | Allocs/refresh | Severity | Status |
 |---|---|---|---|---|
 | ~~`Priority.ToString()` x2 per building~~ | 248-249 | ~~60K strings/sec~~ | **FIXED** | static `PriorityNames[]` lookup, zero alloc |
 | ~~`new Dictionary` for nutrients~~ | 277 | ~~5 dicts/frame~~ | **FIXED** | persistent dict in struct, `.Clear()` + repopulate |
 | ~~Static values re-read every frame~~ | various | ~~wasted cycles~~ | **FIXED** | moved to add-time only |
+| ~~60fps refresh~~ | UpdateSingleton | ~~60x/sec~~ | **FIXED** | cadenced to 1s (configurable) |
 | `Orientation` from `OrientNames[]` | 226 | 0 (array lookup, no alloc) | none | already good |
+| `foreach` over `BreedingPod.Nutrients` | 310 | ~5 enumerator boxes/refresh | **minor** | if `Nutrients` returns `IEnumerable<T>`, foreach boxes enumerator (~40 bytes). Only ~5 breeding pods |
+| `foreach` over `Inventories.AllInventories` | 322 | ~500 enumerator boxes/refresh | **minor** | same boxing concern for all buildings with inventories. At 1Hz cadence = ~500 small allocs/sec |
 
-### Per-request allocations (only when API called, ~1/minute)
+### Per-request allocations (only when API called)
 
 | Source | Count | Severity |
 |---|---|---|
@@ -88,18 +101,13 @@ All reads served on the listener thread from double-buffered read lists. Zero ma
 | ~~`new List<object>` per endpoint~~ | ~~1 per call~~ | **FIXED** -- StringBuilder returns string |
 | `$"string interpolation"` in alerts/summary | ~20 per call | negligible |
 | `sb.ToString()` for trees/buildings | 1 per request | reusable `_sb` field, pre-allocated 500KB |
+| LINQ `.Select().ToList()` in map stacking | per stacked tile | **cosmetic** | anonymous objects + LINQ alloc, could be simple loop |
+| `new Dictionary` per beaver in Collect* | ~65 per call | expected | response-building, per-request only |
+| `new Dictionary` per power network | ~17 per call | expected | response-building, per-request only |
 
-### Static values refreshed needlessly every frame
+### Static values (resolved)
 
-These don't change between frames but are re-read in `RefreshCachedState`:
-
-| Value | Changes when | Should refresh |
-|---|---|---|
-| `EffectRadius` | never | add-time only |
-| `IsGenerator`, `IsConsumer` | never | add-time only |
-| `NominalPowerInput`, `NominalPowerOutput` | never | add-time only |
-| `HasFloodgate`, `HasClutch`, `HasWonder` | never | add-time only |
-| `FloodgateMaxHeight` | never | add-time only |
+All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer, NominalPower, HasFloodgate, HasClutch, HasWonder, FloodgateMaxHeight.
 
 ## Remaining bottlenecks (ordered by impact)
 

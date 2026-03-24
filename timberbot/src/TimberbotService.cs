@@ -352,9 +352,73 @@ namespace Timberbot
                 }
                 catch { }
             }
+            // beavers
+            for (int i = 0; i < _beaversWrite.Count; i++)
+            {
+                var c = _beaversWrite[i];
+                try
+                {
+                    if (c.WbTracker != null)
+                        c.Wellbeing = c.WbTracker.Wellbeing;
+                    var go = c.NeedMgr?.GetComponent<EntityComponent>()?.GameObject;
+                    if (go != null)
+                    {
+                        var pos = go.transform.position;
+                        c.X = Mathf.FloorToInt(pos.x);
+                        c.Y = Mathf.FloorToInt(pos.z);
+                        c.Z = Mathf.FloorToInt(pos.y);
+                    }
+                    if (c.Worker != null && c.Worker.Workplace != null)
+                        c.Workplace = CleanName(c.Worker.Workplace.GameObject.name);
+                    else
+                        c.Workplace = null;
+                    if (c.Citizen != null)
+                    {
+                        try { var dc = c.Citizen.AssignedDistrict; c.District = dc != null ? dc.DistrictName : null; } catch { }
+                    }
+                    c.HasHome = c.Dweller != null && c.Dweller.HasHome;
+                    c.Contaminated = c.Contaminable != null && c.Contaminable.IsContaminated;
+                    if (c.Life != null) c.LifeProgress = c.Life.LifeProgress;
+                    if (c.Deteriorable != null) c.DeteriorationProgress = (float)System.Math.Round(c.Deteriorable.DeteriorationProgress, 3);
+                    if (c.Carrier != null && c.Carrier.IsCarrying)
+                    {
+                        c.IsCarrying = true;
+                        var ga = c.Carrier.CarriedGoods;
+                        c.CarryingGood = ga.GoodId;
+                        c.CarryAmount = ga.Amount;
+                    }
+                    else
+                    {
+                        c.IsCarrying = false;
+                    }
+                    // needs
+                    if (c.Needs == null) c.Needs = new List<CachedNeed>();
+                    c.Needs.Clear();
+                    c.AnyCritical = false;
+                    if (c.NeedMgr != null)
+                    {
+                        foreach (var ns in c.NeedMgr.GetNeeds())
+                        {
+                            var need = c.NeedMgr.GetNeed(ns.Id);
+                            c.Needs.Add(new CachedNeed
+                            {
+                                Id = ns.Id,
+                                Points = (float)System.Math.Round(need.Points, 2),
+                                Wellbeing = c.NeedMgr.GetNeedWellbeing(ns.Id),
+                                Favorable = need.IsFavorable,
+                                Critical = need.IsCritical,
+                                Active = need.IsActive,
+                                Group = ns.NeedGroupId ?? ""
+                            });
+                            if (need.IsBelowWarningThreshold) c.AnyCritical = true;
+                        }
+                    }
+                    _beaversWrite[i] = c;
+                }
+                catch { }
+            }
             // swap: background thread gets the freshly updated buffer.
             // no copy-back -- both buffers always have same entities (add/remove updates both).
-            // new write buffer has 1-frame-stale mutable values, refreshed next frame.
             var tmpB = _buildingsRead; _buildingsRead = _buildingsWrite; _buildingsWrite = tmpB;
             var tmpN = _naturalResourcesRead; _naturalResourcesRead = _naturalResourcesWrite; _naturalResourcesWrite = tmpN;
             var tmpV = _beaversRead; _beaversRead = _beaversWrite; _beaversWrite = tmpV;
@@ -428,14 +492,50 @@ namespace Timberbot
             public int Stock, Capacity;
         }
 
+        private struct CachedNeed
+        {
+            public string Id, Group;
+            public float Points;
+            public int Wellbeing;
+            public bool Favorable, Critical, Active;
+        }
+
+        private struct CachedBeaver
+        {
+            // immutable refs (add-time)
+            public int Id;
+            public string Name;
+            public bool IsBot;
+            public NeedManager NeedMgr;
+            public WellbeingTracker WbTracker;
+            public Worker Worker;
+            public LifeProgressor Life;
+            public GoodCarrier Carrier;
+            public Deteriorable Deteriorable;
+            public Contaminable Contaminable;
+            public Dweller Dweller;
+            public Timberborn.GameDistricts.Citizen Citizen;
+            // mutable (refreshed on main thread)
+            public float Wellbeing;
+            public int X, Y, Z;
+            public string Workplace, District;
+            public bool HasHome, Contaminated;
+            public float LifeProgress, DeteriorationProgress;
+            public bool IsCarrying;
+            public string CarryingGood;
+            public int CarryAmount;
+            public bool AnyCritical;
+            public List<CachedNeed> Needs;
+        }
+
         // double-buffered indexes: main thread writes to _write lists, then swaps to _read.
         // background thread only ever reads from _read lists. zero contention.
         private List<CachedBuilding> _buildingsWrite = new List<CachedBuilding>();
         private List<CachedBuilding> _buildingsRead = new List<CachedBuilding>();
         private List<CachedNaturalResource> _naturalResourcesWrite = new List<CachedNaturalResource>();
         private List<CachedNaturalResource> _naturalResourcesRead = new List<CachedNaturalResource>();
-        private List<EntityComponent> _beaversWrite = new List<EntityComponent>();
-        private List<EntityComponent> _beaversRead = new List<EntityComponent>();
+        private List<CachedBeaver> _beaversWrite = new List<CachedBeaver>();
+        private List<CachedBeaver> _beaversRead = new List<CachedBeaver>();
         private readonly Dictionary<int, EntityComponent> _entityCache = new Dictionary<int, EntityComponent>();
         // separate StringBuilders per endpoint to avoid contention on background thread
         private readonly System.Text.StringBuilder _sbBuildings = new System.Text.StringBuilder(200000);
@@ -510,8 +610,24 @@ namespace Timberbot
             }
             else if (ec.GetComponent<NeedManager>() != null)
             {
-                _beaversWrite.Add(ec);
-                _beaversRead.Add(ec);
+                var cb = new CachedBeaver
+                {
+                    Id = ec.GameObject.GetInstanceID(),
+                    Name = CleanName(ec.GameObject.name),
+                    IsBot = ec.GetComponent<Bot>() != null,
+                    NeedMgr = ec.GetComponent<NeedManager>(),
+                    WbTracker = ec.GetComponent<WellbeingTracker>(),
+                    Worker = ec.GetComponent<Worker>(),
+                    Life = ec.GetComponent<LifeProgressor>(),
+                    Carrier = ec.GetComponent<GoodCarrier>(),
+                    Deteriorable = ec.GetComponent<Deteriorable>(),
+                    Contaminable = ec.GetComponent<Contaminable>(),
+                    Dweller = ec.GetComponent<Dweller>(),
+                    Citizen = ec.GetComponent<Timberborn.GameDistricts.Citizen>(),
+                    Needs = new List<CachedNeed>()
+                };
+                _beaversWrite.Add(cb);
+                _beaversRead.Add(cb);
             }
         }
 
@@ -523,8 +639,8 @@ namespace Timberbot
             _buildingsRead.RemoveAll(b => b.Id == id);
             _naturalResourcesWrite.RemoveAll(n => n.Id == id);
             _naturalResourcesRead.RemoveAll(n => n.Id == id);
-            _beaversWrite.Remove(ec);
-            _beaversRead.Remove(ec);
+            _beaversWrite.RemoveAll(b => b.Id == id);
+            _beaversRead.RemoveAll(b => b.Id == id);
         }
 
         [OnEvent]

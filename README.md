@@ -1,10 +1,10 @@
-# Timberbot
+# Timberbot API
 
 C# mod + Python client that lets AI agents read and control a running Timberborn game over HTTP.
 
 ```
 Timberborn (Unity)
-  |-- Timberbot mod (port 8085)      read + write game state
+  |-- Timberbot API mod (port 8085)   read + write game state
 
 Python client
   |-- timberbot.py                   single-file API client + CLI + dashboard
