@@ -231,7 +231,7 @@ class Timberbot:
         return self._post("/api/placement/find", {"prefab": prefab, "x1": x1, "y1": y1, "x2": x2, "y2": y2})
 
     def place_building(self, prefab, x, y, z, orientation="south"):
-        """Place a building. Orientation: south, west, north, east (or s/w/n/e)."""
+        """Place a building. Orientation: south, west, north, east."""
         return self._post("/api/building/place", {
             "prefab": prefab, "x": x, "y": y, "z": z,
             "orientation": str(orientation).lower()
