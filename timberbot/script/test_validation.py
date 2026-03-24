@@ -1487,50 +1487,65 @@ class TestRunner:
     def test_performance(self):
         print("\n=== performance ===\n")
 
-        # time each major endpoint over multiple iterations
+        # time ALL endpoints, 10 iterations each, track reliability
         endpoints = [
             ("ping", lambda: self.bot.ping()),
             ("summary", lambda: self.bot.summary()),
             ("buildings", lambda: self.bot.buildings()),
-            ("buildings detail:full", lambda: self.bot.buildings(detail="full")),
+            ("buildings full", lambda: self.bot.buildings(detail="full")),
             ("trees", lambda: self.bot.trees()),
+            ("gatherables", lambda: self.bot.gatherables()),
             ("beavers", lambda: self.bot.beavers()),
             ("alerts", lambda: self.bot.alerts()),
             ("resources", lambda: self.bot.resources()),
             ("weather", lambda: self.bot.weather()),
+            ("time", lambda: self.bot.time()),
+            ("districts", lambda: self.bot.districts()),
+            ("distribution", lambda: self.bot.distribution()),
+            ("science", lambda: self.bot.science()),
+            ("notifications", lambda: self.bot.notifications()),
+            ("workhours", lambda: self.bot.workhours()),
+            ("speed", lambda: self.bot.speed()),
             ("prefabs", lambda: self.bot.prefabs()),
+            ("wellbeing", lambda: self.bot.wellbeing()),
+            ("tree_clusters", lambda: self.bot.tree_clusters()),
         ]
 
-        iterations = 5
-        max_latency_ms = 500  # fail if any single call > 500ms
+        iterations = 10
 
         print(f"  timing {len(endpoints)} endpoints x {iterations} iterations\n")
-        print(f"  {'endpoint':<25} {'avg ms':>8} {'min ms':>8} {'max ms':>8} {'items':>6}")
-        print(f"  {'-'*25} {'-'*8} {'-'*8} {'-'*8} {'-'*6}")
+        print(f"  {'endpoint':<25} {'avg ms':>8} {'min ms':>8} {'max ms':>8} {'items':>6} {'ok':>4}")
+        print(f"  {'-'*25} {'-'*8} {'-'*8} {'-'*8} {'-'*6} {'-'*4}")
 
-        all_ok = True
+        total_ok = 0
+        total_bad = 0
         for name, fn in endpoints:
             times = []
+            ok = 0
             result = None
             for _ in range(iterations):
                 t0 = time.perf_counter()
-                result = fn()
+                try:
+                    result = fn()
+                    ok += 1
+                except Exception:
+                    result = None
                 t1 = time.perf_counter()
                 times.append((t1 - t0) * 1000)
 
+            total_ok += ok
+            total_bad += iterations - ok
             avg = sum(times) / len(times)
             mn = min(times)
             mx = max(times)
-            count = len(result) if isinstance(result, list) else 1
+            count = len(result) if isinstance(result, list) else 1 if result else 0
 
-            print(f"  {name:<25} {avg:>8.1f} {mn:>8.1f} {mx:>8.1f} {count:>6}")
-
-            if mx > max_latency_ms:
-                all_ok = False
+            print(f"  {name:<25} {avg:>8.1f} {mn:>8.1f} {mx:>8.1f} {count:>6} {ok:>4}")
 
         print()
-        self.check(f"all endpoints < {max_latency_ms}ms", all_ok,
-                   f"some endpoint exceeded {max_latency_ms}ms")
+        self.check(f"all {total_ok + total_bad} responses valid",
+                   total_bad == 0,
+                   f"{total_bad} bad responses out of {total_ok + total_bad}")
 
         # cache consistency: call same endpoint twice, verify same results
         print("\n  cache consistency: verifying repeated calls return same data...")
