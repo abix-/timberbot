@@ -28,23 +28,27 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 | `CachedNaturalResource` | BlockObject, Living, Cuttable, Gatherable, Growable | **5** |
 | `CachedBeaver` | NeedMgr, WbTracker, Worker, Life, Carrier, Deteriorable, Contaminable, Dweller, Citizen, Bot | **10** |
 
-## Endpoint performance (measured, 522 buildings / 2986 trees / 65 beavers / 4161 total)
+## Endpoint performance (measured, 522 buildings / 2986 trees / 65 beavers / 4161 total, 100 iterations)
 
-### Optimized (cached struct indexes)
+### Optimized (cached struct indexes, double-buffered, background thread)
 
-| Endpoint | Iterates | Items | Measured | GetComponent/item | Notes |
-|---|---|---|---|---|---|
-| `ping` | none | 1 | **1ms** | 0 | Listener thread |
-| `summary` | all 3 read buffers | 3000+500+65 | **1.2ms** | 0 | Cached primitives only |
-| `buildings` | `_buildingsRead` | 522 | **2.8ms** | **0** | Cached primitives, TOON dict |
-| `buildings detail:full` | `_buildingsRead` | 522 | **1.3ms** | **0** | Cached primitives, full dict |
-| `trees` | `_naturalResourcesRead` | 2985 | **2.0ms** | **0** | StringBuilder serialization, no Newtonsoft |
-| `gatherables` | `_naturalResourcesRead` | ~150 | **<1ms** | **0** | Cached primitives |
-| `beavers` | `_beaversRead` | 65 | **0.9ms** | **0** | CachedBeaver struct + StringBuilder |
-| `alerts` | `_buildingsRead` | 522 | **1.0ms** | **0** | Cached primitives only |
-| `resources` | district centers | 13 | **0.9ms** | 0 | Listener thread |
-| `weather` | none | 1 | **0.8ms** | 0 | Listener thread |
-| `prefabs` | building templates | 157 | **3.8ms** | 0 | Listener thread |
+| Endpoint | Items | Min (ms) | GetComponent | Notes |
+|---|---|---|---|---|
+| `ping` | 1 | **0.7** | 0 | Listener thread |
+| `summary` | 3500+ | **0.9** | 0 | Cached primitives only |
+| `buildings` | 522 | **2.1** | **0** | StringBuilder + Jw helper |
+| `buildings detail:full` | 522 | **3.4** | **0** | StringBuilder + Jw, all fields |
+| `trees` | 2983 | **8.6** | **0** | StringBuilder + Jw |
+| `gatherables` | 1504 | **6.7** | **0** | Dictionary (low priority to convert) |
+| `beavers` | 65 | **1.1** | **0** | CachedBeaver + StringBuilder + Jw |
+| `alerts` | 19 | **0.8** | **0** | Cached primitives |
+| `resources` | 13 | **0.8** | 0 | District registries |
+| `weather` | 1 | **0.8** | 0 | Service fields |
+| `time` | 1 | **0.8** | 0 | Service fields |
+| `prefabs` | 157 | **2.9** | 0 | Building templates |
+| `wellbeing` | 1 | **0.9** | 0 | Cached beaver needs |
+| `tree_clusters` | 5 | **0.9** | 0 | Cached natural resources |
+| **burst (7 calls)** | -- | **17** | -- | 2ms avg per call |
 
 ### New endpoints (0.5.6+)
 
@@ -160,7 +164,8 @@ All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer,
 | GETs on listener thread | 23ms | 6.5ms | 8ms | 39ms |
 | Double buffer + cached primitives | 4.7ms | 2.8ms | 1.3ms | 28ms |
 | StringBuilder (trees) | 2.0ms | 2.8ms | 1.3ms | 28ms |
-| Alloc-once + SB buildings | **2.0ms** | **~1ms** | **~1ms** | **~20ms est** |
+| Alloc-once + SB buildings | 2.0ms | ~1ms | ~1ms | ~20ms est |
+| DRY (Jw + DoubleBuffer) | **8.6ms** | **2.1ms** | **3.4ms** | **17ms** |
 
 **A/B test results (trees, 2985 items):** Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), StringBuilder **2.0ms** (winner). StringBuilder skips Newtonsoft entirely -- manual JSON via `sb.Append()`. Main-thread cost for reads is **zero**.
 
@@ -192,7 +197,9 @@ All scaling is linear. Zero main-thread cost for GET-only bot turns.
 
 Performance tests in `timberbot/script/test_validation.py`:
 
-- **Latency**: 10 endpoints x 5 iterations, all must be < 500ms
+- **Latency**: 20 endpoints x 100 iterations each (2000 calls total)
+- **Reliability**: all 2000 responses must be valid (no errors, no corruption)
 - **Cache consistency**: same endpoint called twice returns same count (no stale refs)
-- **Cache invalidation**: place path -> count+1, demolish -> count back (EventBus works)
+- **Cache invalidation**: place path -> count+1, demolish -> count back (EventBus + DoubleBuffer)
 - **Burst**: 7 sequential calls < 3s total
+- **Save-agnostic**: all tests use `find_placement`/`find_building` for dynamic coords
