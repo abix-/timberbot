@@ -20,7 +20,7 @@ Full [url=https://abix-.github.io/TimberbornMods/api-reference/]API Reference[/u
 
 [table]
 [tr][th]System[/th][th]What you get[/th][th]Status[/th][/tr]
-[tr][td]Beavers[/td][td]Per-beaver wellbeing, every unmet need by name, workplace, age, contamination[/td][td]Yes[/td][/tr]
+[tr][td]Beavers[/td][td]Per-beaver position, district, wellbeing, needs, workplace, carried goods, deterioration. detail:full for all needs with group category[/td][td]Yes[/td][/tr]
 [tr][td]Wellbeing[/td][td]Population wellbeing by category (Social, Fun, Nutrition, Aesthetics, Awe) with current/max[/td][td]Yes[/td][/tr]
 [tr][td]Buildings[/td][td]Workers, priority, power, reachability, inventory, construction progress[/td][td]Yes[/td][/tr]
 [tr][td]Placement[/td][td]Place any building with game-native validation. Find spots with reachability and power[/td][td]Yes[/td][/tr]
