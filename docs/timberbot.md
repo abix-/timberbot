@@ -1,7 +1,7 @@
 ---
 name: timberbot
 description: Play Timberborn autonomously via timberbot.py. Keep beavers alive, wellbeing high, needs met.
-version: "4.6"
+version: "4.7"
 ---
 # Timberbot - Game Reference
 
@@ -164,6 +164,26 @@ Max wellbeing: 77. Each beaver's `beavers` entry shows unmet needs by name.
 | Awe | 26 | LaborerMonument (+3, 7-tile radius), FlameOfUnity (+5), TributeToIngenuity (+8), EarthRepopulator (+10) |
 
 Nutrition requires food VARIETY -- different food types, not more of the same. Each type needs its own production chain. Wellbeing drops fast during crises (-12 possible) and recovers slowly.
+
+### Wellbeing building placement
+- Each wellbeing building has an **effect radius** -- beavers must be within range to get the benefit
+- Use `buildings detail:id:<id>` to see `effectRadius` for a specific building
+- Place wellbeing buildings near high-traffic areas (paths, workplaces, housing) for maximum coverage
+- Different wellbeing types CAN overlap -- a Scratcher and Lantern covering the same area is good (different needs)
+- Same wellbeing type should NOT overlap -- two Scratchers covering the same area wastes one of them
+- Spread identical buildings apart so their effect radii cover different parts of the colony
+
+### Recipe switching -- DANGEROUS
+- **Calling set_recipe DESTROYS in-progress items AND the materials consumed so far.** Materials that took days to produce and haul are flushed permanently
+- Even setting the SAME recipe that is already active resets progress and destroys materials
+- NEVER call set_recipe unless you are certain the building has no recipe set (brand new building, never configured)
+- NEVER call set_recipe to "confirm" or "verify" -- read the building state instead
+- NEVER call set_recipe on single-recipe buildings (e.g. BotAssembler only makes Bot.IronTeeth -- it is already set by default)
+- For multi-recipe buildings (BotPartFactory, Fermenter, FoodFactory): set once, then leave it alone until a full batch is complete and you genuinely need to switch
+
+### Rooftop buildings
+- **Roof** (Roof1x1, etc.): decorative, placed on top of buildings. Does NOT need path access -- provides Aesthetics just by existing
+- **RooftopTerrace**: has an entrance, beavers physically visit it for SocialLife. DOES need path/stair access to the rooftop
 
 ## Settings
 

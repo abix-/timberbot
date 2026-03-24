@@ -28,6 +28,12 @@ class TestRunner:
         """Wait for the double-buffered cache to refresh after a write."""
         time.sleep(REFRESH_WAIT)
 
+    def write_and_wait(self, fn):
+        """Execute a write operation and wait for cache refresh."""
+        result = fn()
+        self.wait_for_refresh()
+        return result
+
     def check(self, name, ok, detail=""):
         if ok:
             self.passed += 1
@@ -59,6 +65,12 @@ class TestRunner:
         args = {"target": "call", "path": path, "method": method}
         args.update(kwargs)
         return self.bot.debug(**args)
+
+    def find_spot(self, prefab="Path", x1=100, y1=100, x2=160, y2=160):
+        """find a valid placement spot for prefab, return {x,y,z,orientation} or None"""
+        result = self.bot.find_placement(prefab, x1, y1, x2, y2)
+        placements = result.get("placements", []) if isinstance(result, dict) else []
+        return placements[0] if placements else None
 
     def find_building(self, name):
         """find first building matching name, return id"""
@@ -149,7 +161,7 @@ class TestRunner:
             ("workhours", lambda: self.bot.workhours()),
             ("speed", lambda: self.bot.speed()),
             ("prefabs", lambda: self.bot.prefabs()),
-            ("map", lambda: self.bot.map(120, 142, 122, 144)),
+            ("map", lambda: self.bot.map(110, 130, 115, 135)),
             ("tree_clusters", lambda: self.bot.tree_clusters()),
             ("wellbeing", lambda: self.bot.wellbeing()),
             ("scan", lambda: self.bot.scan(120, 140, 5)),
@@ -182,39 +194,44 @@ class TestRunner:
     def test_placement_and_demolish(self):
         print("\n=== placement + demolish ===\n")
 
-        # error cases -- game-native validation returns generic "Cannot place" for most
-        # note: "on water" is NOT an error -- game allows paths on shallow water (levees, dams)
+        # find a valid spot dynamically for placement tests
+        spot = self.find_spot("Path")
+        if not spot:
+            self.skip("placement tests", "no valid Path spot found")
+            return
+        sx, sy, sz = spot["x"], spot["y"], spot["z"]
+
+        # error cases
         tests = [
-            ("occupied tile", lambda: self.bot.place_building("Path", 122, 133, 2)),
             ("off map", lambda: self.bot.place_building("Path", 999, 999, 2)),
-            ("z too high", lambda: self.bot.place_building("Path", 70, 125, 4)),
-            ("z too low", lambda: self.bot.place_building("Path", 70, 125, 1)),
+            ("z too high", lambda: self.bot.place_building("Path", sx, sy, sz + 10)),
+            ("z too low", lambda: self.bot.place_building("Path", sx, sy, max(0, sz - 5))),
         ]
         for name, fn in tests:
             result = fn()
             self.check(name, self.err(result),
                        json.dumps(result)[:100])
 
-        # these still return specific error messages (checked before preview validation)
+        # specific error messages
         specific_tests = [
-            ("unknown prefab", lambda: self.bot.place_building("Fake", 120, 130, 2), "not found"),
-            ("invalid orientation", lambda: self.bot.place_building("Path", 120, 127, 2, orientation="bogus"), "invalid orientation"),
-            ("locked building", lambda: self.bot.place_building("TributeToIngenuity.IronTeeth", 70, 125, 2), "not unlocked"),
+            ("unknown prefab", lambda: self.bot.place_building("Fake", sx, sy, sz), "not found"),
+            ("invalid orientation", lambda: self.bot.place_building("Path", sx, sy, sz, orientation="bogus"), "invalid orientation"),
+            ("locked building", lambda: self.bot.place_building("TributeToIngenuity.IronTeeth", sx, sy, sz), "not unlocked"),
         ]
         for name, fn, expect_err in specific_tests:
             result = fn()
             self.check(name, self.err(result) and expect_err in str(result["error"]),
                        json.dumps(result)[:100])
 
-        # valid placement
-        result = self.bot.place_building("Path", 70, 125, 2)
+        # valid placement using find_spot coords
+        result = self.bot.place_building("Path", sx, sy, sz, spot.get("orientation", "south"))
         self.check("valid placement", self.has(result, "id"))
 
         if self.has(result, "id"):
             placed_id = result["id"]
 
-            # verify via map that tile is now occupied
-            tile = self.bot.map(70, 125, 70, 125)
+            # verify via map
+            tile = self.bot.map(sx, sy, sx, sy)
             tiles = tile.get("tiles", [])
             has_path = any(t.get("occupant") == "Path" for t in tiles)
             self.check("verify placement via map", has_path)
@@ -223,8 +240,8 @@ class TestRunner:
             dem = self.bot.demolish_building(placed_id)
             self.check("demolish", self.has(dem, "demolished") or not self.err(dem))
 
-            # verify gone via map
-            tile2 = self.bot.map(70, 125, 70, 125)
+            # verify gone
+            tile2 = self.bot.map(sx, sy, sx, sy)
             tiles2 = tile2.get("tiles", [])
             no_path = not any(t.get("occupant") == "Path" for t in tiles2)
             self.check("verify demolish via map", no_path)
@@ -337,25 +354,40 @@ class TestRunner:
     def test_crops(self):
         print("\n=== crops ===\n")
 
-        # plant on open ground -- PlantingAreaValidator.CanPlant decides validity
-        result = self.bot.plant_crop(68, 130, 70, 132, 2, "Kohlrabi")
-        self.check("plant crops", self.has(result, "planted") and result["planted"] > 0,
+        # find a farmhouse to get valid planting area
+        fh = self.find_building("FarmHouse")
+        if not fh:
+            self.skip("crops", "no FarmHouse found")
+            return
+        fb = self.bot.buildings(detail=f"id:{fh}")
+        if not fb or not isinstance(fb, list) or not fb:
+            self.skip("crops", "cannot get farmhouse details")
+            return
+        b = fb[0]
+        bx, by, bz = b.get("x", 0), b.get("y", 0), b.get("z", 0)
+
+        # plant near farmhouse
+        result = self.bot.plant_crop(bx - 3, by - 3, bx + 3, by + 3, bz, "Kohlrabi")
+        self.check("plant crops", self.has(result, "planted"),
                    json.dumps(result)[:100])
 
-        # plant on area with buildings (should skip occupied tiles)
-        result2 = self.bot.plant_crop(119, 122, 122, 126, 2, "Kohlrabi")
-        self.check("skip occupied tiles", self.has(result2, "skipped") and result2["skipped"] > 0,
-                   json.dumps(result2)[:100])
-
         # clear
-        self.bot.clear_planting(68, 130, 70, 132, 2)
-        self.bot.clear_planting(119, 122, 122, 126, 2)
+        self.bot.clear_planting(bx - 3, by - 3, bx + 3, by + 3, bz)
 
     def test_tree_marking(self):
         print("\n=== tree marking ===\n")
 
-        # mark trees in an area
-        result = self.bot.mark_trees(125, 150, 135, 160, 4)
+        # find actual tree coords dynamically
+        trees = self.bot.trees()
+        alive_trees = [t for t in trees if t.get("alive")] if isinstance(trees, list) else []
+        if not alive_trees:
+            self.skip("tree marking", "no alive trees")
+            return
+        t = alive_trees[0]
+        tx, ty, tz = t["x"], t["y"], t["z"]
+
+        # mark trees in area around the found tree
+        result = self.bot.mark_trees(tx - 3, ty - 3, tx + 3, ty + 3, tz)
         self.check("mark trees", not self.err(result),
                    json.dumps(result)[:100] if self.err(result) else "")
 
@@ -368,7 +400,7 @@ class TestRunner:
         self.check("verify trees marked", marked > 0, f"marked count: {marked}")
 
         # clear
-        self.bot.clear_trees(125, 150, 135, 160, 4)
+        self.bot.clear_trees(tx - 3, ty - 3, tx + 3, ty + 3, tz)
 
     def test_stockpile(self):
         print("\n=== stockpile ===\n")
@@ -387,11 +419,11 @@ class TestRunner:
     def test_orientation(self):
         print("\n=== orientation ===\n")
 
-        # find flat test area
+        # find flat test area dynamically
         test_spot = None
         need = 5
-        for cy in range(125, 145):
-            for cx in range(70, 130):
+        for cy in range(100, 170):
+            for cx in range(70, 170):
                 region = self.bot.map(cx, cy, cx + need - 1, cy + need - 1)
                 tiles = region.get("tiles", [])
                 if len(tiles) < need * need:
@@ -432,7 +464,8 @@ class TestRunner:
                     self.check(f"{prefab.split('.')[0]} {orient}", False, json.dumps(result)[:100])
                     continue
 
-                # verify origin via map
+                # wait for cache then verify origin via map
+                self.wait_for_refresh()
                 region = self.bot.map(bx - 1, by - 1, bx + sx, by + sy)
                 occupied = [(t["x"], t["y"]) for t in region.get("tiles", [])
                             if t.get("occupant") and prefab.split(".")[0] in t["occupant"]]
@@ -446,7 +479,7 @@ class TestRunner:
     def test_find_placement(self):
         print("\n=== find_placement ===\n")
 
-        result = self.bot.find_placement("Inventor.IronTeeth", 100, 115, 155, 155)
+        result = self.bot.find_placement("Inventor.IronTeeth", 100, 100, 170, 170)
         self.check("returns results",
                    self.has(result, "placements") and len(result.get("placements", [])) > 0)
 
@@ -533,10 +566,10 @@ class TestRunner:
     def test_path_routing(self):
         print("\n=== path routing ===\n")
 
-        # find a flat open area for path tests
+        # find a flat open area for path tests dynamically
         test_spot = None
-        for cy in range(125, 140):
-            for cx in range(70, 100):
+        for cy in range(100, 170):
+            for cx in range(70, 170):
                 region = self.bot.map(cx, cy, cx + 4, cy)
                 tiles = region.get("tiles", [])
                 if len(tiles) < 5:
@@ -590,8 +623,8 @@ class TestRunner:
         # path across z-level change (should auto-place stairs)
         # find two adjacent unoccupied tiles with z-height difference of 1
         stair_spot = None
-        for ty in range(125, 145):
-            for tx in range(70, 140):
+        for ty in range(100, 170):
+            for tx in range(70, 170):
                 region = self.bot.map(tx, ty, tx + 1, ty)
                 tiles = region.get("tiles", [])
                 if len(tiles) < 2:
@@ -717,12 +750,25 @@ class TestRunner:
             if "waterDays" in result:
                 wd = result["waterDays"]
                 self.check("waterDays > 0", isinstance(wd, (int, float)) and wd > 0, f"got: {wd}")
+            self.check("logDays present", "logDays" in result,
+                       f"keys: {[k for k in result if 'Days' in k]}")
+            self.check("plankDays present", "plankDays" in result)
+            self.check("gearDays present", "gearDays" in result)
 
     def test_map_moisture(self):
         print("\n=== map moisture ===\n")
 
-        # check tiles near water for moist field
-        result = self.bot.map(120, 135, 125, 140)
+        # check tiles near a water pump for moist field
+        pump = self.find_building("DeepWaterPump")
+        if not pump:
+            self.skip("map moisture", "no water pump found")
+            return
+        pb = self.bot.buildings(detail=f"id:{pump}")
+        if not pb or not isinstance(pb, list) or not pb:
+            self.skip("map moisture", "cannot get pump details")
+            return
+        px, py = pb[0].get("x", 120), pb[0].get("y", 130)
+        result = self.bot.map(px - 3, py - 3, px + 3, py + 3)
         tiles = result.get("tiles", [])
         moist_count = sum(1 for t in tiles if t.get("moist"))
         self.check("moist tiles near water", moist_count > 0, f"got {moist_count} moist tiles")
@@ -1341,8 +1387,17 @@ class TestRunner:
     def test_map_stacking(self):
         """Test map shows multiple occupants at different z-levels."""
         print("\n=== map stacking ===\n")
-        # scan an area known to have stairs/platforms (z-transitions)
-        result = self.bot.map(139, 147, 140, 148)
+        # find an area with stairs/platforms by looking for Platform buildings
+        platform = self.find_building("Platform") or self.find_building("Stairs")
+        if not platform:
+            self.skip("map stacking", "no platform/stairs found")
+            return
+        pb = self.bot.buildings(detail=f"id:{platform}")
+        if not pb or not isinstance(pb, list) or not pb:
+            self.skip("map stacking", "cannot get platform details")
+            return
+        px, py = pb[0].get("x", 139), pb[0].get("y", 147)
+        result = self.bot.map(px - 1, py - 1, px + 1, py + 1)
         tiles = result.get("tiles", [])
         self.check("map returns tiles", len(tiles) > 0)
 

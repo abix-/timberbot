@@ -1,13 +1,13 @@
 Play Timberborn with an AI. Timberbot API gives Claude, ChatGPT, or your own scripts full read/write access to your colony over HTTP so they can partner with you to run it.
 
 [h1]What Timberbot API adds[/h1]
-Timberborn already has a built-in HTTP API (port 8080) for automation with levers and adapters. Timberbot (port 8085) adds everything the built-in API doesn't cover:
+Timberborn already has a built-in HTTP API (port 8080) for automation with levers and adapters. Timberbot API (port 8085) adds everything the built-in API doesn't cover:
 
 [table]
 [tr][th]Capability[/th][th]Built-in API[/th][th]Timberbot API[/th][/tr]
 [tr][td]Building placement + demolition[/td][td]No[/td][td]Yes, with tile validation[/td][/tr]
 [tr][td]Read game state[/td][td]On/off signals via sensor -> adapter chains[/td][td]Full data: buildings, beavers, trees, map, resources, weather, science[/td][/tr]
-[tr][td]Beaver wellbeing + needs[/td][td]No[/td][td]Per-beaver needs, contamination, workplace, population wellbeing breakdown by category[/td][/tr]
+[tr][td]Beaver wellbeing + needs[/td][td]No[/td][td]Per-beaver position, district, needs, carried goods, bot durability. detail:full for all 38 needs with group category[/td][/tr]
 [tr][td]Colony management[/td][td]No[/td][td]Workers, priority, speed, crops, trees, science, distribution[/td][/tr]
 [tr][td]Map + terrain reading[/td][td]No[/td][td]Terrain, water, contamination, occupants[/td][/tr]
 [tr][td]AI-optimized output[/td][td]No[/td][td]TOON format, scan, visual map with terrain height, alerts, tree clusters[/td][/tr]
@@ -28,7 +28,7 @@ Full [url=https://abix-.github.io/TimberbornMods/api-reference/]API Reference[/u
 [tr][td]Paths[/td][td]Auto-stairs and platforms across z-levels[/td][td]Yes[/td][/tr]
 [tr][td]Crops[/td][td]Plant, clear, find valid irrigated spots within farmhouse range[/td][td]Yes[/td][/tr]
 [tr][td]Trees[/td][td]Growth, cutting marks, densest clusters[/td][td]Yes[/td][/tr]
-[tr][td]Map[/td][td]Terrain, water, badwater, moisture, occupants. ASCII visual with height shading[/td][td]Yes[/td][/tr]
+[tr][td]Map[/td][td]Terrain, water depth, badwater, moisture, occupants with vertical stacking. ASCII visual with height shading[/td][td]Yes[/td][/tr]
 [tr][td]Weather[/td][td]Drought countdown, badtide status[/td][td]Yes[/td][/tr]
 [tr][td]Science[/td][td]Points, unlock costs, unlock with one call[/td][td]Yes[/td][/tr]
 [tr][td]Workers[/td][td]Count, priority, pause, haul priority[/td][td]Yes[/td][/tr]
@@ -65,12 +65,13 @@ Full [url=https://abix-.github.io/TimberbornMods/api-reference/]API Reference[/u
 [h1]How it works[/h1]
 Timberbot API runs an HTTP server (port 8085) inside the game. Python client included:
 [code]
-python timberbot.py summary                          # colony dashboard with housing, wellbeing, alerts
-python timberbot.py buildings                        # all buildings (flat TOON format)
-python timberbot.py --json buildings                 # full JSON for programmatic access
-python timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2 orientation:south
+python timberbot.py summary                          # colony snapshot: resources, weather, alerts, projections
+python timberbot.py beavers                          # position, district, wellbeing, carried goods per beaver
+python timberbot.py beavers detail:full              # all 38 needs with group category per beaver
+python timberbot.py buildings detail:full             # inventory, production progress, power, effect radius
+python timberbot.py power                            # power networks with supply vs demand
 python timberbot.py visual x:120 y:140 radius:10     # ASCII map with terrain height shading
-python timberbot.py alerts
+python timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2 orientation:south
 [/code]
 
 [h1]Getting started[/h1]
