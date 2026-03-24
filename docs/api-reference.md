@@ -624,7 +624,12 @@ Pagination available in Python client only: `bot.beavers(limit=10)`
 | id | int | Instance ID |
 | name | string | Beaver name |
 | wellbeing | float | Wellbeing score |
-| needs | object | Active needs: `{"Hunger": {"points": 0.8, "isCritical": false, "isBelowWarning": false}}` |
+| needs | array | Per-need breakdown (see below) |
+| needs[].id | string | Need name (Hunger, Thirst, Campfire, Scratcher, etc.) |
+| needs[].points | float | Current points (0-1, higher = more satisfied) |
+| needs[].wellbeing | int | Wellbeing contribution from this need |
+| needs[].favorable | bool | Need is satisfied |
+| needs[].critical | bool | Need is in critical state |
 | anyCritical | bool | Any need below warning threshold |
 | lifeProgress | float | Age progress (0.0-1.0) |
 | workplace | string | Assigned workplace name (empty if none) |
@@ -1411,6 +1416,60 @@ Clear planting marks from an area.
 
 ```json
 {"x1": 110, "y1": 130, "x2": 115, "y2": 135, "z": 2, "cleared": true, "tiles": 36}
+```
+
+---
+
+### POST /api/planting/find
+
+Find valid planting spots in an area or within a building's work range.
+
+**CLI:** `timberbot.py find_planting crop:Kohlrabi building_id:-514366` or `timberbot.py find_planting crop:Kohlrabi x1:68 y1:128 x2:72 y2:132 z:2`
+
+#### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| crop | string | yes | Crop name (Kohlrabi, Pine, Birch, etc.) |
+| building_id | int | no | Farmhouse/forester ID -- returns spots within building range |
+| x1, y1, x2, y2, z | int | no | Area scan (used when building_id is 0) |
+
+#### Response
+
+```json
+{
+  "crop": "Kohlrabi",
+  "spots": [
+    {"x": 120, "y": 135, "z": 2, "moist": true, "planted": false},
+    {"x": 121, "y": 135, "z": 2, "moist": true, "planted": true}
+  ]
+}
+```
+
+---
+
+### POST /api/building/range
+
+Get the work range tiles for a building. Same green circle the player sees when selecting a farmhouse, lumberjack, forester, gatherer, scavenger, or district center.
+
+**CLI:** `timberbot.py building_range building_id:-514366`
+
+#### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | int | yes | Building ID |
+
+#### Response
+
+```json
+{
+  "id": -514366,
+  "name": "FarmHouse",
+  "tiles": 45,
+  "moist": 32,
+  "bounds": {"x1": 118, "y1": 130, "x2": 128, "y2": 145}
+}
 ```
 
 ---

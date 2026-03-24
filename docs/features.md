@@ -1,9 +1,5 @@
 # Features
 
-What Timberbot can and can't do, audited against every Timberborn 1.0 game system.
-
-## Supported systems
-
 | System | What you can do |
 |---|---|
 | [Beavers](api-reference.md#get-apibeavers) | See every beaver's wellbeing, per-need breakdown (Hunger, Thirst, Campfire, etc.), workplace, age, contamination. Know exactly which needs are unmet and critical |
