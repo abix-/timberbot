@@ -1,7 +1,7 @@
 ---
 name: timberbot
 description: Play Timberborn autonomously via timberbot.py. Keep beavers alive, wellbeing high, needs met.
-version: "3.0"
+version: "4.2"
 ---
 # AI Prompt - Playing Timberborn via API
 
@@ -49,6 +49,18 @@ Every turn:
 4. `visual` the area -- confirm building placed correctly
 - Results sorted by: reachable > pathAccess > nearPower > pathCount
 - If find_placement returns no reachable results, widen the search area or build paths to connect
+
+## Path and stair placement
+
+!!! warning "NEVER place paths or stairs with place_building"
+    Use `place_path` for ALL roads and stairs. It auto-places stairs at z-level changes and platforms for multi-level transitions.
+
+- `place_path x1:X y1:Y x2:X2 y2:Y2` -- route a straight-line path (axis-aligned: x1==x2 or y1==y2)
+- Auto-places stairs at z-level transitions (e.g. z=2 to z=3)
+- Auto-places platforms for multi-level jumps
+- Returns `{placed, stairs, skipped, errors}`
+- To extend the path network, run `place_path` from an existing path tile toward the target area
+- After placing paths, recheck `find_placement` -- previously unreachable spots may now be reachable
 
 ## Z-level rules
 
@@ -112,6 +124,8 @@ Pick the direction that points FROM the building TOWARD the path. If the path is
 - Need ~1 farmhouse per 8 beavers with full kohlrabi fields
 - Check `foodDays` in summary -- if below 3, prioritize farming
 - Crops grow during drought as long as soil is irrigated (near standing water). Keep planting and farming year-round on oasis maps
+- Use `find_planting crop:Kohlrabi building_id:X` to find valid irrigated spots within a farmhouse's range
+- Use `building_range building_id:X` to see how many tiles (and moist tiles) a farmhouse covers
 - Set VeryHigh priority on food and water buildings
 
 ## Water rules
@@ -153,6 +167,41 @@ WoodWorkshop 2x4, HaulingPost 3x2, Barrack 3x2, DC 3x3, Rowhouse 1x2, FarmHouse 
 - `set_farmhouse_action building_id:X action:planting` -- prioritize planting over harvesting. Use `action:harvesting` to reset to default
 - `set_plantable_priority building_id:X plantable:Pine` -- forester prioritizes this tree type. Use `plantable:none` to clear
 
+## API quick reference -- when to use each method
+
+| Situation | Method |
+|---|---|
+| Colony status check | `summary` |
+| Beaver needs detail | `beavers` |
+| Wellbeing breakdown | `wellbeing` |
+| Building alerts | `alerts` |
+| Find berry bushes | `gatherables` |
+| Find building by name | `find source:buildings name:X` |
+| Check farmhouse coverage | `building_range building_id:X` |
+| Find irrigated crop spots | `find_planting crop:Kohlrabi building_id:X` |
+| Find building placement | `find_placement prefab:Name x1:X y1:Y x2:X2 y2:Y2` |
+| Place a building | `place_building prefab:Name x:X y:Y z:Z orientation:south` |
+| Place roads/stairs | `place_path x1:X y1:Y x2:X2 y2:Y2` |
+| Remove a building | `demolish_building building_id:X` |
+| Set priority | `set_priority building_id:X priority:VeryHigh type:construction` |
+| Adjust workers | `set_workers building_id:X count:N` |
+| Pause/unpause | `pause_building building_id:X` / `unpause_building building_id:X` |
+| Set tank good | `set_good building_id:X good:Water` |
+| Set hauler priority | `set_haul_priority building_id:X prioritized:true` |
+| Set recipe | `set_recipe building_id:X recipe:RecipeId` |
+| Set farmhouse mode | `set_farmhouse_action building_id:X action:planting` |
+| Set forester tree | `set_plantable_priority building_id:X plantable:Pine` |
+| Mark trees for cutting | `mark_trees x1:X y1:Y x2:X2 y2:Y2 z:Z` |
+| Stop cutting trees | `clear_trees x1:X y1:Y x2:X2 y2:Y2 z:Z` |
+| Plant crops | `plant_crop x1:X y1:Y x2:X2 y2:Y2 z:Z crop:Kohlrabi` |
+| Find tree clusters | `tree_clusters` |
+| Unlock building | `unlock_building building:Name.IronTeeth` |
+| Check science | `science` |
+| Set game speed | `set_speed speed:3` |
+| Extend work hours | `set_workhours end_hours:20` |
+| View area | `visual x:X y:Y radius:10` |
+| Check terrain | `map x1:X y1:Y x2:X2 y2:Y2` |
+
 ## General rules
 
 - ALWAYS use `timberbot.py <method>` for everything
@@ -161,12 +210,14 @@ WoodWorkshop 2x4, HaulingPost 3x2, Barrack 3x2, DC 3x3, Rowhouse 1x2, FarmHouse 
 - Set VeryHigh priority on food and water buildings (BOTH construction and workplace)
 - Set haul priority on breeding pods so beavers deliver food there
 - ALWAYS keep 1-2 idle haulers (unassigned beavers) -- breeding pods and construction need haulers to deliver materials
-- If breeding halted, pause non-essential buildings (power wheel, lumber mill, lumberjack) to free haulers
+- If breeding halted, `pause_building` non-essential buildings (power wheel, lumber mill, lumberjack) to free haulers. `unpause_building` gradually as population recovers
 - One action per turn, verify it worked, then next action
 - Goods are hauled by idle beavers. Don't over-employ the colony early
 - Oasis maps have standing water (no flow). Use Large Power Wheel, not Compact Water Wheel
 - When colony is struggling, pause non-essential buildings to free workers for hauling
 - Lumberjacks MUST stay staffed -- no logs means no planks means no construction
+- Use `demolish_building` to remove misplaced or unnecessary buildings
+- Use `set_workhours end_hours:20` to extend work during crises (default is 18)
 - NEVER use the `/api/debug` endpoint during gameplay -- it is for development and testing only, not for cheating or bypassing game mechanics
 
 ## Wellbeing rules
@@ -185,7 +236,8 @@ Wellbeing can go up to 77. Target 15+ for a thriving colony. Use `wellbeing` end
 | Awe | 26 | Wonders: LaborerMonument (+3), FlameOfUnity (+5), TributeToIngenuity (+8), EarthRepopulator (+10) |
 
 **Workflow:**
-1. Run `wellbeing` to see which categories are low
+1. Run `wellbeing` to see which categories are low across the population
+1a. Run `beavers` to see per-beaver unmet needs (each beaver shows `unmet` field with specific needs like Campfire, Detailer)
 2. Pick the category with the biggest gap between current and max
 3. Build/unlock the cheapest building that satisfies that category
 4. Nutrition requires food VARIETY -- not just more kohlrabi, but different food types (need processing buildings)
