@@ -1,6 +1,6 @@
 {
   "refreshIntervalSeconds": 1.0,
   "debugEndpointEnabled": false,
-  "webhooksEnabled": false,
+  "webhooksEnabled": true,
   "httpPort": 8085
 }

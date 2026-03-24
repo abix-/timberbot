@@ -115,7 +115,7 @@ namespace Timberbot
         private float _refreshInterval = 1.0f;   // seconds between cache refreshes (default: 1s)
         private bool _debugEnabled = false;       // enable /api/debug endpoint (default: off)
         private int _httpPort = 8085;             // HTTP server port
-        private bool _webhooksEnabled = false;    // enable webhook push notifications
+        private bool _webhooksEnabled = true;     // enable webhook push notifications (default: on)
 
         // webhooks: fire-and-forget push to registered URLs
         private class WebhookRegistration { public string Id; public string Url; public System.Collections.Generic.HashSet<string> Events; }
@@ -780,11 +780,13 @@ namespace Timberbot
             RemoveFromIndexes(e.Entity);
         }
 
-        // weather + time webhooks (one-liners)
+        // game event webhooks (one-liner per event -- add new events here)
         [OnEvent] public void OnDroughtStart(Timberborn.HazardousWeatherSystem.HazardousWeatherStartedEvent e) => PushEvent("drought.start", new { duration = _weatherService.HazardousWeatherDuration });
         [OnEvent] public void OnDroughtEnd(Timberborn.HazardousWeatherSystem.HazardousWeatherEndedEvent e) => PushEvent("drought.end", null);
         [OnEvent] public void OnDayStart(Timberborn.TimeSystem.DaytimeStartEvent e) => PushEvent("day.start", new { day = _dayNightCycle.DayNumber });
         [OnEvent] public void OnNightStart(Timberborn.TimeSystem.NighttimeStartEvent e) => PushEvent("night.start", new { day = _dayNightCycle.DayNumber });
+        [OnEvent] public void OnBuildingFinished(Timberborn.BlockSystem.EnteredFinishedStateEvent e) { try { var bo = e.BlockObject; var go = bo?.GetComponent<EntityComponent>()?.GameObject; PushEvent("building.finished", new { id = go?.GetInstanceID() ?? 0, name = go != null ? CleanName(go.name) : "" }); } catch { } }
+        [OnEvent] public void OnDistrictChanged(Timberborn.GameDistricts.DistrictCenterRegistryChangedEvent e) => PushEvent("district.changed", null);
 
         // strip Unity/faction suffixes so API returns clean names
         private static string CleanName(string name) =>
