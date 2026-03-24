@@ -7,7 +7,7 @@ version: "3.0"
 
 How to play Timberborn autonomously using `timberbot.py`. Copy this file to `~/.claude/skills/timberbot/SKILL.md` to use as a Claude Code skill.
 
-Play the game using `python timberbot/script/timberbot.py` commands only. NEVER use inline python or pipe through python -c.
+Play the game using `timberbot.py` commands only. NEVER use inline python or pipe through python -c. See [getting-started.md](getting-started.md) for PATH setup.
 
 ## When you don't know something
 
@@ -155,7 +155,7 @@ WoodWorkshop 2x4, HaulingPost 3x2, Barrack 3x2, DC 3x3, Rowhouse 1x2, FarmHouse 
 
 ## General rules
 
-- ALWAYS use `python timberbot/script/timberbot.py <method>` for everything
+- ALWAYS use `timberbot.py <method>` for everything
 - Use `find source:buildings name:X` to look up building IDs
 - Use `visual` before and after every placement
 - Set VeryHigh priority on food and water buildings (BOTH construction and workplace)
