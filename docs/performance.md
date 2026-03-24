@@ -67,12 +67,47 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 
 All reads served on the listener thread from double-buffered read lists. Zero main-thread cost for GET-only bot turns. Writes (POST) still queue to main thread. Thread-unsafe properties (reachability, powered) cached as primitives on main thread -- background thread never calls Unity component properties directly.
 
+## GC pressure audit
+
+`RefreshCachedState` runs every frame (60fps). Allocations here directly cause GC spikes.
+
+### Per-frame allocations (RefreshCachedState)
+
+| Source | Lines | Allocs/frame | Severity | Fix |
+|---|---|---|---|---|
+| `Priority.ToString()` x2 per building | 248-249 | ~1000 strings (500 buildings x 2) | **HIGH** -- 60K strings/sec | static `PriorityNames[]` lookup |
+| `new Dictionary<string, int>()` for nutrients | 277 | ~5 dicts (breeding pods only) | low | reuse persistent dict in struct, clear+repopulate |
+| `CurrentRecipe` string from Manufactory | 268 | ~10 strings | low | cache at add-time, refresh only when changed |
+| `Orientation` from `OrientNames[]` | 226 | 0 (array lookup, no alloc) | none | already good |
+
+### Per-request allocations (only when API called, ~1/minute)
+
+| Source | Count | Severity |
+|---|---|---|
+| `new Dictionary<string, object>` per building | 522 per call | medium -- but only on request |
+| `new List<object>` per endpoint | 1 per call | negligible |
+| `$"string interpolation"` in alerts/summary | ~20 per call | negligible |
+| Trees `sb.ToString()` | 1 x ~320KB | medium but once per request |
+
+### Static values refreshed needlessly every frame
+
+These don't change between frames but are re-read in `RefreshCachedState`:
+
+| Value | Changes when | Should refresh |
+|---|---|---|
+| `EffectRadius` | never | add-time only |
+| `IsGenerator`, `IsConsumer` | never | add-time only |
+| `NominalPowerInput`, `NominalPowerOutput` | never | add-time only |
+| `HasFloodgate`, `HasClutch`, `HasWonder` | never | add-time only |
+| `FloodgateMaxHeight` | never | add-time only |
+
 ## Remaining bottlenecks (ordered by impact)
 
 | # | Bottleneck | Cost | Root cause | Fix |
 |---|---|---|---|---|
-| 1 | **Unity GC spikes** | random 0.5-2s | Unity garbage collector freezes all threads | unavoidable from mod code |
-| 2 | **beavers live reads** | 2.4ms / 65 items | NeedManager iteration still uses GetComponent | cache beaver needs in struct (low priority, only 65 items) |
+| 1 | **Priority.ToString() per frame** | 60K string allocs/sec | enum ToString allocates in .NET | static string[] lookup |
+| 2 | **Unity GC spikes** | random 0.5-2s | Unity garbage collector freezes all threads | reduce alloc pressure (above) |
+| 3 | **beavers live reads** | 2.4ms / 65 items | NeedManager iteration still uses GetComponent | cache beaver needs in struct (low priority, only 65 items) |
 
 ## Resolved bottlenecks
 
