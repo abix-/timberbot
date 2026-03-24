@@ -253,6 +253,17 @@ class Timberbot:
             "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z, "crop": crop
         })
 
+    def find_planting(self, crop, building_id=0, x1=0, y1=0, x2=0, y2=0, z=0):
+        """Find valid planting spots. Use building_id for farmhouse range, or x1/y1/x2/y2/z for area."""
+        return self._post("/api/planting/find", {
+            "crop": crop, "building_id": building_id,
+            "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z
+        })
+
+    def building_range(self, building_id):
+        """Get work range tiles for a building (farmhouse, lumberjack, forester)."""
+        return self._post("/api/building/range", {"id": building_id})
+
     def clear_planting(self, x1, y1, x2, y2, z):
         """Clear planting marks from a rectangular area."""
         return self._post("/api/planting/clear", {

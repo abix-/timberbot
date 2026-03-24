@@ -246,6 +246,18 @@ namespace Timberbot
                             body?.Value<int>("y2") ?? 0,
                             body?.Value<int>("z") ?? 0,
                             body?.Value<string>("crop") ?? "");
+                    case "/api/planting/find":
+                        return _service.FindPlantingSpots(
+                            body?.Value<string>("crop") ?? "",
+                            body?.Value<int>("building_id") ?? 0,
+                            body?.Value<int>("x1") ?? 0,
+                            body?.Value<int>("y1") ?? 0,
+                            body?.Value<int>("x2") ?? 0,
+                            body?.Value<int>("y2") ?? 0,
+                            body?.Value<int>("z") ?? 0);
+                    case "/api/building/range":
+                        return _service.CollectBuildingRange(
+                            body?.Value<int>("id") ?? 0);
                     case "/api/planting/clear":
                         return _service.UnmarkPlanting(
                             body?.Value<int>("x1") ?? 0,

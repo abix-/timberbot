@@ -995,8 +995,8 @@ namespace Timberbot
                 if (tracker != null)
                     entry["wellbeing"] = tracker.Wellbeing;
 
-                // per-need breakdown using NeedManager internals
-                var needs = new Dictionary<string, object>();
+                // per-need breakdown using NeedManager
+                var needs = new List<object>();
                 bool anyCritical = false;
                 try
                 {
@@ -1005,12 +1005,16 @@ namespace Timberbot
                         var id = needSpec.Id;
                         var need = needMgr.GetNeed(id);
                         if (!need.IsActive) continue;
-                        needs[id] = new
+                        bool favorable = need.IsFavorable;
+                        int wb = needMgr.GetNeedWellbeing(id);
+                        needs.Add(new
                         {
-                            points = need.Points,
-                            isCritical = need.IsCritical,
-                            isBelowWarning = need.IsBelowWarningThreshold
-                        };
+                            id,
+                            points = System.Math.Round(need.Points, 2),
+                            wellbeing = wb,
+                            favorable,
+                            critical = need.IsCritical
+                        });
                         if (need.IsBelowWarningThreshold) anyCritical = true;
                     }
                 }
@@ -1042,28 +1046,25 @@ namespace Timberbot
                 {
                     float wb = entry.ContainsKey("wellbeing") ? System.Convert.ToSingle(entry["wellbeing"]) : 0f;
                     string tier = wb >= 16 ? "ecstatic" : wb >= 12 ? "happy" : wb >= 8 ? "okay" : wb >= 4 ? "unhappy" : "miserable";
-                    var criticalNeeds = new List<string>();
-                    if (entry.ContainsKey("needs") && entry["needs"] is Dictionary<string, object> nd)
-                    {
-                        foreach (var kv in nd)
-                        {
-                            if (kv.Value is Dictionary<string, object>) continue; // skip non-flat
-                            // needs are anonymous objects, check via reflection
-                        }
-                    }
-                    // build critical string from raw needs
+                    // build unmet needs list from per-need data
+                    var unmetList = new List<string>();
                     var critList = new List<string>();
                     try
                     {
-                        var needsDict = entry["needs"] as Dictionary<string, object>;
-                        if (needsDict != null)
+                        var needsList = entry["needs"] as List<object>;
+                        if (needsList != null)
                         {
-                            foreach (var kv in needsDict)
+                            foreach (var nv in needsList)
                             {
-                                var nv = kv.Value;
-                                var belowProp = nv.GetType().GetProperty("isBelowWarning");
-                                if (belowProp != null && (bool)belowProp.GetValue(nv))
-                                    critList.Add(kv.Key);
+                                var favProp = nv.GetType().GetProperty("favorable");
+                                var critProp = nv.GetType().GetProperty("critical");
+                                var idProp = nv.GetType().GetProperty("id");
+                                if (idProp == null) continue;
+                                string nid = (string)idProp.GetValue(nv);
+                                if (critProp != null && (bool)critProp.GetValue(nv))
+                                    critList.Add(nid);
+                                else if (favProp != null && !(bool)favProp.GetValue(nv))
+                                    unmetList.Add(nid);
                             }
                         }
                     }
@@ -1075,7 +1076,8 @@ namespace Timberbot
                         ["tier"] = tier,
                         ["isBot"] = entry.GetValueOrDefault("isBot", false),
                         ["workplace"] = entry.GetValueOrDefault("workplace", ""),
-                        ["critical"] = critList.Count > 0 ? string.Join("+", critList) : ""
+                        ["critical"] = critList.Count > 0 ? string.Join("+", critList) : "",
+                        ["unmet"] = unmetList.Count > 0 ? string.Join("+", unmetList) : ""
                     });
                 }
                 else
@@ -1638,6 +1640,49 @@ namespace Timberbot
             };
         }
 
+        // find valid planting spots in an area or within a building's range
+        public object FindPlantingSpots(string crop, int buildingId, int x1, int y1, int x2, int y2, int z)
+        {
+            var spots = new List<object>();
+
+            if (buildingId != 0)
+            {
+                // building mode: get planting coords from building's InRangePlantingCoordinates
+                var ec = FindEntity(buildingId);
+                if (ec == null)
+                    return new { error = "building not found", id = buildingId };
+
+                var inRange = ec.GetComponent<Timberborn.Planting.InRangePlantingCoordinates>();
+                if (inRange == null)
+                    return new { error = "building has no planting range", id = buildingId };
+
+                foreach (var c in inRange.GetCoordinates())
+                {
+                    if (!_plantingAreaValidator.CanPlant(c, crop)) continue;
+                    bool moist = _soilMoistureService.SoilIsMoist(c);
+                    bool planted = _plantingService.IsResourceAt(c);
+                    spots.Add(new { x = c.x, y = c.y, z = c.z, moist, planted });
+                }
+            }
+            else
+            {
+                // area mode: scan rectangle
+                for (int x = Mathf.Min(x1, x2); x <= Mathf.Max(x1, x2); x++)
+                {
+                    for (int y = Mathf.Min(y1, y2); y <= Mathf.Max(y1, y2); y++)
+                    {
+                        var c = new Vector3Int(x, y, z);
+                        if (!_plantingAreaValidator.CanPlant(c, crop)) continue;
+                        bool moist = _soilMoistureService.SoilIsMoist(c);
+                        bool planted = _plantingService.IsResourceAt(c);
+                        spots.Add(new { x, y, z, moist, planted });
+                    }
+                }
+            }
+
+            return new { crop, spots };
+        }
+
         public object UnmarkPlanting(int x1, int y1, int x2, int y2, int z)
         {
             var minX = Mathf.Min(x1, x2);
@@ -1900,6 +1945,40 @@ namespace Timberbot
                 return new { district = districtName, good = goodId, importOption, exportThreshold };
             }
             return new { error = "district not found", district = districtName };
+        }
+
+        // building work range -- same green circle the player sees
+        public object CollectBuildingRange(int buildingId)
+        {
+            var ec = FindEntity(buildingId);
+            if (ec == null)
+                return new { error = "building not found", id = buildingId };
+
+            var terrainRange = ec.GetComponent<Timberborn.BuildingsNavigation.BuildingTerrainRange>();
+            if (terrainRange == null)
+                return new { error = "building has no work range", id = buildingId,
+                             name = CleanName(ec.GameObject.name) };
+
+            var range = terrainRange.GetRange();
+            int moistCount = 0;
+            int minX = int.MaxValue, minY = int.MaxValue, maxX = int.MinValue, maxY = int.MinValue;
+            foreach (var c in range)
+            {
+                if (c.x < minX) minX = c.x;
+                if (c.x > maxX) maxX = c.x;
+                if (c.y < minY) minY = c.y;
+                if (c.y > maxY) maxY = c.y;
+                if (_soilMoistureService.SoilIsMoist(c)) moistCount++;
+            }
+
+            return new
+            {
+                id = buildingId,
+                name = CleanName(ec.GameObject.name),
+                tiles = range.Count,
+                moist = moistCount,
+                bounds = range.Count > 0 ? new { x1 = minX, y1 = minY, x2 = maxX, y2 = maxY } : null
+            };
         }
 
         // PLACEMENT VALIDATION
