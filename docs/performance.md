@@ -119,7 +119,7 @@ All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer,
 |---|---|---|---|---|
 | 1 | **Unity GC spikes** | random 0.5-2s | Unity garbage collector freezes all threads | reduced alloc pressure, but unavoidable from mod |
 | 2 | **sb.ToString() alloc** | 1 string per request (~100-500KB) | StringBuilder must create final string | unavoidable but once per request |
-| 3 | **GetComponent per beaver per refresh** | 65 calls/sec | `c.NeedMgr?.GetComponent<EntityComponent>()?.GameObject` to get position | cache `GameObject` ref at add-time |
+| ~~3~~ | ~~GetComponent per beaver per refresh~~ | ~~65 calls/sec~~ | ~~GetComponent to get GameObject for position~~ | **FIXED** -- cached `Go` field at add-time |
 | 4 | **Building X,Y,Z,Orientation re-read** | 522 wasted reads/sec | coordinates and orientation are immutable after placement | move to add-time (same as EffectRadius etc.) |
 
 ## Resolved bottlenecks

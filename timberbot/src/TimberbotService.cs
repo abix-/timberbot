@@ -378,7 +378,7 @@ namespace Timberbot
                 {
                     if (c.WbTracker != null)
                         c.Wellbeing = c.WbTracker.Wellbeing;
-                    var go = c.NeedMgr?.GetComponent<EntityComponent>()?.GameObject;
+                    var go = c.Go;
                     if (go != null)
                     {
                         var pos = go.transform.position;
@@ -535,6 +535,7 @@ namespace Timberbot
             public int Id;
             public string Name;
             public bool IsBot;
+            public GameObject Go;
             public NeedManager NeedMgr;
             public WellbeingTracker WbTracker;
             public Worker Worker;
@@ -671,6 +672,7 @@ namespace Timberbot
                     Id = ec.GameObject.GetInstanceID(),
                     Name = CleanName(ec.GameObject.name),
                     IsBot = ec.GetComponent<Bot>() != null,
+                    Go = ec.GameObject,
                     NeedMgr = ec.GetComponent<NeedManager>(),
                     WbTracker = ec.GetComponent<WellbeingTracker>(),
                     Worker = ec.GetComponent<Worker>(),
