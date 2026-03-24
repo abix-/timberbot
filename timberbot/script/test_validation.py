@@ -600,7 +600,8 @@ class TestRunner:
                    self.has(result, "placed") and result["placed"] > 0,
                    json.dumps(result)[:100])
 
-        # verify tiles are occupied
+        # verify tiles are occupied (wait for cache refresh)
+        self.wait_for_refresh()
         region = self.bot.map(sx, sy, sx + 3, sy)
         paths = [t for t in region.get("tiles", []) if t.get("occupant") == "Path"]
         self.check("verify paths on map", len(paths) >= 3, f"found {len(paths)} paths")
@@ -651,7 +652,8 @@ class TestRunner:
                            self.has(result3, "stairs") and result3.get("stairs", 0) > 0,
                            json.dumps(result3)[:100])
 
-                # verify stairs on map
+                # verify stairs on map (wait for cache refresh)
+                self.wait_for_refresh()
                 region = self.bot.map(sx1, sy1, sx2, sy2)
                 has_stairs = any("Stairs" in str(t.get("occupant", "")) for t in region.get("tiles", []))
                 self.check("verify stairs on map", has_stairs)
