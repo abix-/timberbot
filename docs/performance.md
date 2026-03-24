@@ -40,7 +40,7 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 | `buildings detail:full` | `_buildingsRead` | 522 | **1.3ms** | **0** | Cached primitives, full dict |
 | `trees` | `_naturalResourcesRead` | 2985 | **2.0ms** | **0** | StringBuilder serialization, no Newtonsoft |
 | `gatherables` | `_naturalResourcesRead` | ~150 | **<1ms** | **0** | Cached primitives |
-| `beavers` | `_beaversRead` | 65 | **2.4ms** | 5-8 | NeedManager still live-read (only 65 items) |
+| `beavers` | `_beaversRead` | 65 | **0.9ms** | **0** | CachedBeaver struct + StringBuilder |
 | `alerts` | `_buildingsRead` | 522 | **1.0ms** | **0** | Cached primitives only |
 | `resources` | district centers | 13 | **0.9ms** | 0 | Listener thread |
 | `weather` | none | 1 | **0.8ms** | 0 | Listener thread |
@@ -102,7 +102,7 @@ All reads served on the listener thread from double-buffered read lists. Zero ma
 | `$"string interpolation"` in alerts/summary | ~20 per call | negligible |
 | `sb.ToString()` for trees/buildings | 1 per request | reusable `_sb` field, pre-allocated 500KB |
 | LINQ `.Select().ToList()` in map stacking | per stacked tile | **cosmetic** | anonymous objects + LINQ alloc, could be simple loop |
-| `new Dictionary` per beaver in Collect* | ~65 per call | expected | response-building, per-request only |
+| ~~`new Dictionary` per beaver~~ | ~~65 per call~~ | **FIXED** -- CachedBeaver + StringBuilder |
 | `new Dictionary` per power network | ~17 per call | expected | response-building, per-request only |
 
 ### Static values (resolved)
@@ -114,8 +114,7 @@ All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer,
 | # | Bottleneck | Cost | Root cause | Fix |
 |---|---|---|---|---|
 | 1 | **Unity GC spikes** | random 0.5-2s | Unity garbage collector freezes all threads | reduced alloc pressure, but unavoidable from mod |
-| 2 | **beavers live reads** | 2.4ms / 65 items | NeedManager iteration still uses GetComponent | cache beaver needs in struct (low priority, only 65 items) |
-| 3 | **sb.ToString() alloc** | 1 string per request (~100-500KB) | StringBuilder must create final string | unavoidable but once per request |
+| 2 | **sb.ToString() alloc** | 1 string per request (~100-500KB) | StringBuilder must create final string | unavoidable but once per request |
 
 ## Resolved bottlenecks
 
@@ -137,6 +136,7 @@ All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer,
 | Buildings Dictionary + Newtonsoft overhead | 8ms for 522 buildings | StringBuilder serialization |
 | Priority.ToString() 60K allocs/sec | per-frame GC pressure | static PriorityNames[] lookup, zero alloc |
 | RefreshCachedState 60x/sec | wasted CPU on main thread | cadenced to 1s (configurable via settings.json) |
+| Beavers live GetComponent from background | 2.4ms + thread safety risk | CachedBeaver struct with needs list, StringBuilder serialization |
 | Double-buffer copy-back race | "Collection was modified" errors | removed copy-back, add/remove updates both buffers |
 | new Dictionary per breeding pod per frame | ~5 allocs/frame | persistent dict, clear+repopulate |
 | Static values refreshed every frame | wasted cycles | moved to add-time only (EffectRadius, IsGenerator, etc.) |

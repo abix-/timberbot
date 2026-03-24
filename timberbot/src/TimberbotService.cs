@@ -717,30 +717,13 @@ namespace Timberbot
                     alertUnreachable++;
             }
 
-            // beavers: wellbeing + critical needs
-
-            foreach (var ec in _beaversRead)
+            // beavers: cached wellbeing + critical needs
+            foreach (var c in _beaversRead)
             {
-                var wb = ec.GetComponent<WellbeingTracker>();
-                if (wb != null)
-                {
-                    totalWellbeing += wb.Wellbeing;
-                    beaverCount++;
-                    if (wb.Wellbeing < 4) miserable++;
-                    try
-                    {
-                        var needMgr = ec.GetComponent<NeedManager>();
-                        if (needMgr != null)
-                        {
-                            foreach (var needSpec in needMgr.GetNeeds())
-                            {
-                                var need = needMgr.GetNeed(needSpec.Id);
-                                if (need.IsActive && need.IsBelowWarningThreshold) { critical++; break; }
-                            }
-                        }
-                    }
-                    catch { }
-                }
+                totalWellbeing += c.Wellbeing;
+                beaverCount++;
+                if (c.Wellbeing < 4) miserable++;
+                if (c.AnyCritical) critical++;
             }
             // count adults only (children can't work, shouldn't count as idle haulers)
             int totalAdults = 0;
@@ -1287,12 +1270,11 @@ namespace Timberbot
             return results;
         }
 
-        // PERF: iterates _beaversRead instead of all entities.
+        // PERF: reads cached beaver data only. Zero GetComponent from background thread.
+        private readonly System.Text.StringBuilder _sbBeavers = new System.Text.StringBuilder(50000);
+
         public object CollectBeavers(string format = "toon", string detail = "basic")
         {
-            // detail=basic (default): active needs only, compact
-            // detail=full: all needs with group category
-            // detail=id:<id>: single beaver/bot by ID, all needs with group
             int? singleId = null;
             if (detail != null && detail.StartsWith("id:"))
             {
@@ -1301,192 +1283,88 @@ namespace Timberbot
             }
             bool fullDetail = detail == "full" || singleId.HasValue;
 
-
-            var results = new List<object>();
-            foreach (var ec in _beaversRead)
+            var sb = _sbBeavers;
+            sb.Clear();
+            sb.Append('[');
+            bool first = true;
+            foreach (var c in _beaversRead)
             {
-                var needMgr = ec.GetComponent<NeedManager>();
-                if (needMgr == null) continue;
-
-                var go = ec.GameObject;
-                if (singleId.HasValue && go.GetInstanceID() != singleId.Value)
+                if (singleId.HasValue && c.Id != singleId.Value)
                     continue;
+                if (!first) sb.Append(',');
+                first = false;
 
-                var entry = new Dictionary<string, object>
+                sb.Append("{\"id\":"); sb.Append(c.Id);
+                sb.Append(",\"name\":\""); sb.Append(c.Name); sb.Append('"');
+                sb.Append(",\"x\":"); sb.Append(c.X);
+                sb.Append(",\"y\":"); sb.Append(c.Y);
+                sb.Append(",\"z\":"); sb.Append(c.Z);
+                sb.Append(",\"wellbeing\":"); sb.Append(c.Wellbeing.ToString("F1"));
+                sb.Append(",\"isBot\":"); sb.Append(c.IsBot ? "true" : "false");
+
+                if (!fullDetail)
                 {
-                    ["id"] = go.GetInstanceID(),
-                    ["name"] = CleanName(go.name)
-                };
-
-                // grid position from world transform
-                var pos = go.transform.position;
-                entry["x"] = Mathf.FloorToInt(pos.x);
-                entry["y"] = Mathf.FloorToInt(pos.z);
-                entry["z"] = Mathf.FloorToInt(pos.y);
-
-                // overall wellbeing
-                var tracker = ec.GetComponent<WellbeingTracker>();
-                if (tracker != null)
-                    entry["wellbeing"] = tracker.Wellbeing;
-
-                // per-need breakdown using NeedManager
-                var needs = new List<object>();
-                bool anyCritical = false;
-                bool isBot = ec.GetComponent<Bot>() != null;
-                try
-                {
-                    foreach (var needSpec in needMgr.GetNeeds())
-                    {
-                        var id = needSpec.Id;
-                        var need = needMgr.GetNeed(id);
-                        // full detail or bot: show all needs. basic: active only
-                        if (!fullDetail && !isBot && !need.IsActive) continue;
-                        bool favorable = need.IsFavorable;
-                        int wb = needMgr.GetNeedWellbeing(id);
-                        var needEntry = new Dictionary<string, object>
-                        {
-                            ["id"] = id,
-                            ["points"] = System.Math.Round(need.Points, 2),
-                            ["wellbeing"] = wb,
-                            ["favorable"] = favorable,
-                            ["critical"] = need.IsCritical
-                        };
-                        if (fullDetail)
-                            needEntry["group"] = needSpec.NeedGroupId ?? "";
-                        needs.Add(needEntry);
-                        if (need.IsBelowWarningThreshold) anyCritical = true;
-                    }
-                }
-                catch { }
-                entry["needs"] = needs;
-                entry["anyCritical"] = anyCritical;
-
-                // life progress
-                var life = ec.GetComponent<LifeProgressor>();
-                if (life != null)
-                    entry["lifeProgress"] = life.LifeProgress;
-
-                // carried goods
-                try
-                {
-                    var carrier = ec.GetComponent<GoodCarrier>();
-                    if (carrier != null)
-                    {
-                        if (carrier.IsCarrying)
-                        {
-                            var ga = carrier.CarriedGoods;
-                            entry["carrying"] = ga.GoodId;
-                            entry["carryAmount"] = ga.Amount;
-                        }
-                        if (fullDetail)
-                        {
-                            entry["liftingCapacity"] = carrier.LiftingCapacity;
-                            if (carrier.IsMovementSlowed)
-                                entry["overburdened"] = true;
-                        }
-                    }
-                }
-                catch { }
-
-                // bot durability (0 = new, 1 = fully deteriorated/dead)
-                try
-                {
-                    var deteriorable = ec.GetComponent<Deteriorable>();
-                    if (deteriorable != null)
-                        entry["deterioration"] = System.Math.Round(deteriorable.DeteriorationProgress, 3);
-                }
-                catch { }
-
-                var worker = ec.GetComponent<Worker>();
-                if (worker != null && worker.Workplace != null)
-                    entry["workplace"] = CleanName(worker.Workplace.GameObject.name);
-
-                var bot = ec.GetComponent<Bot>();
-                entry["isBot"] = bot != null;
-
-                // beaver activity from status system (same as building alerts)
-                var statusSubject = ec.GetComponent<StatusSubject>();
-                if (statusSubject != null)
-                {
-                    try
-                    {
-                        var actList = new List<string>();
-                        foreach (var status in statusSubject.ActiveStatuses)
-                        {
-                            var desc = status.StatusDescription;
-                            if (!string.IsNullOrEmpty(desc) && desc != "Normal")
-                                actList.Add(desc);
-                        }
-                        if (actList.Count > 0)
-                            entry["activity"] = string.Join(", ", actList);
-                    }
-                    catch { }
-                }
-
-                var contaminable = ec.GetComponent<Contaminable>();
-                if (contaminable != null)
-                    entry["contaminated"] = contaminable.IsContaminated;
-
-                var dweller = ec.GetComponent<Dweller>();
-                if (dweller != null)
-                    entry["hasHome"] = dweller.HasHome;
-
-                var citizen = ec.GetComponent<Timberborn.GameDistricts.Citizen>();
-                if (citizen != null)
-                {
-                    try
-                    {
-                        var dc = citizen.AssignedDistrict;
-                        if (dc != null)
-                            entry["district"] = dc.DistrictName;
-                    }
-                    catch { }
-                }
-
-                if (format == "toon" && !fullDetail)
-                {
-                    float wb = entry.ContainsKey("wellbeing") ? System.Convert.ToSingle(entry["wellbeing"]) : 0f;
+                    // TOON: compact with tier, critical, unmet
+                    float wb = c.Wellbeing;
                     string tier = wb >= 16 ? "ecstatic" : wb >= 12 ? "happy" : wb >= 8 ? "okay" : wb >= 4 ? "unhappy" : "miserable";
-                    // build unmet needs list from per-need data
-                    var unmetList = new List<string>();
-                    var critList = new List<string>();
-                    try
+                    sb.Append(",\"tier\":\""); sb.Append(tier); sb.Append('"');
+                    sb.Append(",\"workplace\":\""); sb.Append(c.Workplace ?? ""); sb.Append('"');
+
+                    // build critical + unmet from cached needs
+                    sb.Append(",\"critical\":\"");
+                    bool cfirst = true;
+                    if (c.Needs != null)
                     {
-                        var needsList = entry["needs"] as List<object>;
-                        if (needsList != null)
+                        foreach (var n in c.Needs)
                         {
-                            foreach (var nv in needsList)
-                            {
-                                var nd = nv as Dictionary<string, object>;
-                                if (nd == null) continue;
-                                string nid = nd.GetValueOrDefault("id", "") as string ?? "";
-                                bool crit = nd.ContainsKey("critical") && (bool)nd["critical"];
-                                bool fav = nd.ContainsKey("favorable") && (bool)nd["favorable"];
-                                if (crit)
-                                    critList.Add(nid);
-                                else if (!fav)
-                                    unmetList.Add(nid);
-                            }
+                            if (n.Critical) { if (!cfirst) sb.Append('+'); cfirst = false; sb.Append(n.Id); }
                         }
                     }
-                    catch { }
-                    results.Add(new Dictionary<string, object>
+                    sb.Append("\",\"unmet\":\"");
+                    bool ufirst = true;
+                    if (c.Needs != null)
                     {
-                        ["id"] = entry["id"], ["name"] = entry.GetValueOrDefault("name", ""),
-                        ["wellbeing"] = System.Math.Round(wb, 2),
-                        ["tier"] = tier,
-                        ["isBot"] = entry.GetValueOrDefault("isBot", false),
-                        ["workplace"] = entry.GetValueOrDefault("workplace", ""),
-                        ["critical"] = critList.Count > 0 ? string.Join("+", critList) : "",
-                        ["unmet"] = unmetList.Count > 0 ? string.Join("+", unmetList) : ""
-                    });
+                        foreach (var n in c.Needs)
+                        {
+                            if (!n.Favorable && !n.Critical && n.Active) { if (!ufirst) sb.Append('+'); ufirst = false; sb.Append(n.Id); }
+                        }
+                    }
+                    sb.Append("\"}");
+                    continue;
                 }
-                else
+
+                // full detail
+                sb.Append(",\"anyCritical\":"); sb.Append(c.AnyCritical ? "true" : "false");
+                if (c.Workplace != null) { sb.Append(",\"workplace\":\""); sb.Append(c.Workplace); sb.Append('"'); }
+                if (c.District != null) { sb.Append(",\"district\":\""); sb.Append(c.District); sb.Append('"'); }
+                sb.Append(",\"hasHome\":"); sb.Append(c.HasHome ? "true" : "false");
+                sb.Append(",\"contaminated\":"); sb.Append(c.Contaminated ? "true" : "false");
+                if (c.Life != null) { sb.Append(",\"lifeProgress\":"); sb.Append(c.LifeProgress.ToString("F2")); }
+                if (c.Deteriorable != null) { sb.Append(",\"deterioration\":"); sb.Append(c.DeteriorationProgress.ToString("F3")); }
+                if (c.IsCarrying) { sb.Append(",\"carrying\":\""); sb.Append(c.CarryingGood); sb.Append("\",\"carryAmount\":"); sb.Append(c.CarryAmount); }
+
+                // needs array
+                sb.Append(",\"needs\":[");
+                if (c.Needs != null)
                 {
-                    results.Add(entry);
+                    bool nfirst = true;
+                    foreach (var n in c.Needs)
+                    {
+                        if (!fullDetail && !c.IsBot && !n.Active) continue;
+                        if (!nfirst) sb.Append(',');
+                        nfirst = false;
+                        sb.Append("{\"id\":\""); sb.Append(n.Id);
+                        sb.Append("\",\"points\":"); sb.Append(n.Points.ToString("F2"));
+                        sb.Append(",\"wellbeing\":"); sb.Append(n.Wellbeing);
+                        sb.Append(",\"favorable\":"); sb.Append(n.Favorable ? "true" : "false");
+                        sb.Append(",\"critical\":"); sb.Append(n.Critical ? "true" : "false");
+                        sb.Append(",\"group\":\""); sb.Append(n.Group); sb.Append("\"}");
+                    }
                 }
+                sb.Append("]}");
             }
-            return results;
+            sb.Append(']');
+            return sb.ToString();
         }
 
         public object CollectPowerNetworks()
@@ -1730,7 +1608,12 @@ namespace Timberbot
                         if (occList.Count == 1)
                             tile["occupant"] = occList[0].name;
                         else
-                            tile["occupants"] = occList.Select(o => new { name = o.name, z = o.z }).ToList();
+                        {
+                            var stacked = new List<object>(occList.Count);
+                            foreach (var o in occList)
+                                stacked.Add(new Dictionary<string, object> { ["name"] = o.name, ["z"] = o.z });
+                            tile["occupants"] = stacked;
+                        }
                     }
                     if (isEntrance) tile["entrance"] = true;
                     if (isSeedling) tile["seedling"] = true;
@@ -2268,34 +2151,37 @@ namespace Timberbot
                 var groupTotals = new Dictionary<string, float>();    // current wellbeing sum per group
                 var groupMaxTotals = new Dictionary<string, float>(); // max wellbeing sum per group
 
-                foreach (var ec in _beaversRead)
+                // build need->group lookup from specs
+                var needToGroup = new Dictionary<string, string>();
+                foreach (var kvp in groupNeeds)
+                    foreach (var ns in kvp.Value)
+                        needToGroup[ns.Id] = kvp.Key;
+
+                foreach (var c in _beaversRead)
                 {
-                    var needMgr = ec.GetComponent<NeedManager>();
-                    if (needMgr == null) continue;
-                    var wb = ec.GetComponent<WellbeingTracker>();
-                    if (wb == null) continue;
+                    if (c.Needs == null) continue;
                     beaverCount++;
 
-                    foreach (var kvp in groupNeeds)
+                    // accumulate from cached needs
+                    foreach (var n in c.Needs)
                     {
-                        var groupId = kvp.Key;
-                        float groupWb = 0f;
-                        float groupMax = 0f;
-                        foreach (var ns in kvp.Value)
-                        {
-                            if (needMgr.HasNeed(ns.Id))
-                            {
-                                var need = needMgr.GetNeedWellbeing(ns.Id);
-                                groupWb += need;
-                            }
-                            groupMax += ns.FavorableWellbeing;
-                        }
+                        if (!needToGroup.TryGetValue(n.Id, out var groupId)) continue;
                         if (!groupTotals.ContainsKey(groupId))
                         {
                             groupTotals[groupId] = 0f;
                             groupMaxTotals[groupId] = 0f;
                         }
-                        groupTotals[groupId] += groupWb;
+                        groupTotals[groupId] += n.Wellbeing;
+                    }
+                    // max totals (from specs, same per beaver)
+                    foreach (var kvp in groupNeeds)
+                    {
+                        var groupId = kvp.Key;
+                        float groupMax = 0f;
+                        foreach (var ns in kvp.Value)
+                            groupMax += ns.FavorableWellbeing;
+                        if (!groupMaxTotals.ContainsKey(groupId))
+                            groupMaxTotals[groupId] = 0f;
                         groupMaxTotals[groupId] += groupMax;
                     }
                 }
