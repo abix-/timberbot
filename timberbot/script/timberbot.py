@@ -46,8 +46,11 @@ class Timberbot:
         self.s = requests.Session()
         self.s.headers["Accept"] = "application/json"
 
-    def _get(self, path):
-        r = self.s.get(f"{self.url}{path}", params={"format": self._format}, timeout=5)
+    def _get(self, path, params=None):
+        p = {"format": self._format}
+        if params:
+            p.update(params)
+        r = self.s.get(f"{self.url}{path}", params=p, timeout=5)
         r.raise_for_status()
         return r.json()
 
@@ -91,11 +94,15 @@ class Timberbot:
         """Districts: [{name, population: {adults, children, bots}, resources: {...}}]."""
         return self._get("/api/districts")
 
-    def buildings(self, limit=0, offset=0):
-        """All buildings with coords, workers, reachability, and power status."""
-        data = self._get("/api/buildings")
-        if offset: data = data[offset:]
-        if limit: data = data[:limit]
+    def buildings(self, limit=0, offset=0, detail="basic"):
+        """All buildings. detail: basic (compact), full (all fields), id:<id> (single building)."""
+        params = {}
+        if detail != "basic":
+            params["detail"] = detail
+        data = self._get("/api/buildings", params=params)
+        if isinstance(data, list):
+            if offset: data = data[offset:]
+            if limit: data = data[:limit]
         return data
 
     def trees(self, limit=0, offset=0):
@@ -112,9 +119,9 @@ class Timberbot:
         if limit: data = data[:limit]
         return data
 
-    def beavers(self, limit=0, offset=0):
-        """All beavers with wellbeing and needs: [{id, name, wellbeing, needs, anyCritical}]."""
-        data = self._get("/api/beavers")
+    def beavers(self, limit=0, offset=0, detail="basic"):
+        """All beavers with wellbeing and needs. detail:full shows all needs with group category."""
+        data = self._get(f"/api/beavers?detail={detail}")
         if offset: data = data[offset:]
         if limit: data = data[:limit]
         return data

@@ -2,7 +2,7 @@
 
 **Full read/write HTTP API for controlling Timberborn with AI.**
 
-Timberbot gives Claude, ChatGPT, or your own scripts complete access to your beaver colony over HTTP -- read game state, place buildings, manage workers, plant crops, and keep your beavers alive.
+Timberbot API gives Claude, ChatGPT, or your own scripts complete access to your beaver colony over HTTP -- read game state, place buildings, manage workers, plant crops, and keep your beavers alive.
 
 ---
 

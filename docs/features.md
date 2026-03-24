@@ -32,12 +32,18 @@
 | [Breeding](api-reference.md#get-apibuildings) | Breeding pod nutrient status | Yes |
 | [Beaver activity](api-reference.md#get-apibeavers) | Current status from game's status system | Yes |
 | [Clutch](api-reference.md#post-apibuildingclutch) | Engage/disengage clutch on buildings | Yes |
-| Bot condition/fuel | Bot needs via beavers endpoint | In-Progress |
+| Bot condition/fuel | Bot needs (Energy, ControlTower, Grease) via beavers endpoint | Yes |
+| Beaver position | Per-beaver x,y,z coordinates on the map | Planned |
+| Water depth | Depth float per tile (not just boolean) for drought planning | Planned |
+| District per beaver | Which district each beaver/bot belongs to | Planned |
+| Badwater tiles | Contamination level per map tile | Planned |
+| Carried goods | What each beaver is hauling in their backpack | Planned |
+| Power network graph | Connected building groups with total supply vs demand | Planned |
 | Resource projection | Projected days of wood, planks, gears | Planned |
 
 ## By design
 
-| System | Why not in Timberbot |
+| System | Why not in Timberbot API |
 |---|---|
 | Automation | Use Timberborn's built-in HTTP API (port 8080) |
 | Logic gates | In-game only |

@@ -617,11 +617,23 @@ Berry bushes and other gatherable resources.
 
 ### GET /api/beavers
 
-All beavers with wellbeing and needs.
+All beavers and bots with wellbeing and needs.
 
 **CLI:** `python timberbot.py beavers` | `python timberbot.py --json beavers`
 
 Pagination available in Python client only: `bot.beavers(limit=10)`
+
+#### Detail modes
+
+| Mode | Description |
+|------|-------------|
+| `detail=basic` (default) | Active needs only, compact |
+| `detail=full` | All needs (active + inactive) with `group` category field |
+| `detail=id:<id>` | Single beaver/bot by ID, all needs with `group` field |
+
+**CLI:** `python timberbot.py beavers detail:full` | `python timberbot.py beavers detail:id:-12345`
+
+Bots always show all 3 needs (Energy, ControlTower, Grease) regardless of detail mode.
 
 #### Response (format=json)
 
@@ -636,6 +648,7 @@ Pagination available in Python client only: `bot.beavers(limit=10)`
 | needs[].wellbeing | int | Wellbeing contribution from this need |
 | needs[].favorable | bool | Need is satisfied |
 | needs[].critical | bool | Need is in critical state |
+| needs[].group | string | Need category: BasicNeeds, Fun, Nutrition, Aesthetics, Awe, SocialLife, Boosts (detail=full only) |
 | anyCritical | bool | Any need below warning threshold |
 | lifeProgress | float | Age progress (0.0-1.0) |
 | workplace | string | Assigned workplace name (empty if none) |
@@ -644,16 +657,18 @@ Pagination available in Python client only: `bot.beavers(limit=10)`
 | activity | string | Current status text (e.g. "Waiting for nutrients", "No available workers") |
 | hasHome | bool | Has assigned dwelling |
 
+**Bot needs:** Bots always show all 3 needs regardless of active state: `Energy` (charge from ChargingStation, drains 0.58/day), `ControlTower` (boost from ControlTower building, drains 72/day), `Grease` (from GreaseFactory, drains 0.2/day). Points range 0-1.
+
 ```json
 [
   {
     "id": 78900,
     "name": "Bucky",
     "wellbeing": 14.2,
-    "needs": {
-      "Hunger": {"points": 0.8, "isCritical": false, "isBelowWarning": false},
-      "Thirst": {"points": 0.6, "isCritical": false, "isBelowWarning": false}
-    },
+    "needs": [
+      {"id": "Hunger", "points": 0.8, "wellbeing": 1, "favorable": true, "critical": false},
+      {"id": "Thirst", "points": 0.6, "wellbeing": 1, "favorable": true, "critical": false}
+    ],
     "anyCritical": false,
     "lifeProgress": 0.35,
     "workplace": "LumberjackFlag",

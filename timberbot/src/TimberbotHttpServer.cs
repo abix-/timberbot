@@ -28,6 +28,7 @@ namespace Timberbot
             public string Method;
             public JObject Body;
             public string Format;
+            public string Detail;
         }
 
         public TimberbotHttpServer(int port, TimberbotService service)
@@ -67,7 +68,7 @@ namespace Timberbot
                 processed++;
                 try
                 {
-                    var data = RouteRequest(req.Route, req.Method, req.Body, req.Format);
+                    var data = RouteRequest(req.Route, req.Method, req.Body, req.Format, req.Detail);
                     Respond(req.Context, 200, data);
                 }
                 catch (Exception ex)
@@ -135,6 +136,7 @@ namespace Timberbot
 
                 // extract format from query string or body
                 var format = ctx.Request.QueryString["format"] ?? body?.Value<string>("format") ?? "toon";
+                var detail = ctx.Request.QueryString["detail"] ?? body?.Value<string>("detail") ?? "basic";
 
                 _pending.Enqueue(new PendingRequest
                 {
@@ -142,12 +144,13 @@ namespace Timberbot
                     Route = path,
                     Method = method,
                     Body = body,
-                    Format = format
+                    Format = format,
+                    Detail = detail
                 });
             }
         }
 
-        private object RouteRequest(string path, string method, JObject body, string format = "toon")
+        private object RouteRequest(string path, string method, JObject body, string format = "toon", string detail = "basic")
         {
             // GET endpoints (read)
             if (method == "GET")
@@ -171,13 +174,13 @@ namespace Timberbot
                     case "/api/districts":
                         return _service.CollectDistricts(format);
                     case "/api/buildings":
-                        return _service.CollectBuildings(format);
+                        return _service.CollectBuildings(format, detail);
                     case "/api/trees":
                         return _service.CollectTrees();
                     case "/api/gatherables":
                         return _service.CollectGatherables();
                     case "/api/beavers":
-                        return _service.CollectBeavers(format);
+                        return _service.CollectBeavers(format, detail);
                     case "/api/distribution":
                         return _service.CollectDistribution();
                     case "/api/science":

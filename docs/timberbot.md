@@ -1,9 +1,9 @@
 ---
 name: timberbot
 description: Play Timberborn autonomously via timberbot.py. Keep beavers alive, wellbeing high, needs met.
-version: "4.4"
+version: "4.5"
 ---
-# Timberbot - Game Reference
+# Timberbot API - Game Reference
 
 Play the game using `timberbot.py` commands only. NEVER use inline python or pipe through python -c. See [getting-started.md](getting-started.md) for PATH setup.
 
@@ -26,9 +26,9 @@ Beavers die if food or water hits 0.
 |---|---|
 | **Read state** | |
 | `summary` | Colony snapshot: population, resources, weather, alerts, wellbeing |
-| `beavers` | Per-beaver wellbeing, unmet needs, workplace, activity status |
+| `beavers` | Per-beaver wellbeing and active needs. `detail:full` for all needs with group category, `detail:id:<id>` for single beaver/bot |
 | `wellbeing` | Wellbeing by category with current/max |
-| `buildings` | All buildings with workers, power, priority, inventory, recipes, breeding status, clutch state |
+| `buildings` | All buildings (compact). `detail:full` for all fields (effectRadius, productionProgress, readyToProduce, inventory, etc), `detail:id:<id>` for single building |
 | `alerts` | Unstaffed, unpowered, unreachable buildings |
 | `trees` | All cuttable trees with growth and marking status |
 | `tree_clusters` | Densest grown tree clusters |
@@ -160,6 +160,6 @@ Max wellbeing: 77. Each beaver's `beavers` entry shows unmet needs by name.
 | Fun | 17 | Scratcher (+1), SwimmingPool (+1), ExercisePlaza (+3), MudBath (+3), WindTunnel (+3), Motivatorium (+5) |
 | Nutrition | 17 | Each unique food type: Kohlrabi (+1), Coffee (+3), FermentedSoybean (+2), CornRation (+2), etc. |
 | Aesthetics | 10 | Lantern (+1), Brazier (+1), Shrub (+1), Roof (+1), BeaverBust (+1), BeaverStatue (+2), Bell (+1), DecorativeClock (+2) |
-| Awe | 26 | LaborerMonument (+3), FlameOfUnity (+5), TributeToIngenuity (+8), EarthRepopulator (+10) |
+| Awe | 26 | LaborerMonument (+3, 7-tile radius), FlameOfUnity (+5), TributeToIngenuity (+8), EarthRepopulator (+10) |
 
 Nutrition requires food VARIETY -- different food types, not more of the same. Each type needs its own production chain. Wellbeing drops fast during crises (-12 possible) and recovers slowly.

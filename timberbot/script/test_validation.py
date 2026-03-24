@@ -98,6 +98,13 @@ class TestRunner:
         self.test_building_inventory()
         self.test_building_recipes()
         self.test_clutch()
+        self.test_bot_data()
+        self.test_bot_buildings()
+        self.test_bot_in_summary()
+        self.test_bot_toon_format()
+        self.test_beaver_detail()
+        self.test_building_detail()
+        self.test_performance()
 
         summary = f"\n=== {self.passed} passed, {self.failed} failed"
         if self.skipped:
@@ -1135,6 +1142,295 @@ class TestRunner:
         self.check("re-engage clutch",
                    self.has(result2, "engaged") and result2["engaged"] == True,
                    json.dumps(result2)[:100])
+
+
+    def test_beaver_detail(self):
+        """Test detail mode shows all needs with group categories."""
+        # basic mode
+        basic = self.bot._get("/api/beavers?format=json")
+        beavers_only = [b for b in basic if not b.get("isBot")]
+        if not beavers_only:
+            self.skip("beaver_detail", "no beavers")
+            return
+        beaver = beavers_only[0]
+        basic_needs = len(beaver.get("needs", []))
+
+        # full detail mode
+        full = self.bot._get("/api/beavers?format=json&detail=full")
+        beaver_full = [b for b in full if b["id"] == beaver["id"]][0]
+        full_needs = len(beaver_full.get("needs", []))
+        self.check("full has more needs than basic",
+                   full_needs >= basic_needs,
+                   f"full={full_needs} basic={basic_needs}")
+
+        # check group field on full detail needs
+        groups_seen = set()
+        for n in beaver_full.get("needs", []):
+            has_group = "group" in n
+            self.check(f"need {n['id']} has group", has_group,
+                       f"keys: {list(n.keys())}")
+            if has_group:
+                groups_seen.add(n["group"])
+        self.check("multiple need groups found", len(groups_seen) > 1,
+                   f"groups: {groups_seen}")
+
+        # single beaver by id
+        single = self.bot._get(f"/api/beavers?format=json&detail=id:{beaver['id']}")
+        self.check("single beaver returns 1 result", len(single) == 1,
+                   f"got {len(single)}")
+        self.check("single has all needs",
+                   len(single[0].get("needs", [])) == full_needs,
+                   f"single={len(single[0].get('needs', []))} full={full_needs}")
+
+        # basic mode should NOT have group field
+        for n in beaver.get("needs", []):
+            self.check(f"basic need {n['id']} no group", "group" not in n)
+
+    def test_bot_data(self):
+        """Test bot-specific fields in beavers endpoint."""
+        beavers = self.bot._get("/api/beavers?format=json")
+        bots = [b for b in beavers if b.get("isBot")]
+        if not bots:
+            self.skip("bot_data", "no bots in colony")
+            return
+        bot = bots[0]
+        self.check("bot has isBot=true", bot["isBot"] == True)
+        self.check("bot has needs", "needs" in bot and len(bot["needs"]) > 0)
+
+        # bot should have Energy, ControlTower, and Grease needs (always, even if inactive)
+        need_ids = {n["id"] for n in bot.get("needs", [])}
+        self.check("bot has Energy need", "Energy" in need_ids, f"got: {need_ids}")
+        self.check("bot has ControlTower need", "ControlTower" in need_ids, f"got: {need_ids}")
+        self.check("bot has Grease need", "Grease" in need_ids, f"got: {need_ids}")
+
+        # each need should have points between 0 and 1
+        for need in bot.get("needs", []):
+            pts = need.get("points", -1)
+            self.check(f"bot need {need['id']} points in range",
+                       0 <= pts <= 1, f"points={pts}")
+
+    def test_bot_buildings(self):
+        """Test bot production buildings have correct detail fields."""
+        buildings = self.bot.buildings()
+
+        # BotPartFactory
+        factories = [b for b in buildings if b.get("name") == "BotPartFactory"]
+        if factories:
+            fid = factories[0]["id"]
+            detail = self.bot._get(f"/api/buildings?format=json&detail=id:{fid}")
+            if detail:
+                d = detail[0]
+                self.check("factory has recipes", "recipes" in d)
+                self.check("factory has productionProgress", "productionProgress" in d)
+                self.check("factory has inventory", "inventory" in d)
+                self.check("factory has powered field", "powered" in d,
+                           f"keys={list(d.keys())[:10]}")
+        else:
+            self.skip("bot_factory", "no BotPartFactory")
+
+        # BotAssembler
+        assemblers = [b for b in buildings if b.get("name") == "BotAssembler"]
+        if assemblers:
+            aid = assemblers[0]["id"]
+            detail = self.bot._get(f"/api/buildings?format=json&detail=id:{aid}")
+            if detail:
+                d = detail[0]
+                self.check("assembler has recipes", "recipes" in d)
+                self.check("assembler recipe is Bot.IronTeeth",
+                           d.get("currentRecipe") == "Bot.IronTeeth",
+                           f"recipe={d.get('currentRecipe')}")
+                self.check("assembler has productionProgress",
+                           "productionProgress" in d)
+        else:
+            self.skip("bot_assembler", "no BotAssembler")
+
+        # ChargingStation
+        chargers = [b for b in buildings if b.get("name") == "ChargingStation"]
+        if chargers:
+            cid = chargers[0]["id"]
+            detail = self.bot._get(f"/api/buildings?format=json&detail=id:{cid}")
+            if detail:
+                self.check("charger has powered field", "powered" in detail[0])
+        else:
+            self.skip("charging_station", "no ChargingStation")
+
+    def test_bot_in_summary(self):
+        """Verify bots appear in summary and population counts."""
+        summary = self.bot.summary()
+        self.check("summary has bots field", "bots" in summary,
+                   f"keys: {list(summary.keys())[:20]}")
+
+        pop = self.bot.population()
+        if pop:
+            self.check("population has bots", "bots" in pop[0],
+                       f"keys: {list(pop[0].keys())}")
+
+    def test_bot_toon_format(self):
+        """Verify bot shows correctly in TOON beavers output."""
+        beavers = self.bot.beavers()
+        bots = [b for b in beavers if b.get("isBot")]
+        if bots:
+            bot = bots[0]
+            self.check("toon bot has isBot", "isBot" in bot)
+            self.check("toon bot isBot=True", bot["isBot"] == True)
+            self.check("toon bot has name", "name" in bot and "Bot" in str(bot["name"]))
+        else:
+            self.skip("bot_toon", "no bots in colony")
+
+
+    def test_building_detail(self):
+        print("\n=== building detail ===\n")
+
+        # basic (default) should return compact rows
+        basic = self.bot.buildings()
+        self.check("basic returns list", isinstance(basic, list) and len(basic) > 0)
+        if basic:
+            first = basic[0]
+            self.check("basic has id", "id" in first)
+            self.check("basic has name", "name" in first)
+            # basic should NOT have inventory or effectRadius
+            self.check("basic omits inventory", "inventory" not in first)
+
+        # full detail
+        full = self.bot.buildings(detail="full")
+        self.check("full returns list", isinstance(full, list) and len(full) > 0)
+        if full:
+            # find a manufactory to check productionProgress
+            manufactory = None
+            for b in full:
+                if "productionProgress" in b:
+                    manufactory = b
+                    break
+            if manufactory:
+                self.check("full has productionProgress", "productionProgress" in manufactory)
+                self.check("full has readyToProduce", "readyToProduce" in manufactory)
+            else:
+                self.skip("manufactory fields", "no active manufactory")
+
+            # find a monument to check effectRadius
+            monument = None
+            for b in full:
+                if "effectRadius" in b:
+                    monument = b
+                    break
+            if monument:
+                self.check("full has effectRadius", monument["effectRadius"] > 0)
+            else:
+                self.skip("effectRadius", "no ranged effect building")
+
+        # single building by id
+        if basic:
+            bid = basic[0]["id"]
+            single = self.bot.buildings(detail=f"id:{bid}")
+            self.check("single returns list", isinstance(single, list))
+            self.check("single has 1 result", len(single) == 1)
+            if single:
+                self.check("single has full fields", "finished" in single[0])
+
+    def test_performance(self):
+        print("\n=== performance ===\n")
+
+        # time each major endpoint over multiple iterations
+        endpoints = [
+            ("ping", lambda: self.bot.ping()),
+            ("summary", lambda: self.bot.summary()),
+            ("buildings", lambda: self.bot.buildings()),
+            ("buildings detail:full", lambda: self.bot.buildings(detail="full")),
+            ("trees", lambda: self.bot.trees()),
+            ("beavers", lambda: self.bot.beavers()),
+            ("alerts", lambda: self.bot.alerts()),
+            ("resources", lambda: self.bot.resources()),
+            ("weather", lambda: self.bot.weather()),
+            ("prefabs", lambda: self.bot.prefabs()),
+        ]
+
+        iterations = 5
+        max_latency_ms = 500  # fail if any single call > 500ms
+
+        print(f"  timing {len(endpoints)} endpoints x {iterations} iterations\n")
+        print(f"  {'endpoint':<25} {'avg ms':>8} {'min ms':>8} {'max ms':>8} {'items':>6}")
+        print(f"  {'-'*25} {'-'*8} {'-'*8} {'-'*8} {'-'*6}")
+
+        all_ok = True
+        for name, fn in endpoints:
+            times = []
+            result = None
+            for _ in range(iterations):
+                t0 = time.perf_counter()
+                result = fn()
+                t1 = time.perf_counter()
+                times.append((t1 - t0) * 1000)
+
+            avg = sum(times) / len(times)
+            mn = min(times)
+            mx = max(times)
+            count = len(result) if isinstance(result, list) else 1
+
+            print(f"  {name:<25} {avg:>8.1f} {mn:>8.1f} {mx:>8.1f} {count:>6}")
+
+            if mx > max_latency_ms:
+                all_ok = False
+
+        print()
+        self.check(f"all endpoints < {max_latency_ms}ms", all_ok,
+                   f"some endpoint exceeded {max_latency_ms}ms")
+
+        # cache consistency: call same endpoint twice, verify same results
+        print("\n  cache consistency: verifying repeated calls return same data...")
+        b1 = self.bot.buildings()
+        b2 = self.bot.buildings()
+        self.check("buildings cache consistent",
+                   isinstance(b1, list) and isinstance(b2, list) and len(b1) == len(b2),
+                   f"first={len(b1) if isinstance(b1,list) else '?'}, second={len(b2) if isinstance(b2,list) else '?'}")
+
+        t1 = self.bot.trees()
+        t2 = self.bot.trees()
+        self.check("trees cache consistent",
+                   isinstance(t1, list) and isinstance(t2, list) and len(t1) == len(t2),
+                   f"first={len(t1) if isinstance(t1,list) else '?'}, second={len(t2) if isinstance(t2,list) else '?'}")
+
+        bv1 = self.bot.beavers()
+        bv2 = self.bot.beavers()
+        self.check("beavers cache consistent",
+                   isinstance(bv1, list) and isinstance(bv2, list) and len(bv1) == len(bv2),
+                   f"first={len(bv1) if isinstance(bv1,list) else '?'}, second={len(bv2) if isinstance(bv2,list) else '?'}")
+
+        # cache invalidation: place and demolish a building, verify index updates
+        print("\n  cache invalidation: place + demolish to verify index tracks changes...")
+        before_count = len(self.bot.buildings())
+        placed = self.bot.place_building("Path", 152, 141, 3, "west")
+        if not self.err(placed):
+            after_count = len(self.bot.buildings())
+            self.check("index grew after place", after_count == before_count + 1,
+                       f"before={before_count}, after={after_count}")
+
+            # demolish it
+            placed_id = placed.get("id")
+            if placed_id:
+                self.bot.demolish_building(placed_id)
+                final_count = len(self.bot.buildings())
+                self.check("index shrank after demolish", final_count == before_count,
+                           f"before={before_count}, final={final_count}")
+            else:
+                self.skip("demolish check", "no id in place result")
+        else:
+            self.skip("cache invalidation", f"place failed: {placed}")
+
+        # burst test: simulate bot turn (multiple calls in quick succession)
+        print("\n  burst test: simulating bot turn (7 calls)...")
+        t0 = time.perf_counter()
+        self.bot.summary()
+        self.bot.buildings()
+        self.bot.beavers()
+        self.bot.trees()
+        self.bot.alerts()
+        self.bot.resources()
+        self.bot.weather()
+        t1 = time.perf_counter()
+        burst_ms = (t1 - t0) * 1000
+        print(f"  burst total: {burst_ms:.0f}ms ({burst_ms/7:.0f}ms avg per call)")
+        self.check("burst < 3s total", burst_ms < 3000,
+                   f"burst took {burst_ms:.0f}ms")
 
 
 def main():

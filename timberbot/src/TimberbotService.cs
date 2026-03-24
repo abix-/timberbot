@@ -56,6 +56,7 @@ using Timberborn.BuildingsNavigation;
 using Timberborn.SoilMoistureSystem;
 using Timberborn.NeedSpecs;
 using Timberborn.GameFactionSystem;
+using Timberborn.RangedEffectSystem;
 using UnityEngine;
 
 namespace Timberbot
@@ -105,6 +106,7 @@ namespace Timberbot
         private readonly FactionNeedService _factionNeedService;           // need specs per faction (beaver/bot)
         private readonly NeedGroupSpecService _needGroupSpecService;       // need group categories (Social, Hygiene, etc)
         private readonly PreviewFactory _previewFactory;                       // create preview entities for placement validation
+        private readonly EventBus _eventBus;                                    // game event bus for entity lifecycle events
         private TimberbotHttpServer _server;
 
         public TimberbotService(
@@ -142,7 +144,8 @@ namespace Timberbot
             PlantablePreviewFactory plantablePreviewFactory,
             FactionNeedService factionNeedService,
             NeedGroupSpecService needGroupSpecService,
-            PreviewFactory previewFactory)
+            PreviewFactory previewFactory,
+            EventBus eventBus)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -179,16 +182,20 @@ namespace Timberbot
             _factionNeedService = factionNeedService;
             _needGroupSpecService = needGroupSpecService;
             _previewFactory = previewFactory;
+            _eventBus = eventBus;
         }
 
         public void Load()
         {
+            _eventBus.Register(this);
+            BuildAllIndexes();
             _server = new TimberbotHttpServer(8085, this);
             Debug.Log("[Timberbot] HTTP server started on port 8085");
         }
 
         public void Unload()
         {
+            _eventBus.Unregister(this);
             _server?.Stop();
             _server = null;
             Debug.Log("[Timberbot] HTTP server stopped");
@@ -199,10 +206,53 @@ namespace Timberbot
             _server?.DrainRequests();
         }
 
-        // PERF: per-frame entity ID->component cache. O(n) build once, O(1) lookup after.
-        // Used by all write endpoints (PlaceBuilding, SetWorkers, SetPriority, etc.)
-        private Dictionary<int, EntityComponent> _entityCache;
-        private int _entityCacheFrame = -1;
+        // PERF: event-driven entity indexes. Updated via EventBus on entity create/delete.
+        // Zero per-frame cost. Always accurate. No stale references.
+        private readonly List<EntityComponent> _buildingIndex = new List<EntityComponent>();
+        private readonly List<EntityComponent> _naturalResourceIndex = new List<EntityComponent>();
+        private readonly List<EntityComponent> _beaverIndex = new List<EntityComponent>();
+        private readonly Dictionary<int, EntityComponent> _entityCache = new Dictionary<int, EntityComponent>();
+
+        private void BuildAllIndexes()
+        {
+            _buildingIndex.Clear();
+            _naturalResourceIndex.Clear();
+            _beaverIndex.Clear();
+            _entityCache.Clear();
+            foreach (var ec in _entityRegistry.Entities)
+                AddToIndexes(ec);
+        }
+
+        private void AddToIndexes(EntityComponent ec)
+        {
+            _entityCache[ec.GameObject.GetInstanceID()] = ec;
+            if (ec.GetComponent<Building>() != null)
+                _buildingIndex.Add(ec);
+            else if (ec.GetComponent<LivingNaturalResource>() != null)
+                _naturalResourceIndex.Add(ec);
+            else if (ec.GetComponent<NeedManager>() != null)
+                _beaverIndex.Add(ec);
+        }
+
+        private void RemoveFromIndexes(EntityComponent ec)
+        {
+            _entityCache.Remove(ec.GameObject.GetInstanceID());
+            _buildingIndex.Remove(ec);
+            _naturalResourceIndex.Remove(ec);
+            _beaverIndex.Remove(ec);
+        }
+
+        [OnEvent]
+        public void OnEntityInitialized(EntityInitializedEvent e)
+        {
+            AddToIndexes(e.Entity);
+        }
+
+        [OnEvent]
+        public void OnEntityDeleted(EntityDeletedEvent e)
+        {
+            RemoveFromIndexes(e.Entity);
+        }
 
         // strip Unity/faction suffixes so API returns clean names
         private static string CleanName(string name) =>
@@ -210,14 +260,6 @@ namespace Timberbot
 
         private EntityComponent FindEntity(int id)
         {
-            int frame = Time.frameCount;
-            if (_entityCache == null || _entityCacheFrame != frame)
-            {
-                _entityCache = new Dictionary<int, EntityComponent>();
-                foreach (var ec in _entityRegistry.Entities)
-                    _entityCache[ec.GameObject.GetInstanceID()] = ec;
-                _entityCacheFrame = frame;
-            }
             _entityCache.TryGetValue(id, out var result);
             return result;
         }
@@ -229,11 +271,10 @@ namespace Timberbot
         //   json: full nested data for programmatic access (--json flag)
         // ================================================================
 
-        // PERF: O(n) single-pass over all entities. Collects trees + housing + employment +
-        // wellbeing + alerts in one loop instead of separate endpoints. Called once per bot turn.
+        // PERF: uses typed indexes instead of scanning all entities.
+        // Three passes over subsets (buildings, natural resources, beavers) instead of one pass over everything.
         public object CollectSummary(string format = "toon")
         {
-            // single pass over all entities
             int markedGrown = 0, markedSeedling = 0, unmarkedGrown = 0;
             int occupiedBeds = 0, totalBeds = 0;
             int totalVacancies = 0, assignedWorkers = 0;
@@ -242,9 +283,10 @@ namespace Timberbot
             int alertUnstaffed = 0, alertUnpowered = 0, alertUnreachable = 0;
             int miserable = 0, critical = 0;
 
-            foreach (var ec in _entityRegistry.Entities)
+            // trees (from natural resource index)
+
+            foreach (var ec in _naturalResourceIndex)
             {
-                // trees
                 var cuttable = ec.GetComponent<Cuttable>();
                 if (cuttable != null)
                 {
@@ -260,8 +302,12 @@ namespace Timberbot
                         else if (!marked && grown) unmarkedGrown++;
                     }
                 }
+            }
 
-                // housing
+            // buildings: housing, employment, power, reachability
+
+            foreach (var ec in _buildingIndex)
+            {
                 var dwelling = ec.GetComponent<Dwelling>();
                 if (dwelling != null)
                 {
@@ -269,7 +315,6 @@ namespace Timberbot
                     totalBeds += dwelling.MaxBeavers;
                 }
 
-                // employment + unstaffed alert
                 var wp = ec.GetComponent<Timberborn.WorkSystem.Workplace>();
                 if (wp != null)
                 {
@@ -279,7 +324,19 @@ namespace Timberbot
                         alertUnstaffed++;
                 }
 
-                // wellbeing + critical needs
+                var mech = ec.GetComponent<MechanicalNode>();
+                if (mech != null && mech.IsConsumer && !mech.Active)
+                    alertUnpowered++;
+
+                var reach = ec.GetComponent<EntityReachabilityStatus>();
+                if (reach != null && reach.IsAnyUnreachable())
+                    alertUnreachable++;
+            }
+
+            // beavers: wellbeing + critical needs
+
+            foreach (var ec in _beaverIndex)
+            {
                 var wb = ec.GetComponent<WellbeingTracker>();
                 if (wb != null)
                 {
@@ -300,16 +357,6 @@ namespace Timberbot
                     }
                     catch { }
                 }
-
-                // power alert
-                var mech = ec.GetComponent<MechanicalNode>();
-                if (mech != null && mech.IsConsumer && !mech.Active)
-                    alertUnpowered++;
-
-                // reachability alert
-                var reach = ec.GetComponent<EntityReachabilityStatus>();
-                if (reach != null && reach.IsAnyUnreachable())
-                    alertUnreachable++;
             }
             // count adults only (children can't work, shouldn't count as idle haulers)
             int totalAdults = 0;
@@ -425,11 +472,12 @@ namespace Timberbot
             return flat;
         }
 
-        // PERF: O(n) entity scan. Called once per bot turn when alerts > 0.
+        // PERF: iterates _buildingIndex instead of all entities.
         public object CollectAlerts()
         {
+
             var alerts = new List<object>();
-            foreach (var ec in _entityRegistry.Entities)
+            foreach (var ec in _buildingIndex)
             {
                 var bo = ec.GetComponent<BlockObject>();
                 if (bo == null) continue;
@@ -736,13 +784,25 @@ namespace Timberbot
         }
 
         // PERF: O(n) entity scan. Called once per bot turn at most.
-        public object CollectBuildings(string format = "toon")
+        public object CollectBuildings(string format = "toon", string detail = "basic")
         {
-            var results = new List<object>();
-            foreach (var ec in _entityRegistry.Entities)
+            // detail=basic (default): compact TOON rows with key fields only
+            // detail=full: all fields per building
+            // detail=id:<id>: single building by ID, all fields
+            int? singleId = null;
+            if (detail != null && detail.StartsWith("id:"))
             {
-                var building = ec.GetComponent<Building>();       // filter: only buildings (not trees, beavers, etc)
-                if (building == null) continue;
+                if (int.TryParse(detail.Substring(3), out int parsed))
+                    singleId = parsed;
+            }
+            bool fullDetail = detail == "full" || singleId.HasValue;
+
+
+            var results = new List<object>();
+            foreach (var ec in _buildingIndex)
+            {
+                if (singleId.HasValue && ec.GameObject.GetInstanceID() != singleId.Value)
+                    continue;
 
                 var go = ec.GameObject;
                 var bo = ec.GetComponent<BlockObject>();            // position, orientation, entrance, finished state
@@ -928,6 +988,8 @@ namespace Timberbot
                         recipes.Add(r.Id);
                     entry["recipes"] = recipes;
                     entry["currentRecipe"] = manufactory.HasCurrentRecipe ? manufactory.CurrentRecipe.Id : "";
+                    entry["productionProgress"] = manufactory.ProductionProgress;
+                    entry["readyToProduce"] = manufactory.IsReadyToProduce;
                 }
 
                 // breeding pod status
@@ -938,7 +1000,11 @@ namespace Timberbot
                     try { entry["nutrients"] = breedingPod.Nutrients; } catch { }
                 }
 
-                if (format == "toon")
+                var rangedEffect = ec.GetComponent<RangedEffectBuildingSpec>();
+                if (rangedEffect != null)
+                    entry["effectRadius"] = rangedEffect.EffectRadius;
+
+                if (format == "toon" && !fullDetail)
                 {
                     // flat format for TOON: only key fields
                     string workers = "";
@@ -963,11 +1029,12 @@ namespace Timberbot
             return results;
         }
 
-        // PERF: O(n) entity scan. Used by trees, gatherables endpoints. Called once per request.
+        // PERF: iterates _naturalResourceIndex (trees/bushes) instead of all entities. Type filter still needed for Cuttable vs Gatherable.
         private List<object> CollectNaturalResources<T>(System.Action<EntityComponent, Dictionary<string, object>> enrich = null) where T : class
         {
+
             var results = new List<object>();
-            foreach (var ec in _entityRegistry.Entities)
+            foreach (var ec in _naturalResourceIndex)
             {
                 if (ec.GetComponent<T>() == null) continue;
 
@@ -1019,16 +1086,31 @@ namespace Timberbot
             return CollectNaturalResources<Gatherable>();
         }
 
-        // PERF: O(n) entity scan. Called once per bot turn when critical/miserable > 0.
-        public object CollectBeavers(string format = "toon")
+        // PERF: iterates _beaverIndex instead of all entities.
+        public object CollectBeavers(string format = "toon", string detail = "basic")
         {
+            // detail=basic (default): active needs only, compact
+            // detail=full: all needs with group category
+            // detail=id:<id>: single beaver/bot by ID, all needs with group
+            int? singleId = null;
+            if (detail != null && detail.StartsWith("id:"))
+            {
+                if (int.TryParse(detail.Substring(3), out int parsed))
+                    singleId = parsed;
+            }
+            bool fullDetail = detail == "full" || singleId.HasValue;
+
+
             var results = new List<object>();
-            foreach (var ec in _entityRegistry.Entities)
+            foreach (var ec in _beaverIndex)
             {
                 var needMgr = ec.GetComponent<NeedManager>();
                 if (needMgr == null) continue;
 
                 var go = ec.GameObject;
+                if (singleId.HasValue && go.GetInstanceID() != singleId.Value)
+                    continue;
+
                 var entry = new Dictionary<string, object>
                 {
                     ["id"] = go.GetInstanceID(),
@@ -1043,23 +1125,28 @@ namespace Timberbot
                 // per-need breakdown using NeedManager
                 var needs = new List<object>();
                 bool anyCritical = false;
+                bool isBot = ec.GetComponent<Bot>() != null;
                 try
                 {
                     foreach (var needSpec in needMgr.GetNeeds())
                     {
                         var id = needSpec.Id;
                         var need = needMgr.GetNeed(id);
-                        if (!need.IsActive) continue;
+                        // full detail or bot: show all needs. basic: active only
+                        if (!fullDetail && !isBot && !need.IsActive) continue;
                         bool favorable = need.IsFavorable;
                         int wb = needMgr.GetNeedWellbeing(id);
-                        needs.Add(new
+                        var needEntry = new Dictionary<string, object>
                         {
-                            id,
-                            points = System.Math.Round(need.Points, 2),
-                            wellbeing = wb,
-                            favorable,
-                            critical = need.IsCritical
-                        });
+                            ["id"] = id,
+                            ["points"] = System.Math.Round(need.Points, 2),
+                            ["wellbeing"] = wb,
+                            ["favorable"] = favorable,
+                            ["critical"] = need.IsCritical
+                        };
+                        if (fullDetail)
+                            needEntry["group"] = needSpec.NeedGroupId ?? "";
+                        needs.Add(needEntry);
                         if (need.IsBelowWarningThreshold) anyCritical = true;
                     }
                 }
@@ -1106,7 +1193,7 @@ namespace Timberbot
                 if (dweller != null)
                     entry["hasHome"] = dweller.HasHome;
 
-                if (format == "toon")
+                if (format == "toon" && !fullDetail)
                 {
                     float wb = entry.ContainsKey("wellbeing") ? System.Convert.ToSingle(entry["wellbeing"]) : 0f;
                     string tier = wb >= 16 ? "ecstatic" : wb >= 12 ? "happy" : wb >= 8 ? "okay" : wb >= 4 ? "unhappy" : "miserable";
@@ -1120,14 +1207,14 @@ namespace Timberbot
                         {
                             foreach (var nv in needsList)
                             {
-                                var favProp = nv.GetType().GetProperty("favorable");
-                                var critProp = nv.GetType().GetProperty("critical");
-                                var idProp = nv.GetType().GetProperty("id");
-                                if (idProp == null) continue;
-                                string nid = (string)idProp.GetValue(nv);
-                                if (critProp != null && (bool)critProp.GetValue(nv))
+                                var nd = nv as Dictionary<string, object>;
+                                if (nd == null) continue;
+                                string nid = nd.GetValueOrDefault("id", "") as string ?? "";
+                                bool crit = nd.ContainsKey("critical") && (bool)nd["critical"];
+                                bool fav = nd.ContainsKey("favorable") && (bool)nd["favorable"];
+                                if (crit)
                                     critList.Add(nid);
-                                else if (favProp != null && !(bool)favProp.GetValue(nv))
+                                else if (!fav)
                                     unmetList.Add(nid);
                             }
                         }
