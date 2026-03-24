@@ -363,6 +363,22 @@ class Timberbot:
             "Cattail": ("l", BGRN), "Spadderdock": ("d", BGRN),
             "Soybean": ("y", BGRN), "Canola": ("o", BGRN),
             "Campfire": ("C", RED),
+            "Stairs": ("/", YEL), "Platform": ("_", YEL),
+            "Metalsmith": ("m", BWHT), "Smelter": ("m", BWHT),
+            "GearWorkshop": ("g", BWHT),
+            "BotAssembler": ("b", BMAG), "BotPartFactory": ("b", BMAG),
+            "ChargingStation": ("c", BMAG),
+            "FluidDump": ("V", BBLU), "DoubleShower": ("v", BBLU),
+            "SwimmingPool": ("v", BBLU),
+            "Scratcher": ("~", GRN), "Bench": ("~", GRN),
+            "ExercisePlaza": ("~", GRN), "MedicalBed": ("~", GRN),
+            "Brazier": ("*", RED), "Lantern": ("*", YEL),
+            "BeaverBust": ("*", YEL), "Roof": ("^", DIM),
+            "Ruin": ("R", DIM), "Relic": ("R", DIM),
+            "FoodFactory": ("F", CYN),
+            "Slope": ("/", DIM),
+            "AncientAquiferDrill": ("A", BBLU),
+            "Shrub": ("B", MAG), "Geothermal": ("G", RED),
         }
 
         def _zbg(z):
@@ -408,7 +424,9 @@ class Timberbot:
                     if ch:
                         row += f"{bg}{co}{ch}{R}"
                     else:
-                        row += f"{bg}{DIM}{oname[0]}{R}"
+                        ch = oname[0]
+                        row += f"{bg}{DIM}{ch}{R}"
+                        legend[ch] = (DIM, oname)
                 elif t["water"] > 0:
                     bg = _zbg(t["terrain"])
                     z_levels.add(t["terrain"])
