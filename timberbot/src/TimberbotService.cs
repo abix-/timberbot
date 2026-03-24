@@ -641,7 +641,12 @@ namespace Timberbot
                         catch { }
                     }
                 }
-                _buildings.Add(cb);
+                // separate reference-type instances per buffer to avoid shared mutation
+                var cbRead = cb;
+                cbRead.Recipes = null; // populated on first refresh
+                cbRead.Inventory = null;
+                cbRead.NutrientStock = null;
+                _buildings.Add(cb, cbRead);
             }
             else if (ec.GetComponent<LivingNaturalResource>() != null)
             {
@@ -676,7 +681,9 @@ namespace Timberbot
                     Citizen = ec.GetComponent<Timberborn.GameDistricts.Citizen>(),
                     Needs = new List<CachedNeed>()
                 };
-                _beavers.Add(cb);
+                var cbRead = cb;
+                cbRead.Needs = new List<CachedNeed>();
+                _beavers.Add(cb, cbRead);
             }
         }
 

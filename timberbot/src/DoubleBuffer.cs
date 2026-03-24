@@ -16,6 +16,7 @@ namespace Timberbot
         public int Count => _write.Count;
 
         public void Add(T item) { _write.Add(item); _read.Add(item); }
+        public void Add(T writeItem, T readItem) { _write.Add(writeItem); _read.Add(readItem); }
         public void RemoveAll(Predicate<T> match) { _write.RemoveAll(match); _read.RemoveAll(match); }
         public void Clear() { _write.Clear(); _read.Clear(); }
         public void Swap() { var tmp = _read; _read = _write; _write = tmp; }
