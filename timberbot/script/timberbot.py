@@ -548,16 +548,53 @@ _BBLU = "\033[94m"
 _BMAG = "\033[95m"
 _BCYN = "\033[96m"
 
+W = 78  # total width
 
-def _color_val(val, warn_below, crit_below, fmt=".0f"):
-    color = _BRED if val < crit_below else _BYEL if val < warn_below else _BGRN
-    return f"{color}{_BOLD}{val:{fmt}}{_RST}"
+# ensure UTF-8 output on Windows
+import sys as _sys
+if _sys.stdout.encoding != 'utf-8':
+    _sys.stdout.reconfigure(encoding='utf-8')
+
+
+def _cv(val, warn, crit, fmt=".0f"):
+    """color a value: green/yellow/red based on thresholds"""
+    c = _BRED if val < crit else _BYEL if val < warn else _BGRN
+    return f"{c}{_BOLD}{val:{fmt}}{_RST}"
+
+
+def _bar(cur, mx, w=12):
+    """progress bar with gradient: ████░░░░"""
+    if mx <= 0:
+        return f"{_DIM}{'░' * w}{_RST}"
+    ratio = min(cur / mx, 1.0)
+    filled = int(ratio * w)
+    c = _BRED if ratio < 0.25 else _BYEL if ratio < 0.5 else _BGRN
+    return f"{c}{'█' * filled}{_DIM}{'░' * (w - filled)}{_RST}"
+
+
+def _hline(left="╠", mid="═", right="╣", split=None):
+    if split:
+        return f" {left}{mid * (split - 1)}{_DIM}╬{_RST}{mid * (W - split - 1)}{right}"
+    return f" {left}{mid * (W - 1)}{right}"
+
+
+def _row(left, right="", split=37):
+    """two-column row with box borders"""
+    import re
+    plain_l = re.sub(r'\033\[[0-9;]*m', '', left)
+    plain_r = re.sub(r'\033\[[0-9;]*m', '', right)
+    pad_l = max(0, split - 2 - len(plain_l))
+    pad_r = max(0, W - split - 2 - len(plain_r))
+    if right:
+        return f" {_DIM}║{_RST} {left}{' ' * pad_l} {_DIM}║{_RST} {right}{' ' * pad_r}{_DIM}║{_RST}"
+    else:
+        full_pad = max(0, W - 3 - len(plain_l))
+        return f" {_DIM}║{_RST} {left}{' ' * full_pad}{_DIM}║{_RST}"
 
 
 def _top_render(summary, wellbeing_data):
-    import re as _re
     if not summary:
-        print(f"  {_RED}-- game not reachable --{_RST}")
+        print(f"\n {_RED}── game not reachable ──{_RST}\n")
         return
 
     t = summary.get("time", {})
@@ -567,13 +604,17 @@ def _top_render(summary, wellbeing_data):
     temp_len = w.get("temperateWeatherDuration", 0)
     haz_len = w.get("hazardousWeatherDuration", 0)
     cday = w.get("cycleDay", 0)
-
-    season = f"{_BRED}DROUGHT{_RST}" if hazardous else f"{_BGRN}temperate{_RST}"
     remaining = temp_len + haz_len - cday + 1 if hazardous else temp_len - cday + 1
-    print(f"  {_BOLD}timberbot top{_RST}{'':30s}day {_BCYN}{day}{_RST}  {season} {cday}/{temp_len}+{haz_len}  {_DIM}{remaining}d left{_RST}")
-    print()
 
-    # aggregate across districts
+    season_str = f"{_BRED}{_BOLD}DROUGHT{_RST}" if hazardous else f"{_BGRN}Temperate{_RST}"
+    day_str = f"Day {_BCYN}{_BOLD}{day}{_RST} {_DIM}──{_RST} {season_str} {_DIM}{cday}/{temp_len}+{haz_len}{_RST} ({_BOLD}{remaining}d{_RST})"
+
+    # header
+    print(f" {_DIM}╔{'═' * (W - 1)}╗{_RST}")
+    print(_row(f"{_BCYN}{_BOLD}TIMBERBOT{_RST}", day_str))
+    print(_hline(split=37))
+
+    # population
     districts = summary.get("districts", [])
     total_adults = sum(d.get("population", {}).get("adults", 0) for d in districts)
     total_children = sum(d.get("population", {}).get("children", 0) for d in districts)
@@ -586,81 +627,114 @@ def _top_render(summary, wellbeing_data):
             amt = val.get("available", val) if isinstance(val, dict) else val
             resources[good] = resources.get(good, 0) + amt
 
-    # housing, employment, wellbeing from JSON
     housing = summary.get("housing", {})
-    beds_str = f"{housing.get('occupiedBeds', 0)}/{housing.get('totalBeds', 0)}"
+    occ_beds = housing.get("occupiedBeds", 0)
+    tot_beds = housing.get("totalBeds", 0)
     employment = summary.get("employment", {})
     unemployed = employment.get("unemployed", 0)
+    assigned = employment.get("assigned", 0)
+    vacancies = employment.get("vacancies", 0)
     wb_obj = summary.get("wellbeing", {})
     wb_avg = wb_obj.get("average", 0) if isinstance(wb_obj, dict) else 0
     critical = wb_obj.get("critical", 0) if isinstance(wb_obj, dict) else 0
 
-    # compute food/water days from resources
-    total_food = resources.get("Berries", 0) + resources.get("Kohlrabi", 0) + resources.get("Bread", 0) + resources.get("Carrot", 0)
+    pop_parts = f"{_BOLD}{total_adults}{_RST} adults  {_BOLD}{total_children}{_RST} children"
+    if total_bots:
+        pop_parts += f"  {_BOLD}{total_bots}{_RST} bots"
+
+    idle_c = _BRED if unemployed == 0 else _BGRN if unemployed <= 4 else _BYEL
+    crit_str = f"  {_BRED}{_BOLD}● {critical} critical{_RST}" if critical > 0 else ""
+
+    print(_row(
+        f"{_BCYN}{_BOLD}{total_pop}{_RST} beavers  {_DIM}({pop_parts}{_DIM}){_RST}",
+        f"Beds {_BOLD}{occ_beds}{_RST}/{tot_beds}  Workers {_BOLD}{assigned}{_RST}/{vacancies}"
+    ))
+    print(_row(
+        f"Wellbeing {_bar(wb_avg, 77)} {_cv(wb_avg, 8, 4, '.1f')}/77{crit_str}",
+        f"Idle {idle_c}{_BOLD}{unemployed}{_RST}"
+    ))
+    print(_hline(split=37))
+
+    # food + water (left) | wellbeing categories (right)
+    total_food = sum(resources.get(g, 0) for g in ["Berries", "Kohlrabi", "Bread", "Carrot", "CornRation", "AlgaeRation", "EggplantRation"])
     total_water = resources.get("Water", 0)
     food_days = round(total_food / total_pop, 1) if total_pop > 0 else 0
     water_days = round(total_water / (total_pop * 2), 1) if total_pop > 0 else 0
 
-    # colony line
-    assigned = employment.get("assigned", 0)
-    vacancies = employment.get("vacancies", 0)
-    pop_str = f"{_BCYN}{_BOLD}{total_pop}{_RST} beavers {_DIM}({total_adults}a {total_children}c"
-    if total_bots: pop_str += f" {total_bots}b"
-    pop_str += f"){_RST}"
-    wb_color = _BRED if wb_avg < 4 else _BYEL if wb_avg < 8 else _BGRN
-    # idle beavers: 0 = no haulers (red), 1-4 = healthy (green), 5+ = overstaffed (yellow)
-    idle_color = _BRED if unemployed == 0 else _BGRN if unemployed <= 4 else _BYEL
-    crit_str = f"  {_BRED}{_BOLD}{critical} critical{_RST}" if critical > 0 else ""
-    print(f"  {_BOLD}COLONY{_RST}  {pop_str}  {beds_str} beds  {idle_color}{unemployed} idle{_RST}  {assigned}/{vacancies} workers  wb {wb_color}{_BOLD}{wb_avg}{_RST}{crit_str}")
+    food_items = [(g, resources.get(g, 0)) for g in ["Kohlrabi", "Berries", "Bread", "Carrot", "CornRation", "AlgaeRation", "EggplantRation"] if resources.get(g, 0) > 0]
 
-    # food + water
-    food_items = []
-    for g in ["Berries", "Kohlrabi", "Bread", "Carrot"]:
-        if resources.get(g, 0) > 0:
-            food_items.append(f"{g} {_BOLD}{resources[g]}{_RST}")
-    food_str = "  ".join(food_items) if food_items else f"{_DIM}none{_RST}"
-    print(f"  {_BOLD}FOOD{_RST}    {food_str}  foodDays {_color_val(food_days, 3, 1)}")
-    print(f"  {_BOLD}WATER{_RST}   {_BBLU}{_BOLD}{total_water}{_RST}  waterDays {_color_val(water_days, 2, 0.5)}")
-    print()
-
-    # two-column: resources left, wellbeing right
-    res_lines = []
-    for good in ["Log", "Plank", "Gear", "ScrapMetal", "MetalPart"]:
-        if good in resources:
-            res_lines.append(f"  {good:16s} {_BOLD}{resources[good]:>5}{_RST}")
-
-    wb_lines = []
+    wb_cats = []
     if wellbeing_data and isinstance(wellbeing_data, dict):
         for cat in wellbeing_data.get("categories", []):
-            g = cat.get("group", "?")
-            cur = cat.get("current", 0)
-            mx = cat.get("max", 0)
-            color = _BRED if cur == 0 and mx > 0 else _BYEL if cur < mx * 0.5 else _BGRN
-            wb_lines.append(f"  {color}{g:14s} {cur:>4.1f}/{mx:.0f}{_RST}")
+            wb_cats.append((cat.get("group", "?"), cat.get("current", 0), cat.get("max", 0)))
 
-    # alerts
+    # food header
+    left_lines = [f"{_BCYN}{_BOLD}FOOD{_RST}  {_cv(food_days, 3, 1, '.1f')} days  {_DIM}({total_food} total){_RST}"]
+    for i, (g, amt) in enumerate(food_items):
+        branch = "└─" if i == len(food_items) - 1 else "├─"
+        left_lines.append(f"  {_DIM}{branch}{_RST} {g:16s} {_BOLD}{amt:>5}{_RST}")
+
+    left_lines.append(f"{_BCYN}{_BOLD}WATER{_RST} {_cv(water_days, 2, 0.5, '.1f')} days  {_BBLU}{_BOLD}{total_water}{_RST}")
+    left_lines.append("")
+
+    right_lines = [f"{_BCYN}{_BOLD}WELLBEING{_RST}"]
+    for g, cur, mx in wb_cats:
+        right_lines.append(f"{g:13s} {_bar(cur, mx, 10)} {_cv(cur, mx * 0.5, mx * 0.1, '.1f')}{_DIM}/{mx:.0f}{_RST}")
+
+    max_rows = max(len(left_lines), len(right_lines))
+    for i in range(max_rows):
+        l = left_lines[i] if i < len(left_lines) else ""
+        r = right_lines[i] if i < len(right_lines) else ""
+        print(_row(l, r))
+
+    print(_hline(split=37))
+
+    # materials (left) | alerts + projections (right)
+    mat_lines = [f"{_BCYN}{_BOLD}MATERIALS{_RST}"]
+    for good in ["Log", "Plank", "Gear", "ScrapMetal", "MetalPart"]:
+        if good in resources:
+            mat_lines.append(f"  {good:16s} {_BOLD}{resources[good]:>5}{_RST}")
+
     alerts_obj = summary.get("alerts", {})
-    alert_lines = []
+    alert_lines = [f"{_BCYN}{_BOLD}ALERTS{_RST}"]
     if isinstance(alerts_obj, dict):
         for k, v in alerts_obj.items():
             if v > 0:
-                alert_lines.append(f"  {_BYEL}{v} {k}{_RST}")
+                alert_lines.append(f"  {_BYEL}⚠ {v} {k}{_RST}")
+    if len(alert_lines) == 1:
+        alert_lines.append(f"  {_BGRN}● all clear{_RST}")
 
-    print(f"  {_BOLD}RESOURCES{_RST}{'':23s}{_BOLD}WELLBEING{_RST} {_DIM}(current/max){_RST}")
-    max_rows = max(len(res_lines), len(wb_lines))
+    # projections
+    alert_lines.append("")
+    alert_lines.append(f"{_BCYN}{_BOLD}PROJECTIONS{_RST}")
+    log_days = round(resources.get("Log", 0) / max(total_pop * 0.3, 1), 1)
+    plank_days = round(resources.get("Plank", 0) / max(total_pop * 0.2, 1), 1)
+    alert_lines.append(f"  Food  {_cv(food_days, 3, 1, '.1f')}d   Water {_cv(water_days, 2, 0.5, '.1f')}d")
+    alert_lines.append(f"  Log   {_cv(log_days, 5, 2, '.0f')}d   Plank {_cv(plank_days, 5, 2, '.0f')}d")
+
+    max_rows = max(len(mat_lines), len(alert_lines))
     for i in range(max_rows):
-        left = res_lines[i] if i < len(res_lines) else ""
-        right = wb_lines[i] if i < len(wb_lines) else ""
-        plain_left = _re.sub(r'\033\[[0-9;]*m', '', left)
-        pad = max(0, 38 - len(plain_left))
-        print(f"{left}{' ' * pad}{right}")
+        l = mat_lines[i] if i < len(mat_lines) else ""
+        r = alert_lines[i] if i < len(alert_lines) else ""
+        print(_row(l, r))
 
-    if alert_lines:
-        print(f"\n  {_BOLD}ALERTS{_RST}")
-        for a in alert_lines:
-            print(a)
+    # districts
+    if len(districts) > 0:
+        print(_hline())
+        print(_row(f"{_BCYN}{_BOLD}DISTRICTS{_RST}"))
+        for d in districts:
+            name = d.get("name", "?")
+            pop = d.get("population", {})
+            dpop = pop.get("adults", 0) + pop.get("children", 0) + pop.get("bots", 0)
+            dres = d.get("resources", {})
+            dwater = dres.get("Water", {})
+            dw = dwater.get("available", dwater) if isinstance(dwater, dict) else dwater
+            dlog = dres.get("Log", {})
+            dl = dlog.get("available", dlog) if isinstance(dlog, dict) else dlog
+            print(_row(f"  {name:16s} {_BOLD}{dpop:>3}{_RST} pop   Water {_BBLU}{_BOLD}{dw:>4}{_RST}   Log {_BOLD}{dl:>4}{_RST}"))
 
-    print(f"\n{'':36s}{_DIM}refreshing every 3s -- ctrl+c to stop{_RST}")
+    print(f" {_DIM}╚{'═' * (W - 1)}╝{_RST}")
+    print(f"{'':30s}{_DIM}refreshing every 3s  ·  ctrl+c to stop{_RST}")
 
 
 def _top():
