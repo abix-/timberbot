@@ -37,6 +37,7 @@ Beavers die if food or water hits 0.
 | `weather` | Drought countdown, hazardous status |
 | `time` | Day number and progress |
 | `speed` | Current game speed |
+| `power` | Power networks: supply, demand, and buildings per connected network |
 | `population` | Beaver/bot counts per district |
 | `resources` | Resource stocks per district |
 | `districts` | Multi-district overview with population and resources |

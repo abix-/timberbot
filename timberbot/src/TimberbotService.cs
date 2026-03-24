@@ -38,6 +38,8 @@ using Timberborn.MechanicalSystem;
 using Timberborn.ScienceSystem;
 using Timberborn.BeaverContaminationSystem;
 using Timberborn.Bots;
+using Timberborn.Carrying;
+using Timberborn.DeteriorationSystem;
 using Timberborn.Wonders;
 using Timberborn.NotificationSystem;
 using Timberborn.StatusSystem;
@@ -1208,6 +1210,37 @@ namespace Timberbot
                 if (life != null)
                     entry["lifeProgress"] = life.LifeProgress;
 
+                // carried goods
+                try
+                {
+                    var carrier = ec.GetComponent<GoodCarrier>();
+                    if (carrier != null)
+                    {
+                        if (carrier.IsCarrying)
+                        {
+                            var ga = carrier.CarriedGoods;
+                            entry["carrying"] = ga.GoodId;
+                            entry["carryAmount"] = ga.Amount;
+                        }
+                        if (fullDetail)
+                        {
+                            entry["liftingCapacity"] = carrier.LiftingCapacity;
+                            if (carrier.IsMovementSlowed)
+                                entry["overburdened"] = true;
+                        }
+                    }
+                }
+                catch { }
+
+                // bot durability (0 = new, 1 = fully deteriorated/dead)
+                try
+                {
+                    var deteriorable = ec.GetComponent<Deteriorable>();
+                    if (deteriorable != null)
+                        entry["deterioration"] = System.Math.Round(deteriorable.DeteriorationProgress, 3);
+                }
+                catch { }
+
                 var worker = ec.GetComponent<Worker>();
                 if (worker != null && worker.Workplace != null)
                     entry["workplace"] = CleanName(worker.Workplace.GameObject.name);
@@ -1298,6 +1331,47 @@ namespace Timberbot
                 }
             }
             return results;
+        }
+
+        public object CollectPowerNetworks()
+        {
+            // group buildings by power network (same Graph instance = same network)
+            var networks = new Dictionary<int, Dictionary<string, object>>();
+            foreach (var ec in _entityRegistry.Entities)
+            {
+                var building = ec.GetComponent<Building>();
+                if (building == null) continue;
+                var node = ec.GetComponent<MechanicalNode>();
+                if (node == null) continue;
+                try
+                {
+                    var graph = node.Graph;
+                    if (graph == null) continue;
+                    int netId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(graph);
+                    if (!networks.ContainsKey(netId))
+                    {
+                        networks[netId] = new Dictionary<string, object>
+                        {
+                            ["id"] = netId,
+                            ["supply"] = graph.PowerSupply,
+                            ["demand"] = graph.PowerDemand,
+                            ["buildings"] = new List<object>()
+                        };
+                    }
+                    var list = (List<object>)networks[netId]["buildings"];
+                    var bo = ec.GetComponent<BlockObject>();
+                    list.Add(new Dictionary<string, object>
+                    {
+                        ["name"] = CleanName(ec.GameObject.name),
+                        ["id"] = ec.GameObject.GetInstanceID(),
+                        ["isGenerator"] = node.IsGenerator,
+                        ["nominalOutput"] = node._nominalPowerOutput,
+                        ["nominalInput"] = node._nominalPowerInput
+                    });
+                }
+                catch { }
+            }
+            return networks.Values.ToList();
         }
 
         public object CollectSpeed()

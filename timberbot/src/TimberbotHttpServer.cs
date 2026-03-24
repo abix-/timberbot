@@ -194,6 +194,8 @@ namespace Timberbot
 
                     case "/api/map":
                         return _service.CollectMap(0, 0, 0, 0);
+                    case "/api/power":
+                        return _service.CollectPowerNetworks();
                     case "/api/speed":
                         return _service.CollectSpeed();
                     case "/api/prefabs":

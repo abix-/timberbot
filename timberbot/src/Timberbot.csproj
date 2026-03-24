@@ -328,6 +328,14 @@
       <Private>false</Private>
       <HintPath>$(GameManagedDir)\Timberborn.RangedEffectSystem.dll</HintPath>
     </Reference>
+    <Reference Include="Timberborn.Carrying" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.Carrying.dll</HintPath>
+    </Reference>
+    <Reference Include="Timberborn.DeteriorationSystem" Publicize="true">
+      <Private>false</Private>
+      <HintPath>$(GameManagedDir)\Timberborn.DeteriorationSystem.dll</HintPath>
+    </Reference>
 
     <Reference Include="System.Collections.Immutable">
       <Private>false</Private>

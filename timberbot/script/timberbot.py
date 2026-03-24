@@ -175,6 +175,10 @@ class Timberbot:
         """Available building templates: [{name, sizeX, sizeY, sizeZ}]."""
         return self._get("/api/prefabs")
 
+    def power(self):
+        """Power networks: [{id, supply, demand, buildings}]."""
+        return self._get("/api/power")
+
     def speed(self):
         """Current game speed: {speed: 0-3}."""
         return self._get("/api/speed")

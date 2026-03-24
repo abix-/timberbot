@@ -154,6 +154,30 @@ Current weather cycle and drought info.
 
 ---
 
+### GET /api/power
+
+Power networks. Groups all powered buildings by their connected network. Buildings sharing a power network have the same supply and demand values.
+
+**CLI:** `python timberbot.py power`
+
+#### Response
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | int | Network identity hash |
+| supply | float | Current power supply (from generators with workers) |
+| demand | float | Total power demand from consumers |
+| buildings | array | Buildings on this network |
+| buildings[].name | string | Building name |
+| buildings[].id | int | Instance ID |
+| buildings[].isGenerator | bool | Power source (wheel, engine) |
+| buildings[].nominalOutput | float | Max power output capacity |
+| buildings[].nominalInput | float | Power draw when running |
+
+Networks with `supply < demand` are underpowered — powered buildings run intermittently. Isolated buildings (no power chain) appear as single-building networks with `supply: 0`.
+
+---
+
 ### GET /api/speed
 
 Current game speed. Answered on listener thread (works when paused).
@@ -655,6 +679,11 @@ Bots always show all 3 needs (Energy, ControlTower, Grease) regardless of detail
 | lifeProgress | float | Age progress (0.0-1.0) |
 | workplace | string | Assigned workplace name (empty if none) |
 | isBot | bool | Mechanical beaver |
+| carrying | string | (optional) Good being hauled (e.g. "Water", "Log") |
+| carryAmount | int | (optional) Units being carried |
+| liftingCapacity | int | Max carry capacity (detail=full only) |
+| overburdened | bool | (optional, detail=full) Carrying heavy load, movement slowed |
+| deterioration | float | (optional, bots only) Deterioration progress 0-1 (1 = fully degraded) |
 | contaminated | bool | Contaminated by badwater |
 | activity | string | Current status text (e.g. "Waiting for nutrients", "No available workers") |
 | hasHome | bool | Has assigned dwelling |

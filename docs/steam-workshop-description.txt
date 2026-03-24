@@ -55,8 +55,9 @@ Full [url=https://abix-.github.io/TimberbornMods/api-reference/]API Reference[/u
 [tr][td]District per beaver[/td][td]Which district each beaver/bot belongs to[/td][td]Yes[/td][/tr]
 [tr][td]Badwater tiles[/td][td]Contamination level per map tile (badwater + soil)[/td][td]Yes[/td][/tr]
 [tr][td]Map stacking[/td][td]Multiple occupants at different z-levels on same tile[/td][td]Yes[/td][/tr]
-[tr][td]Carried goods[/td][td]What each beaver is hauling[/td][td]Planned[/td][/tr]
-[tr][td]Power network graph[/td][td]Connected building groups with supply vs demand[/td][td]Planned[/td][/tr]
+[tr][td]Carried goods[/td][td]What each beaver is hauling, lifting capacity, overburdened[/td][td]Yes[/td][/tr]
+[tr][td]Power networks[/td][td]Connected building groups with supply vs demand[/td][td]Yes[/td][/tr]
+[tr][td]Bot durability[/td][td]Deterioration progress on mechanical beavers[/td][td]Yes[/td][/tr]
 [tr][td]Resource projection[/td][td]Projected days of wood, planks, gears[/td][td]Planned[/td][/tr]
 [/table]
 

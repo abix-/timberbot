@@ -107,6 +107,9 @@ class TestRunner:
         self.test_beaver_position()
         self.test_beaver_district()
         self.test_map_stacking()
+        self.test_carried_goods()
+        self.test_bot_durability()
+        self.test_power_networks()
         self.test_performance()
 
         summary = f"\n=== {self.passed} passed, {self.failed} failed"
@@ -1360,6 +1363,77 @@ class TestRunner:
             self.check(f"tile ({t['x']},{t['y']}) no overlap",
                        not has_both,
                        "has both occupant and occupants")
+
+    def test_carried_goods(self):
+        """Test carried goods fields on beavers."""
+        print("\n=== carried goods ===\n")
+        beavers = self.bot._get("/api/beavers?format=json")
+        carriers = [b for b in beavers if "carrying" in b]
+        if carriers:
+            c = carriers[0]
+            self.check("carrying is string", isinstance(c["carrying"], str))
+            self.check("carryAmount is int", isinstance(c["carryAmount"], int))
+            self.check("carryAmount > 0", c["carryAmount"] > 0)
+        else:
+            self.skip("carried_goods", "no beaver currently carrying")
+
+        # detail:full should have liftingCapacity
+        full = self.bot._get("/api/beavers?format=json&detail=full")
+        beaver = [b for b in full if not b.get("isBot")][0]
+        self.check("detail has liftingCapacity", "liftingCapacity" in beaver,
+                   f"keys: {[k for k in beaver.keys() if 'lift' in k.lower() or 'carry' in k.lower()]}")
+        if "liftingCapacity" in beaver:
+            self.check("liftingCapacity > 0", beaver["liftingCapacity"] > 0)
+
+    def test_bot_durability(self):
+        """Test deterioration field on bots."""
+        print("\n=== bot durability ===\n")
+        beavers = self.bot._get("/api/beavers?format=json")
+        bots = [b for b in beavers if b.get("isBot")]
+        if not bots:
+            self.skip("bot_durability", "no bots in colony")
+            return
+        bot = bots[0]
+        self.check("bot has deterioration", "deterioration" in bot,
+                   f"keys: {list(bot.keys())}")
+        if "deterioration" in bot:
+            self.check("deterioration is number",
+                       isinstance(bot["deterioration"], (int, float)))
+            self.check("deterioration in range 0-1",
+                       0 <= bot["deterioration"] <= 1,
+                       f"deterioration={bot['deterioration']}")
+
+    def test_power_networks(self):
+        """Test power network endpoint."""
+        print("\n=== power networks ===\n")
+        networks = self.bot.power()
+        self.check("power returns list", isinstance(networks, list))
+        self.check("has networks", len(networks) > 0, f"count={len(networks)}")
+
+        if networks:
+            net = networks[0]
+            self.check("network has id", "id" in net)
+            self.check("network has supply", "supply" in net)
+            self.check("network has demand", "demand" in net)
+            self.check("network has buildings", "buildings" in net)
+            self.check("buildings is list", isinstance(net["buildings"], list))
+
+            if net["buildings"]:
+                b = net["buildings"][0]
+                self.check("building has name", "name" in b)
+                self.check("building has id", "id" in b)
+                self.check("building has isGenerator", "isGenerator" in b)
+                self.check("building has nominalOutput", "nominalOutput" in b)
+                self.check("building has nominalInput", "nominalInput" in b)
+
+            # find a network with a generator
+            gen_nets = [n for n in networks
+                        if any(b.get("isGenerator") for b in n.get("buildings", []))]
+            if gen_nets:
+                self.check("generator network has demand field",
+                           "demand" in gen_nets[0])
+            else:
+                self.skip("power_generator", "no networks with generators")
 
     def test_building_detail(self):
         print("\n=== building detail ===\n")

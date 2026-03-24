@@ -32,14 +32,15 @@
 | [Breeding](api-reference.md#get-apibuildings) | Breeding pod nutrient status | Yes |
 | [Beaver activity](api-reference.md#get-apibeavers) | Current status from game's status system | Yes |
 | [Clutch](api-reference.md#post-apibuildingclutch) | Engage/disengage clutch on buildings | Yes |
-| Bot condition/fuel | Bot needs (Energy, ControlTower, Grease) via beavers endpoint | Yes |
+| [Bot condition/fuel](api-reference.md#get-apibeavers) | Bot needs (Energy, ControlTower, Grease) via beavers endpoint | Yes |
 | [Beaver position](api-reference.md#get-apibeavers) | Per-beaver x,y,z grid coordinates | Yes |
 | [Water depth](api-reference.md#post-apimap) | Water height float per tile for drought planning | Yes |
 | [District per beaver](api-reference.md#get-apibeavers) | Which district each beaver/bot belongs to | Yes |
 | [Badwater tiles](api-reference.md#post-apimap) | Contamination level per map tile (badwater + soil) | Yes |
 | [Map stacking](api-reference.md#post-apimap) | Multiple occupants at different z-levels on same tile | Yes |
-| Carried goods | What each beaver is hauling in their backpack | Planned |
-| Power network graph | Connected building groups with total supply vs demand | Planned |
+| [Carried goods](api-reference.md#get-apibeavers) | What each beaver is hauling, lifting capacity, overburdened state | Yes |
+| [Power networks](api-reference.md#get-apipower) | Connected building groups with supply vs demand per network | Yes |
+| [Bot durability](api-reference.md#get-apibeavers) | Deterioration progress (0-1) on mechanical beavers | Yes |
 | Resource projection | Projected days of wood, planks, gears | Planned |
 
 ## By design
