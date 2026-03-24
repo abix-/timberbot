@@ -105,18 +105,29 @@ class Timberbot:
             if limit: data = data[:limit]
         return data
 
+    _TREE_SPECIES = {"Pine", "Birch", "Oak", "Maple", "Chestnut", "Mangrove"}
+    _CROP_SPECIES = {"Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot"}
+
     def natural_resources(self, limit=0, offset=0):
         """All natural resources (trees, crops, bushes): [{id, name, x, y, z, marked, alive, grown, growth}]."""
         data = self._get("/api/natural_resources")
+        if isinstance(data, dict) and "error" in data:
+            data = self._get("/api/trees")  # fallback for older mod versions
         if isinstance(data, list):
             if offset: data = data[offset:]
             if limit: data = data[:limit]
         return data
 
+    def trees(self, limit=0, offset=0):
+        """Trees only (Pine, Birch, Oak, etc). Filtered from natural_resources."""
+        data = [t for t in self.natural_resources() if t.get("name") in self._TREE_SPECIES]
+        if offset: data = data[offset:]
+        if limit: data = data[:limit]
+        return data
+
     def crops(self):
-        """Planted crops in the ground (filtered from natural_resources)."""
-        _CROPS = {"Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot"}
-        return [t for t in self.natural_resources() if t.get("name") in _CROPS]
+        """Planted crops in the ground (Kohlrabi, Soybean, Corn, etc). Filtered from natural_resources."""
+        return [t for t in self.natural_resources() if t.get("name") in self._CROP_SPECIES]
 
     def gatherables(self, limit=0, offset=0):
         """All gatherable resources (berry bushes etc): [{id, name, x, y, z, alive}]."""
