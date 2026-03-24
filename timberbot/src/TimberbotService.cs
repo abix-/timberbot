@@ -250,9 +250,9 @@ namespace Timberbot
         // background thread reads from _read lists (never modified during read).
         private void RefreshCachedState()
         {
-            for (int i = 0; i < _buildingsWrite.Count; i++)
+            for (int i = 0; i < _buildings.Write.Count; i++)
             {
-                var c = _buildingsWrite[i];
+                var c = _buildings.Write[i];
                 try
                 {
                     if (c.BlockObject != null)
@@ -344,13 +344,13 @@ namespace Timberbot
                         c.Stock = totalStock;
                         c.Capacity = totalCapacity;
                     }
-                    _buildingsWrite[i] = c;
+                    _buildings.Write[i] = c;
                 }
                 catch { }
             }
-            for (int i = 0; i < _naturalResourcesWrite.Count; i++)
+            for (int i = 0; i < _naturalResources.Write.Count; i++)
             {
-                var c = _naturalResourcesWrite[i];
+                var c = _naturalResources.Write[i];
                 try
                 {
                     if (c.BlockObject != null)
@@ -362,14 +362,14 @@ namespace Timberbot
                     c.Alive = c.Living != null && !c.Living.IsDead;
                     c.Grown = c.Growable != null && c.Growable.IsGrown;
                     c.Growth = c.Growable != null ? c.Growable.GrowthProgress : 0f;
-                    _naturalResourcesWrite[i] = c;
+                    _naturalResources.Write[i] = c;
                 }
                 catch { }
             }
             // beavers
-            for (int i = 0; i < _beaversWrite.Count; i++)
+            for (int i = 0; i < _beavers.Write.Count; i++)
             {
-                var c = _beaversWrite[i];
+                var c = _beavers.Write[i];
                 try
                 {
                     if (c.WbTracker != null)
@@ -430,15 +430,14 @@ namespace Timberbot
                             if (need.IsBelowWarningThreshold) c.AnyCritical = true;
                         }
                     }
-                    _beaversWrite[i] = c;
+                    _beavers.Write[i] = c;
                 }
                 catch { }
             }
-            // swap: background thread gets the freshly updated buffer.
-            // no copy-back -- both buffers always have same entities (add/remove updates both).
-            var tmpB = _buildingsRead; _buildingsRead = _buildingsWrite; _buildingsWrite = tmpB;
-            var tmpN = _naturalResourcesRead; _naturalResourcesRead = _naturalResourcesWrite; _naturalResourcesWrite = tmpN;
-            var tmpV = _beaversRead; _beaversRead = _beaversWrite; _beaversWrite = tmpV;
+            // swap: background thread gets the freshly updated buffer
+            _buildings.Swap();
+            _naturalResources.Swap();
+            _beavers.Swap();
         }
 
         // PERF: event-driven entity indexes with cached component refs.
@@ -555,14 +554,9 @@ namespace Timberbot
             public List<CachedNeed> Needs;
         }
 
-        // double-buffered indexes: main thread writes to _write lists, then swaps to _read.
-        // background thread only ever reads from _read lists. zero contention.
-        private List<CachedBuilding> _buildingsWrite = new List<CachedBuilding>();
-        private List<CachedBuilding> _buildingsRead = new List<CachedBuilding>();
-        private List<CachedNaturalResource> _naturalResourcesWrite = new List<CachedNaturalResource>();
-        private List<CachedNaturalResource> _naturalResourcesRead = new List<CachedNaturalResource>();
-        private List<CachedBeaver> _beaversWrite = new List<CachedBeaver>();
-        private List<CachedBeaver> _beaversRead = new List<CachedBeaver>();
+        private readonly DoubleBuffer<CachedBuilding> _buildings = new DoubleBuffer<CachedBuilding>();
+        private readonly DoubleBuffer<CachedNaturalResource> _naturalResources = new DoubleBuffer<CachedNaturalResource>();
+        private readonly DoubleBuffer<CachedBeaver> _beavers = new DoubleBuffer<CachedBeaver>();
         private readonly Dictionary<int, EntityComponent> _entityCache = new Dictionary<int, EntityComponent>();
         // separate StringBuilders per endpoint to avoid contention on background thread
         private readonly System.Text.StringBuilder _sbBuildings = new System.Text.StringBuilder(200000);
@@ -570,9 +564,9 @@ namespace Timberbot
 
         private void BuildAllIndexes()
         {
-            _buildingsWrite.Clear(); _buildingsRead.Clear();
-            _naturalResourcesWrite.Clear(); _naturalResourcesRead.Clear();
-            _beaversWrite.Clear(); _beaversRead.Clear();
+            _buildings.Clear();
+            _naturalResources.Clear();
+            _beavers.Clear();
             _entityCache.Clear();
             foreach (var ec in _entityRegistry.Entities)
                 AddToIndexes(ec);
@@ -647,8 +641,7 @@ namespace Timberbot
                         catch { }
                     }
                 }
-                _buildingsWrite.Add(cb);
-                _buildingsRead.Add(cb);
+                _buildings.Add(cb);
             }
             else if (ec.GetComponent<LivingNaturalResource>() != null)
             {
@@ -662,8 +655,7 @@ namespace Timberbot
                     Gatherable = ec.GetComponent<Gatherable>(),
                     Growable = ec.GetComponent<Timberborn.Growing.Growable>()
                 };
-                _naturalResourcesWrite.Add(nr);
-                _naturalResourcesRead.Add(nr);
+                _naturalResources.Add(nr);
             }
             else if (ec.GetComponent<NeedManager>() != null)
             {
@@ -684,8 +676,7 @@ namespace Timberbot
                     Citizen = ec.GetComponent<Timberborn.GameDistricts.Citizen>(),
                     Needs = new List<CachedNeed>()
                 };
-                _beaversWrite.Add(cb);
-                _beaversRead.Add(cb);
+                _beavers.Add(cb);
             }
         }
 
@@ -693,12 +684,9 @@ namespace Timberbot
         {
             int id = ec.GameObject.GetInstanceID();
             _entityCache.Remove(id);
-            _buildingsWrite.RemoveAll(b => b.Id == id);
-            _buildingsRead.RemoveAll(b => b.Id == id);
-            _naturalResourcesWrite.RemoveAll(n => n.Id == id);
-            _naturalResourcesRead.RemoveAll(n => n.Id == id);
-            _beaversWrite.RemoveAll(b => b.Id == id);
-            _beaversRead.RemoveAll(b => b.Id == id);
+            _buildings.RemoveAll(b => b.Id == id);
+            _naturalResources.RemoveAll(n => n.Id == id);
+            _beavers.RemoveAll(b => b.Id == id);
         }
 
         [OnEvent]
@@ -752,7 +740,7 @@ namespace Timberbot
             int miserable = 0, critical = 0;
 
             // trees (read cached primitives only -- zero Unity calls)
-            foreach (var c in _naturalResourcesRead)
+            foreach (var c in _naturalResources.Read)
             {
                 if (c.Cuttable == null) continue;
                 if (c.Alive)
@@ -764,7 +752,7 @@ namespace Timberbot
             }
 
             // buildings (read cached primitives only -- zero Unity calls)
-            foreach (var c in _buildingsRead)
+            foreach (var c in _buildings.Read)
             {
                 if (c.Dwelling != null)
                 {
@@ -785,7 +773,7 @@ namespace Timberbot
             }
 
             // beavers: cached wellbeing + critical needs
-            foreach (var c in _beaversRead)
+            foreach (var c in _beavers.Read)
             {
                 totalWellbeing += c.Wellbeing;
                 beaverCount++;
@@ -914,11 +902,11 @@ namespace Timberbot
             return flat;
         }
 
-        // PERF: iterates _buildingsRead instead of all entities.
+        // PERF: iterates _buildings.Read instead of all entities.
         public object CollectAlerts()
         {
             var alerts = new List<object>();
-            foreach (var c in _buildingsRead)
+            foreach (var c in _buildings.Read)
             {
                 if (c.Workplace != null && c.DesiredWorkers > 0 && c.AssignedWorkers < c.DesiredWorkers)
                     alerts.Add(new { type = "unstaffed", id = c.Id, name = c.Name, workers = $"{c.AssignedWorkers}/{c.DesiredWorkers}" });
@@ -936,7 +924,7 @@ namespace Timberbot
         public object CollectTreeClusters(int cellSize = 10, int top = 5)
         {
             var cells = new Dictionary<long, int[]>(); // key -> [grown, total, centerX, centerY, z]
-            foreach (var nr in _naturalResourcesRead)
+            foreach (var nr in _naturalResources.Read)
             {
                 if (nr.Cuttable == null) continue;
                 if (nr.Living == null || nr.Living.IsDead) continue;
@@ -980,7 +968,7 @@ namespace Timberbot
             var deadTiles = new HashSet<long>();
 
             // buildings (multi-tile footprints cached at add-time)
-            var buildings = _buildingsRead;
+            var buildings = _buildings.Read;
             for (int bi = 0; bi < buildings.Count; bi++)
             {
                 var b = buildings[bi];
@@ -996,7 +984,7 @@ namespace Timberbot
             }
 
             // natural resources (1x1, all data cached)
-            var resources = _naturalResourcesRead;
+            var resources = _naturalResources.Read;
             for (int ri = 0; ri < resources.Count; ri++)
             {
                 var r = resources[ri];
@@ -1210,108 +1198,106 @@ namespace Timberbot
 
             var sb = _sbBuildings;
             sb.Clear();
-            sb.Append('[');
+            Jw.OpenArr(sb);
             bool first = true;
-            foreach (var c in _buildingsRead)
+            foreach (var c in _buildings.Read)
             {
                 if (singleId.HasValue && c.Id != singleId.Value)
                     continue;
-                if (!first) sb.Append(',');
+                if (!first) Jw.Sep(sb);
                 first = false;
 
-                sb.Append("{\"id\":"); sb.Append(c.Id);
-                sb.Append(",\"name\":\""); sb.Append(c.Name);
-                sb.Append("\",\"x\":"); sb.Append(c.X);
-                sb.Append(",\"y\":"); sb.Append(c.Y);
-                sb.Append(",\"z\":"); sb.Append(c.Z);
-                sb.Append(",\"orientation\":\""); sb.Append(c.Orientation ?? ""); sb.Append('"');
-                sb.Append(",\"finished\":"); sb.Append(c.Finished ? "true" : "false");
-                sb.Append(",\"paused\":"); sb.Append(c.Paused ? "true" : "false");
+                Jw.Open(sb);
+                Jw.KeyFirst(sb, "id"); Jw.Int(sb, c.Id);
+                Jw.Key(sb, "name"); Jw.Str(sb, c.Name);
+                Jw.Key(sb, "x"); Jw.Int(sb, c.X);
+                Jw.Key(sb, "y"); Jw.Int(sb, c.Y);
+                Jw.Key(sb, "z"); Jw.Int(sb, c.Z);
+                Jw.Key(sb, "orientation"); Jw.Str(sb, c.Orientation ?? "");
+                Jw.Key(sb, "finished"); Jw.Bool(sb, c.Finished);
+                Jw.Key(sb, "paused"); Jw.Bool(sb, c.Paused);
 
                 if (!fullDetail)
                 {
-                    // basic: priority + workers only
-                    sb.Append(",\"priority\":\""); sb.Append(c.ConstructionPriority ?? ""); sb.Append('"');
-                    sb.Append(",\"workers\":\"");
-                    if (c.Workplace != null) { sb.Append(c.AssignedWorkers); sb.Append('/'); sb.Append(c.DesiredWorkers); }
-                    sb.Append('"');
-                    sb.Append('}');
+                    Jw.Key(sb, "priority"); Jw.Str(sb, c.ConstructionPriority ?? "");
+                    Jw.Key(sb, "workers"); Jw.Str(sb, c.Workplace != null ? $"{c.AssignedWorkers}/{c.DesiredWorkers}" : "");
+                    Jw.Close(sb);
                     continue;
                 }
 
                 // full detail
-                if (c.Pausable != null) { sb.Append(",\"pausable\":true"); }
-                if (c.HasFloodgate) { sb.Append(",\"floodgate\":true,\"height\":"); sb.Append(c.FloodgateHeight.ToString("F1")); sb.Append(",\"maxHeight\":"); sb.Append(c.FloodgateMaxHeight.ToString("F1")); }
-                if (c.ConstructionPriority != null) { sb.Append(",\"constructionPriority\":\""); sb.Append(c.ConstructionPriority); sb.Append('"'); }
-                if (c.WorkplacePriorityStr != null) { sb.Append(",\"workplacePriority\":\""); sb.Append(c.WorkplacePriorityStr); sb.Append('"'); }
-                if (c.Workplace != null) { sb.Append(",\"maxWorkers\":"); sb.Append(c.MaxWorkers); sb.Append(",\"desiredWorkers\":"); sb.Append(c.DesiredWorkers); sb.Append(",\"assignedWorkers\":"); sb.Append(c.AssignedWorkers); }
-                if (c.Reachability != null) { sb.Append(",\"reachable\":"); sb.Append(!c.Unreachable ? "true" : "false"); }
-                if (c.Mechanical != null) { sb.Append(",\"powered\":"); sb.Append(c.Powered ? "true" : "false"); }
+                if (c.Pausable != null) { Jw.Key(sb, "pausable"); Jw.Bool(sb, true); }
+                if (c.HasFloodgate) { Jw.Key(sb, "floodgate"); Jw.Bool(sb, true); Jw.Key(sb, "height"); Jw.Float(sb, c.FloodgateHeight, "F1"); Jw.Key(sb, "maxHeight"); Jw.Float(sb, c.FloodgateMaxHeight, "F1"); }
+                if (c.ConstructionPriority != null) { Jw.Key(sb, "constructionPriority"); Jw.Str(sb, c.ConstructionPriority); }
+                if (c.WorkplacePriorityStr != null) { Jw.Key(sb, "workplacePriority"); Jw.Str(sb, c.WorkplacePriorityStr); }
+                if (c.Workplace != null) { Jw.Key(sb, "maxWorkers"); Jw.Int(sb, c.MaxWorkers); Jw.Key(sb, "desiredWorkers"); Jw.Int(sb, c.DesiredWorkers); Jw.Key(sb, "assignedWorkers"); Jw.Int(sb, c.AssignedWorkers); }
+                if (c.Reachability != null) { Jw.Key(sb, "reachable"); Jw.Bool(sb, !c.Unreachable); }
+                if (c.Mechanical != null) { Jw.Key(sb, "powered"); Jw.Bool(sb, c.Powered); }
                 if (c.PowerNode != null)
                 {
-                    sb.Append(",\"isGenerator\":"); sb.Append(c.IsGenerator ? "true" : "false");
-                    sb.Append(",\"isConsumer\":"); sb.Append(c.IsConsumer ? "true" : "false");
-                    sb.Append(",\"nominalPowerInput\":"); sb.Append(c.NominalPowerInput);
-                    sb.Append(",\"nominalPowerOutput\":"); sb.Append(c.NominalPowerOutput);
-                    if (c.PowerDemand > 0 || c.PowerSupply > 0) { sb.Append(",\"powerDemand\":"); sb.Append(c.PowerDemand); sb.Append(",\"powerSupply\":"); sb.Append(c.PowerSupply); }
+                    Jw.Key(sb, "isGenerator"); Jw.Bool(sb, c.IsGenerator);
+                    Jw.Key(sb, "isConsumer"); Jw.Bool(sb, c.IsConsumer);
+                    Jw.Key(sb, "nominalPowerInput"); Jw.Int(sb, c.NominalPowerInput);
+                    Jw.Key(sb, "nominalPowerOutput"); Jw.Int(sb, c.NominalPowerOutput);
+                    if (c.PowerDemand > 0 || c.PowerSupply > 0) { Jw.Key(sb, "powerDemand"); Jw.Int(sb, c.PowerDemand); Jw.Key(sb, "powerSupply"); Jw.Int(sb, c.PowerSupply); }
                 }
-                if (c.Site != null) { sb.Append(",\"buildProgress\":"); sb.Append(c.BuildProgress.ToString("F2")); sb.Append(",\"materialProgress\":"); sb.Append(c.MaterialProgress.ToString("F2")); sb.Append(",\"hasMaterials\":"); sb.Append(c.HasMaterials ? "true" : "false"); }
+                if (c.Site != null) { Jw.Key(sb, "buildProgress"); Jw.Float(sb, c.BuildProgress); Jw.Key(sb, "materialProgress"); Jw.Float(sb, c.MaterialProgress); Jw.Key(sb, "hasMaterials"); Jw.Bool(sb, c.HasMaterials); }
                 if (c.Capacity > 0)
                 {
-                    sb.Append(",\"stock\":"); sb.Append(c.Stock);
-                    sb.Append(",\"capacity\":"); sb.Append(c.Capacity);
+                    Jw.Key(sb, "stock"); Jw.Int(sb, c.Stock);
+                    Jw.Key(sb, "capacity"); Jw.Int(sb, c.Capacity);
                     if (c.Inventory != null && c.Inventory.Count > 0)
                     {
-                        sb.Append(",\"inventory\":{");
+                        Jw.Key(sb, "inventory"); Jw.Open(sb);
                         bool ifirst = true;
                         foreach (var kvp in c.Inventory)
                         {
-                            if (!ifirst) sb.Append(',');
-                            ifirst = false;
-                            sb.Append('"'); sb.Append(kvp.Key); sb.Append("\":"); sb.Append(kvp.Value);
+                            if (!ifirst) Jw.Sep(sb);
+                            else { Jw.KeyFirst(sb, kvp.Key); ifirst = false; Jw.Int(sb, kvp.Value); continue; }
+                            Jw.KeyFirst(sb, kvp.Key); Jw.Int(sb, kvp.Value);
                         }
-                        sb.Append('}');
+                        Jw.Close(sb);
                     }
                 }
-                if (c.HasWonder) { sb.Append(",\"isWonder\":true,\"wonderActive\":"); sb.Append(c.WonderActive ? "true" : "false"); }
-                if (c.Dwelling != null) { sb.Append(",\"dwellers\":"); sb.Append(c.Dwellers); sb.Append(",\"maxDwellers\":"); sb.Append(c.MaxDwellers); }
-                if (c.HasClutch) { sb.Append(",\"isClutch\":true,\"clutchEngaged\":"); sb.Append(c.ClutchEngaged ? "true" : "false"); }
+                if (c.HasWonder) { Jw.Key(sb, "isWonder"); Jw.Bool(sb, true); Jw.Key(sb, "wonderActive"); Jw.Bool(sb, c.WonderActive); }
+                if (c.Dwelling != null) { Jw.Key(sb, "dwellers"); Jw.Int(sb, c.Dwellers); Jw.Key(sb, "maxDwellers"); Jw.Int(sb, c.MaxDwellers); }
+                if (c.HasClutch) { Jw.Key(sb, "isClutch"); Jw.Bool(sb, true); Jw.Key(sb, "clutchEngaged"); Jw.Bool(sb, c.ClutchEngaged); }
                 if (c.Manufactory != null)
                 {
                     if (c.Recipes != null && c.Recipes.Count > 0)
                     {
-                        sb.Append(",\"recipes\":[");
+                        Jw.Key(sb, "recipes"); Jw.OpenArr(sb);
                         for (int ri = 0; ri < c.Recipes.Count; ri++)
                         {
-                            if (ri > 0) sb.Append(',');
-                            sb.Append('"'); sb.Append(c.Recipes[ri]); sb.Append('"');
+                            if (ri > 0) Jw.Sep(sb);
+                            Jw.Str(sb, c.Recipes[ri]);
                         }
-                        sb.Append(']');
+                        Jw.CloseArr(sb);
                     }
-                    sb.Append(",\"currentRecipe\":\""); sb.Append(c.CurrentRecipe ?? ""); sb.Append('"');
-                    sb.Append(",\"productionProgress\":"); sb.Append(c.ProductionProgress.ToString("F2"));
-                    sb.Append(",\"readyToProduce\":"); sb.Append(c.ReadyToProduce ? "true" : "false");
+                    Jw.Key(sb, "currentRecipe"); Jw.Str(sb, c.CurrentRecipe ?? "");
+                    Jw.Key(sb, "productionProgress"); Jw.Float(sb, c.ProductionProgress);
+                    Jw.Key(sb, "readyToProduce"); Jw.Bool(sb, c.ReadyToProduce);
                 }
                 if (c.BreedingPod != null)
                 {
-                    sb.Append(",\"needsNutrients\":"); sb.Append(c.NeedsNutrients ? "true" : "false");
+                    Jw.Key(sb, "needsNutrients"); Jw.Bool(sb, c.NeedsNutrients);
                     if (c.NutrientStock != null && c.NutrientStock.Count > 0)
                     {
-                        sb.Append(",\"nutrients\":{");
+                        Jw.Key(sb, "nutrients"); Jw.Open(sb);
                         bool nfirst = true;
                         foreach (var kvp in c.NutrientStock)
                         {
-                            if (!nfirst) sb.Append(',');
-                            nfirst = false;
-                            sb.Append('"'); sb.Append(kvp.Key); sb.Append("\":"); sb.Append(kvp.Value);
+                            if (!nfirst) Jw.Sep(sb);
+                            else { Jw.KeyFirst(sb, kvp.Key); nfirst = false; Jw.Int(sb, kvp.Value); continue; }
+                            Jw.KeyFirst(sb, kvp.Key); Jw.Int(sb, kvp.Value);
                         }
-                        sb.Append('}');
+                        Jw.Close(sb);
                     }
                 }
-                if (c.EffectRadius > 0) { sb.Append(",\"effectRadius\":"); sb.Append(c.EffectRadius); }
-                sb.Append('}');
+                if (c.EffectRadius > 0) { Jw.Key(sb, "effectRadius"); Jw.Int(sb, c.EffectRadius); }
+                Jw.Close(sb);
             }
-            sb.Append(']');
+            Jw.CloseArr(sb);
             return sb.ToString();
         }
 
@@ -1322,35 +1308,33 @@ namespace Timberbot
         {
             var sb = _sbTrees;
             sb.Clear();
-            sb.Append('[');
+            Jw.OpenArr(sb);
             bool first = true;
-            foreach (var c in _naturalResourcesRead)
+            foreach (var c in _naturalResources.Read)
             {
                 if (c.Cuttable == null) continue;
-                if (!first) sb.Append(',');
+                if (!first) Jw.Sep(sb);
                 first = false;
-                sb.Append("{\"id\":");
-                sb.Append(c.Id);
-                sb.Append(",\"name\":\"");
-                sb.Append(c.Name);
-                sb.Append("\",\"x\":");
-                sb.Append(c.X);
-                sb.Append(",\"y\":"); sb.Append(c.Y);
-                sb.Append(",\"z\":"); sb.Append(c.Z);
-                sb.Append(",\"marked\":"); sb.Append(c.Marked ? "true" : "false");
-                sb.Append(",\"alive\":"); sb.Append(c.Alive ? "true" : "false");
-                sb.Append(",\"grown\":"); sb.Append(c.Grown ? "true" : "false");
-                sb.Append(",\"growth\":"); sb.Append(c.Growth.ToString("F2"));
-                sb.Append('}');
+                Jw.Open(sb);
+                Jw.KeyFirst(sb, "id"); Jw.Int(sb, c.Id);
+                Jw.Key(sb, "name"); Jw.Str(sb, c.Name);
+                Jw.Key(sb, "x"); Jw.Int(sb, c.X);
+                Jw.Key(sb, "y"); Jw.Int(sb, c.Y);
+                Jw.Key(sb, "z"); Jw.Int(sb, c.Z);
+                Jw.Key(sb, "marked"); Jw.Bool(sb, c.Marked);
+                Jw.Key(sb, "alive"); Jw.Bool(sb, c.Alive);
+                Jw.Key(sb, "grown"); Jw.Bool(sb, c.Grown);
+                Jw.Key(sb, "growth"); Jw.Float(sb, c.Growth);
+                Jw.Close(sb);
             }
-            sb.Append(']');
+            Jw.CloseArr(sb);
             return sb.ToString();
         }
 
         public object CollectGatherables()
         {
             var results = new List<object>();
-            foreach (var c in _naturalResourcesRead)
+            foreach (var c in _naturalResources.Read)
             {
                 if (c.Gatherable == null) continue;
                 results.Add(new Dictionary<string, object>
@@ -1378,86 +1362,81 @@ namespace Timberbot
 
             var sb = _sbBeavers;
             sb.Clear();
-            sb.Append('[');
+            Jw.OpenArr(sb);
             bool first = true;
-            foreach (var c in _beaversRead)
+            foreach (var c in _beavers.Read)
             {
                 if (singleId.HasValue && c.Id != singleId.Value)
                     continue;
-                if (!first) sb.Append(',');
+                if (!first) Jw.Sep(sb);
                 first = false;
 
-                sb.Append("{\"id\":"); sb.Append(c.Id);
-                sb.Append(",\"name\":\""); sb.Append(c.Name); sb.Append('"');
-                sb.Append(",\"x\":"); sb.Append(c.X);
-                sb.Append(",\"y\":"); sb.Append(c.Y);
-                sb.Append(",\"z\":"); sb.Append(c.Z);
-                sb.Append(",\"wellbeing\":"); sb.Append(c.Wellbeing.ToString("F1"));
-                sb.Append(",\"isBot\":"); sb.Append(c.IsBot ? "true" : "false");
+                Jw.Open(sb);
+                Jw.KeyFirst(sb, "id"); Jw.Int(sb, c.Id);
+                Jw.Key(sb, "name"); Jw.Str(sb, c.Name);
+                Jw.Key(sb, "x"); Jw.Int(sb, c.X);
+                Jw.Key(sb, "y"); Jw.Int(sb, c.Y);
+                Jw.Key(sb, "z"); Jw.Int(sb, c.Z);
+                Jw.Key(sb, "wellbeing"); Jw.Float(sb, c.Wellbeing, "F1");
+                Jw.Key(sb, "isBot"); Jw.Bool(sb, c.IsBot);
 
                 if (!fullDetail)
                 {
-                    // TOON: compact with tier, critical, unmet
                     float wb = c.Wellbeing;
                     string tier = wb >= 16 ? "ecstatic" : wb >= 12 ? "happy" : wb >= 8 ? "okay" : wb >= 4 ? "unhappy" : "miserable";
-                    sb.Append(",\"tier\":\""); sb.Append(tier); sb.Append('"');
-                    sb.Append(",\"workplace\":\""); sb.Append(c.Workplace ?? ""); sb.Append('"');
+                    Jw.Key(sb, "tier"); Jw.Str(sb, tier);
+                    Jw.Key(sb, "workplace"); Jw.Str(sb, c.Workplace ?? "");
 
-                    // build critical + unmet from cached needs
+                    // critical + unmet need summaries
                     sb.Append(",\"critical\":\"");
                     bool cfirst = true;
                     if (c.Needs != null)
-                    {
                         foreach (var n in c.Needs)
-                        {
                             if (n.Critical) { if (!cfirst) sb.Append('+'); cfirst = false; sb.Append(n.Id); }
-                        }
-                    }
                     sb.Append("\",\"unmet\":\"");
                     bool ufirst = true;
                     if (c.Needs != null)
-                    {
                         foreach (var n in c.Needs)
-                        {
                             if (!n.Favorable && !n.Critical && n.Active) { if (!ufirst) sb.Append('+'); ufirst = false; sb.Append(n.Id); }
-                        }
-                    }
                     sb.Append("\"}");
                     continue;
                 }
 
                 // full detail
-                sb.Append(",\"anyCritical\":"); sb.Append(c.AnyCritical ? "true" : "false");
-                if (c.Workplace != null) { sb.Append(",\"workplace\":\""); sb.Append(c.Workplace); sb.Append('"'); }
-                if (c.District != null) { sb.Append(",\"district\":\""); sb.Append(c.District); sb.Append('"'); }
-                sb.Append(",\"hasHome\":"); sb.Append(c.HasHome ? "true" : "false");
-                sb.Append(",\"contaminated\":"); sb.Append(c.Contaminated ? "true" : "false");
-                if (c.Life != null) { sb.Append(",\"lifeProgress\":"); sb.Append(c.LifeProgress.ToString("F2")); }
-                if (c.Deteriorable != null) { sb.Append(",\"deterioration\":"); sb.Append(c.DeteriorationProgress.ToString("F3")); }
-                if (c.Carrier != null) { sb.Append(",\"liftingCapacity\":"); sb.Append(c.LiftingCapacity); if (c.Overburdened) sb.Append(",\"overburdened\":true"); }
-                if (c.IsCarrying) { sb.Append(",\"carrying\":\""); sb.Append(c.CarryingGood); sb.Append("\",\"carryAmount\":"); sb.Append(c.CarryAmount); }
+                Jw.Key(sb, "anyCritical"); Jw.Bool(sb, c.AnyCritical);
+                if (c.Workplace != null) { Jw.Key(sb, "workplace"); Jw.Str(sb, c.Workplace); }
+                if (c.District != null) { Jw.Key(sb, "district"); Jw.Str(sb, c.District); }
+                Jw.Key(sb, "hasHome"); Jw.Bool(sb, c.HasHome);
+                Jw.Key(sb, "contaminated"); Jw.Bool(sb, c.Contaminated);
+                if (c.Life != null) { Jw.Key(sb, "lifeProgress"); Jw.Float(sb, c.LifeProgress); }
+                if (c.Deteriorable != null) { Jw.Key(sb, "deterioration"); Jw.Float(sb, c.DeteriorationProgress, "F3"); }
+                if (c.Carrier != null) { Jw.Key(sb, "liftingCapacity"); Jw.Int(sb, c.LiftingCapacity); if (c.Overburdened) { Jw.Key(sb, "overburdened"); Jw.Bool(sb, true); } }
+                if (c.IsCarrying) { Jw.Key(sb, "carrying"); Jw.Str(sb, c.CarryingGood); Jw.Key(sb, "carryAmount"); Jw.Int(sb, c.CarryAmount); }
 
                 // needs array
-                sb.Append(",\"needs\":[");
+                Jw.Key(sb, "needs"); Jw.OpenArr(sb);
                 if (c.Needs != null)
                 {
                     bool nfirst = true;
                     foreach (var n in c.Needs)
                     {
                         if (!fullDetail && !c.IsBot && !n.Active) continue;
-                        if (!nfirst) sb.Append(',');
+                        if (!nfirst) Jw.Sep(sb);
                         nfirst = false;
-                        sb.Append("{\"id\":\""); sb.Append(n.Id);
-                        sb.Append("\",\"points\":"); sb.Append(n.Points.ToString("F2"));
-                        sb.Append(",\"wellbeing\":"); sb.Append(n.Wellbeing);
-                        sb.Append(",\"favorable\":"); sb.Append(n.Favorable ? "true" : "false");
-                        sb.Append(",\"critical\":"); sb.Append(n.Critical ? "true" : "false");
-                        sb.Append(",\"group\":\""); sb.Append(n.Group); sb.Append("\"}");
+                        Jw.Open(sb);
+                        Jw.KeyFirst(sb, "id"); Jw.Str(sb, n.Id);
+                        Jw.Key(sb, "points"); Jw.Float(sb, n.Points);
+                        Jw.Key(sb, "wellbeing"); Jw.Int(sb, n.Wellbeing);
+                        Jw.Key(sb, "favorable"); Jw.Bool(sb, n.Favorable);
+                        Jw.Key(sb, "critical"); Jw.Bool(sb, n.Critical);
+                        Jw.Key(sb, "group"); Jw.Str(sb, n.Group);
+                        Jw.Close(sb);
                     }
                 }
-                sb.Append("]}");
+                Jw.CloseArr(sb);
+                Jw.Close(sb);
             }
-            sb.Append(']');
+            Jw.CloseArr(sb);
             return sb.ToString();
         }
 
@@ -1465,7 +1444,7 @@ namespace Timberbot
         {
             // group buildings by power network using cached PowerNetworkId
             var networks = new Dictionary<int, Dictionary<string, object>>();
-            var buildings = _buildingsRead;
+            var buildings = _buildings.Read;
             for (int i = 0; i < buildings.Count; i++)
             {
                 var c = buildings[i];
@@ -1581,7 +1560,7 @@ namespace Timberbot
             var deadTiles = new HashSet<long>();
 
             // buildings (multi-tile footprints cached at add-time)
-            var buildings = _buildingsRead;
+            var buildings = _buildings.Read;
             for (int i = 0; i < buildings.Count; i++)
             {
                 var c = buildings[i];
@@ -1601,7 +1580,7 @@ namespace Timberbot
             }
 
             // natural resources (1x1, all data cached)
-            var resources = _naturalResourcesRead;
+            var resources = _naturalResources.Read;
             for (int i = 0; i < resources.Count; i++)
             {
                 var r = resources[i];
@@ -2219,7 +2198,7 @@ namespace Timberbot
                     foreach (var ns in kvp.Value)
                         needToGroup[ns.Id] = kvp.Key;
 
-                foreach (var c in _beaversRead)
+                foreach (var c in _beavers.Read)
                 {
                     if (c.Needs == null) continue;
                     beaverCount++;
@@ -2522,7 +2501,7 @@ namespace Timberbot
                     // O(n) scan but only called once per z-level change (max ~6 times per route)
                     void DemolishPathAt(int px, int py, int pz)
                     {
-                        foreach (var cb in _buildingsRead)
+                        foreach (var cb in _buildings.Read)
                         {
                             if (cb.BlockObject == null) continue;
                             var c = cb.BlockObject.Coordinates;
@@ -2951,7 +2930,7 @@ namespace Timberbot
             // collect path and power tile positions for placement scoring
             var pathTiles = new HashSet<long>();
             var powerTiles = new HashSet<long>();
-            foreach (var cb in _buildingsRead)
+            foreach (var cb in _buildings.Read)
             {
                 if (cb.BlockObject == null) continue;
                 if (cb.Name.Contains("Path") || cb.Name.Contains("Stairs"))
