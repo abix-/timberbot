@@ -21,6 +21,8 @@ Or use it as a scripting API for your own tools, dashboards, and external automa
 
 [b]One-call snapshot:[/b] entire colony in a single request. Resources, weather, drought countdown, alerts, and projected days of food, water, logs, planks, and gears.
 
+[b]Webhooks:[/b] 68 push notification events -- drought start/end, beaver death, construction complete, game over, and more. Your scripts react instantly instead of polling.
+
 [h1]Live dashboard[/h1]
 [code]
 timberbot.py top
@@ -36,6 +38,8 @@ timberbot.py beavers detail:full                  # every need on every beaver
 timberbot.py power                                # power networks with supply vs demand
 timberbot.py visual x:120 y:140 radius:10         # ASCII map
 timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2 orientation:south
+timberbot.py crops                                  # crops in the ground with growth status
+timberbot.py register_webhook url:http://localhost:9000/events events:drought.start,beaver.died
 [/code]
 Works with any language that speaks HTTP. Python client is optional. Raw curl works too.
 
@@ -60,6 +64,7 @@ Edit settings.json in your mod folder (Documents/Timberborn/Mods/Timberbot/):
 {
   "refreshIntervalSeconds": 1.0,
   "debugEndpointEnabled": false,
+  "webhooksEnabled": true,
   "httpPort": 8085
 }
 [/code]
@@ -69,4 +74,5 @@ Edit settings.json in your mod folder (Documents/Timberborn/Mods/Timberbot/):
 [url=https://abix-.github.io/TimberbornMods/api-reference/]API Reference[/url] All endpoints with request/response examples
 [url=https://abix-.github.io/TimberbornMods/timberbot/]AI Prompt[/url] Teach Claude or ChatGPT to run your colony
 [url=https://abix-.github.io/TimberbornMods/features/]Features[/url] Full compatibility matrix (40 game systems)
+[url=https://abix-.github.io/TimberbornMods/webhooks/]Webhooks[/url] 68 push notification events for game automation
 [url=https://github.com/abix-/TimberbornMods]Source Code[/url]

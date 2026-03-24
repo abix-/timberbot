@@ -393,6 +393,7 @@
     <Copy SourceFiles="..\..\docs\features.md" DestinationFolder="$(ModDir)\docs" />
     <Copy SourceFiles="..\..\docs\developing.md" DestinationFolder="$(ModDir)\docs" />
     <Copy SourceFiles="..\..\docs\timberbot.md" DestinationFolder="$(ModDir)\docs" />
+    <Copy SourceFiles="..\..\docs\webhooks.md" DestinationFolder="$(ModDir)\docs" />
     <Message Text="Deployed to $(ModDir)" Importance="high" />
   </Target>
 

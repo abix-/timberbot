@@ -88,6 +88,10 @@ Beavers die if food or water hits 0.
 | `set_distribution district:X good:Water import_option:Forced` | Import/export per good per district |
 | `unlock_building building:Name.IronTeeth` | Unlock building with science points |
 | `migrate from_district:X to_district:Y count:N` | Move beavers between districts |
+| **Webhooks** | |
+| `register_webhook url:URL events:drought.start,beaver.died` | Push notifications for 68 game events. See [webhooks.md](webhooks.md) |
+| `unregister_webhook webhook_id:wh_1` | Remove a registered webhook |
+| `list_webhooks` | Show all registered webhooks |
 | **Forbidden** | |
 | `debug` | Reflection-based game internals inspector. Disabled by default -- enable in `settings.json` |
 

@@ -42,7 +42,7 @@
 | [Power networks](api-reference.md#get-apipower) | Connected building groups with supply vs demand per network | Yes |
 | [Bot durability](api-reference.md#get-apibeavers) | Deterioration progress (0-1) on mechanical beavers | Yes |
 | [Resource projection](api-reference.md#get-apisummary) | Projected days of logs, planks, gears (logDays, plankDays, gearDays) | Yes |
-| Webhooks | Push notifications for game events (drought, death, construction complete) instead of polling | Planned |
+| [Webhooks](webhooks.md) | 68 push notification events for game automation (drought, death, construction, weather, power, wonders) | Yes |
 
 ## By design
 
