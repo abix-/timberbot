@@ -13,7 +13,7 @@ Usage:
     python timberbot.py summary             colony dashboard (one call, all stats)
     python timberbot.py buildings           list all buildings
     python timberbot.py --json summary      full JSON output
-    python timberbot.py watch               live terminal dashboard
+    python timberbot.py top                 live colony dashboard
     python timberbot.py place_building prefab:LumberjackFlag.IronTeeth x:120 y:130 z:2
 
 As a library:
@@ -453,7 +453,7 @@ class Timberbot:
 
 
 # ---------------------------------------------------------------------------
-# Live dashboard (watch subcommand)
+# Live dashboard (top subcommand)
 # ---------------------------------------------------------------------------
 
 _RST = "\033[0m"
@@ -469,101 +469,139 @@ _BMAG = "\033[95m"
 _BCYN = "\033[96m"
 
 
-def _bar(pct, width=20):
-    filled = int(pct * width)
-    return f"{_BGRN}{'#' * filled}{_DIM}{'.' * (width - filled)}{_RST}"
+def _color_val(val, warn_below, crit_below, fmt=".0f"):
+    color = _BRED if val < crit_below else _BYEL if val < warn_below else _BGRN
+    return f"{color}{_BOLD}{val:{fmt}}{_RST}"
 
 
-def _render(data):
-    if not data:
+def _top_render(summary, wellbeing_data):
+    import re as _re
+    if not summary:
         print(f"  {_RED}-- game not reachable --{_RST}")
         return
 
-    t = data.get("time", {})
-    w = data.get("weather", {})
-
+    t = summary.get("time", {})
+    w = summary.get("weather", {})
     day = t.get("dayNumber", 0)
-    progress = t.get("dayProgress", 0)
-    cycle = w.get("cycle", 0)
-    cday = w.get("cycleDay", 0)
     hazardous = w.get("isHazardous", False)
-    temperate_len = w.get("temperateWeatherDuration", 0)
-    hazard_len = w.get("hazardousWeatherDuration", 0)
-    days_left = temperate_len - cday + 1 if not hazardous else 0
+    temp_len = w.get("temperateWeatherDuration", 0)
+    haz_len = w.get("hazardousWeatherDuration", 0)
+    cday = w.get("cycleDay", 0)
 
-    season_color = _BRED if hazardous else _BGRN
-    season_label = "DROUGHT" if hazardous else "temperate"
-    print(f"  {_BOLD}{_BCYN}day {day}{_RST} {_bar(progress)} {_DIM}{progress:.0%}{_RST}")
-    print(f"  {season_color}{season_label}{_RST} {_DIM}cycle {cycle} day {cday}/{temperate_len}+{hazard_len}{_RST}", end="")
-    if not hazardous:
-        if days_left <= 3:
-            print(f"  {_BRED}{_BOLD}{days_left}d to drought!{_RST}")
-        else:
-            print(f"  {_DIM}{days_left}d to drought{_RST}")
-    else:
-        remaining = temperate_len + hazard_len - cday + 1
-        print(f"  {_BRED}{remaining}d remaining{_RST}")
+    season = f"{_BRED}DROUGHT{_RST}" if hazardous else f"{_BGRN}temperate{_RST}"
+    remaining = temp_len + haz_len - cday + 1 if hazardous else temp_len - cday + 1
+    print(f"  {_BOLD}timberbot top{_RST}{'':30s}day {_BCYN}{day}{_RST}  {season} {cday}/{temp_len}+{haz_len}  {_DIM}{remaining}d left{_RST}")
     print()
 
-    for d in data.get("districts", []):
-        dname = d.get("name", "?")
-        pop = d.get("population", {})
-        adults = pop.get("adults", 0)
-        children = pop.get("children", 0)
-        bots = pop.get("bots", 0)
-        resources = d.get("resources", {})
+    # aggregate across districts
+    districts = summary.get("districts", [])
+    total_adults = sum(d.get("population", {}).get("adults", 0) for d in districts)
+    total_children = sum(d.get("population", {}).get("children", 0) for d in districts)
+    total_bots = sum(d.get("population", {}).get("bots", 0) for d in districts)
+    total_pop = total_adults + total_children + total_bots
 
-        total = adults + children + bots
-        print(f"  {_BOLD}{_BYEL}{dname}{_RST}  {_BCYN}{total}{_RST} pop {_DIM}({adults}a {children}c{f' {bots}b' if bots else ''}){_RST}")
+    resources = {}
+    for d in districts:
+        for good, val in d.get("resources", {}).items():
+            amt = val.get("available", val) if isinstance(val, dict) else val
+            resources[good] = resources.get(good, 0) + amt
 
-        if resources:
-            items = sorted(resources.items(), key=lambda x: -(x[1]["all"] if isinstance(x[1], dict) else x[1]))
-            for good, val in items:
-                if isinstance(val, dict):
-                    avail = val.get("available", 0)
-                    total_stock = val.get("all", 0)
-                else:
-                    avail = total_stock = val
+    # housing, employment, wellbeing from JSON
+    housing = summary.get("housing", {})
+    beds_str = f"{housing.get('occupiedBeds', 0)}/{housing.get('totalBeds', 0)}"
+    employment = summary.get("employment", {})
+    unemployed = employment.get("unemployed", 0)
+    wb_obj = summary.get("wellbeing", {})
+    wb_avg = wb_obj.get("average", 0) if isinstance(wb_obj, dict) else 0
+    critical = wb_obj.get("critical", 0) if isinstance(wb_obj, dict) else 0
 
-                if "water" in good.lower():
-                    color = _BBLU
-                elif "berr" in good.lower() or "bread" in good.lower() or "carrot" in good.lower():
-                    color = _BGRN
-                elif "log" in good.lower() or "plank" in good.lower() or "wood" in good.lower():
-                    color = _BYEL
-                elif "metal" in good.lower() or "gear" in good.lower() or "scrap" in good.lower():
-                    color = _BMAG
-                else:
-                    color = _WHT
+    # compute food/water days from resources
+    total_food = resources.get("Berries", 0) + resources.get("Kohlrabi", 0) + resources.get("Bread", 0) + resources.get("Carrot", 0)
+    total_water = resources.get("Water", 0)
+    food_days = round(total_food / total_pop, 1) if total_pop > 0 else 0
+    water_days = round(total_water / (total_pop * 2), 1) if total_pop > 0 else 0
 
-                carried = total_stock - avail
-                carried_str = f" {_DIM}(+{carried} in transit){_RST}" if carried > 0 else ""
-                print(f"    {color}{good:22s}{_RST} {_BOLD}{avail:>5}{_RST}{carried_str}")
-        else:
-            print(f"    {_DIM}(no resources){_RST}")
-        print()
+    # colony line
+    assigned = employment.get("assigned", 0)
+    vacancies = employment.get("vacancies", 0)
+    pop_str = f"{_BCYN}{_BOLD}{total_pop}{_RST} beavers {_DIM}({total_adults}a {total_children}c"
+    if total_bots: pop_str += f" {total_bots}b"
+    pop_str += f"){_RST}"
+    wb_color = _BRED if wb_avg < 4 else _BYEL if wb_avg < 8 else _BGRN
+    # idle beavers: 0 = no haulers (red), 1-4 = healthy (green), 5+ = overstaffed (yellow)
+    idle_color = _BRED if unemployed == 0 else _BGRN if unemployed <= 4 else _BYEL
+    crit_str = f"  {_BRED}{_BOLD}{critical} critical{_RST}" if critical > 0 else ""
+    print(f"  {_BOLD}COLONY{_RST}  {pop_str}  {beds_str} beds  {idle_color}{unemployed} idle{_RST}  {assigned}/{vacancies} workers  wb {wb_color}{_BOLD}{wb_avg}{_RST}{crit_str}")
+
+    # food + water
+    food_items = []
+    for g in ["Berries", "Kohlrabi", "Bread", "Carrot"]:
+        if resources.get(g, 0) > 0:
+            food_items.append(f"{g} {_BOLD}{resources[g]}{_RST}")
+    food_str = "  ".join(food_items) if food_items else f"{_DIM}none{_RST}"
+    print(f"  {_BOLD}FOOD{_RST}    {food_str}  foodDays {_color_val(food_days, 3, 1)}")
+    print(f"  {_BOLD}WATER{_RST}   {_BBLU}{_BOLD}{total_water}{_RST}  waterDays {_color_val(water_days, 2, 0.5)}")
+    print()
+
+    # two-column: resources left, wellbeing right
+    res_lines = []
+    for good in ["Log", "Plank", "Gear", "ScrapMetal", "MetalPart"]:
+        if good in resources:
+            res_lines.append(f"  {good:16s} {_BOLD}{resources[good]:>5}{_RST}")
+
+    wb_lines = []
+    if wellbeing_data and isinstance(wellbeing_data, dict):
+        for cat in wellbeing_data.get("categories", []):
+            g = cat.get("group", "?")
+            cur = cat.get("current", 0)
+            mx = cat.get("max", 0)
+            color = _BRED if cur == 0 and mx > 0 else _BYEL if cur < mx * 0.5 else _BGRN
+            wb_lines.append(f"  {color}{g:14s} {cur:>4.1f}/{mx:.0f}{_RST}")
+
+    # alerts
+    alerts_obj = summary.get("alerts", {})
+    alert_lines = []
+    if isinstance(alerts_obj, dict):
+        for k, v in alerts_obj.items():
+            if v > 0:
+                alert_lines.append(f"  {_BYEL}{v} {k}{_RST}")
+
+    print(f"  {_BOLD}RESOURCES{_RST}{'':23s}{_BOLD}WELLBEING{_RST} {_DIM}(current/max){_RST}")
+    max_rows = max(len(res_lines), len(wb_lines))
+    for i in range(max_rows):
+        left = res_lines[i] if i < len(res_lines) else ""
+        right = wb_lines[i] if i < len(wb_lines) else ""
+        plain_left = _re.sub(r'\033\[[0-9;]*m', '', left)
+        pad = max(0, 38 - len(plain_left))
+        print(f"{left}{' ' * pad}{right}")
+
+    if alert_lines:
+        print(f"\n  {_BOLD}ALERTS{_RST}")
+        for a in alert_lines:
+            print(a)
+
+    print(f"\n{'':36s}{_DIM}refreshing every 3s -- ctrl+c to stop{_RST}")
 
 
-def _watch():
-    bot = Timberbot()
-    print(f"\n  {_BOLD}{_BMAG}=== Timberborn Live ==={_RST}\n")
+def _top():
+    bot = Timberbot(json_mode=True)
 
     if not bot.ping():
         print(f"  {_RED}cannot reach Timberbot on port 8085{_RST}")
         print(f"  {_DIM}start Timberborn with the mod loaded{_RST}\n")
         sys.exit(1)
 
-    print(f"  {_BGRN}connected{_RST}  {_DIM}polling every 3s -- ctrl+c to stop{_RST}\n")
-
     try:
         while True:
             try:
-                data = bot.summary()
+                summary = bot.summary()
+                wb = bot.wellbeing()
             except Exception:
-                data = None
+                summary = None
+                wb = None
             print("\033[2J\033[H", end="")
-            print(f"\n  {_BOLD}{_BMAG}=== Timberborn Live ==={_RST}\n")
-            _render(data)
+            print()
+            _top_render(summary, wb)
             time.sleep(3)
     except KeyboardInterrupt:
         print(f"\n  {_DIM}bye!{_RST}\n")
@@ -631,7 +669,7 @@ def main():
                 usage = _format_usage(name, method)
                 if "VALUE" in usage:
                     print(f"    {usage.strip()}")
-        print(f"\n  {'watch':30s} live terminal dashboard")
+        print(f"\n  {'top':30s} live colony dashboard")
         sys.exit(1)
 
     json_mode = "--json" in sys.argv
@@ -639,8 +677,8 @@ def main():
     method_name = raw_args[0]
     args = raw_args[1:]
 
-    if method_name == "watch":
-        _watch()
+    if method_name == "top":
+        _top()
         return
 
     bot = Timberbot(json_mode=json_mode)
