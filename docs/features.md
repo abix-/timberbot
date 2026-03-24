@@ -17,6 +17,13 @@
 | [Workers](api-reference.md#post-apiworkers) | Count, priority, pause, haul priority | Yes |
 | [Distribution](api-reference.md#get-apidistribution) | Import/export per good, beaver migration between districts | Yes |
 | [Production](api-reference.md#post-apirecipe) | Recipes, farmhouse action, forester priority | Yes |
+| [Stockpiles](api-reference.md#post-apistockpilecapacity) | Capacity and allowed goods per stockpile | Yes |
+| [Floodgates](api-reference.md#post-apifloodgate) | Water gate height | Yes |
+| [Work schedule](api-reference.md#post-apiworkhours) | Work end hour | Yes |
+| [Game speed](api-reference.md#post-apispeed) | Pause, normal, fast, fastest | Yes |
+| [Alerts](api-reference.md#get-apialerts) | Unstaffed, unpowered, unreachable buildings | Yes |
+| [Scan](api-reference.md#post-apiscan) | Compact area snapshot with occupants | Yes |
+| [Visual](api-reference.md#post-apivisual) | ASCII map with terrain height shading and building markers | Yes |
 | [Summary](api-reference.md#get-apisummary) | Entire colony snapshot in one call | Yes |
 | [Debug](api-reference.md#post-apidebug) | Reflection-based inspection of any game object at runtime | Yes |
 | Bot condition/fuel | Bot needs via beavers endpoint | In-Progress |
