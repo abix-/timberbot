@@ -515,6 +515,10 @@ namespace Timberbot
             public Dictionary<string, int> Inventory;
             public int EffectRadius;
             public int Stock, Capacity;
+            // spatial footprint (set once at add-time, immutable)
+            public List<(int x, int y, int z)> OccupiedTiles;
+            public bool HasEntrance;
+            public int EntranceX, EntranceY;
         }
 
         private struct CachedNeed
@@ -616,6 +620,32 @@ namespace Timberbot
                     NominalPowerOutput = ec.GetComponent<MechanicalNode>()?._nominalPowerOutput ?? 0,
                     EffectRadius = ec.GetComponent<RangedEffectBuildingSpec>()?.EffectRadius ?? 0
                 };
+                // spatial footprint (immutable after placement)
+                var bo = cb.BlockObject;
+                if (bo != null)
+                {
+                    cb.OccupiedTiles = new List<(int, int, int)>();
+                    try
+                    {
+                        foreach (var block in bo.PositionedBlocks.GetAllBlocks())
+                        {
+                            var tc = block.Coordinates;
+                            cb.OccupiedTiles.Add((tc.x, tc.y, tc.z));
+                        }
+                    }
+                    catch { cb.OccupiedTiles.Add((cb.Id, 0, 0)); } // fallback shouldn't happen
+                    if (bo.HasEntrance)
+                    {
+                        try
+                        {
+                            var ent = bo.PositionedEntrance.DoorstepCoordinates;
+                            cb.HasEntrance = true;
+                            cb.EntranceX = ent.x;
+                            cb.EntranceY = ent.y;
+                        }
+                        catch { }
+                    }
+                }
                 _buildingsWrite.Add(cb);
                 _buildingsRead.Add(cb);
             }
@@ -932,44 +962,39 @@ namespace Timberbot
             var occupied = new List<object>();
             var water = new List<object>();
 
-            // reuse map's tile-building logic directly
+            // build occupancy from cached indexes -- zero GetComponent, fully thread-safe
             var occupants = new Dictionary<long, string>();
             var entrances = new HashSet<long>();
             var seedlings = new HashSet<long>();
             var deadTiles = new HashSet<long>();
-            foreach (var ec in _entityRegistry.Entities)
+
+            // buildings (multi-tile footprints cached at add-time)
+            var buildings = _buildingsRead;
+            for (int bi = 0; bi < buildings.Count; bi++)
             {
-                var bo = ec.GetComponent<BlockObject>();
-                if (bo == null) continue;
-                var name = CleanName(ec.GameObject.name);
-                if (name.Contains("RecoveredGoodStack") || name.Contains("GoodStack")) continue;
-                var living = ec.GetComponent<LivingNaturalResource>();
-                if (living != null && living.IsDead)
+                var b = buildings[bi];
+                if (b.OccupiedTiles == null) continue;
+                if (b.Name.Contains("RecoveredGoodStack") || b.Name.Contains("GoodStack")) continue;
+                foreach (var tile in b.OccupiedTiles)
                 {
-                    var dc = bo.Coordinates;
-                    deadTiles.Add((long)dc.x * 100000 + dc.y);
+                    if (tile.x >= x1 && tile.x <= x2 && tile.y >= y1 && tile.y <= y2)
+                        occupants[(long)tile.x * 100000 + tile.y] = b.Name;
                 }
-                var growable = ec.GetComponent<Timberborn.Growing.Growable>();
-                if (growable != null && !growable.IsGrown)
-                    seedlings.Add((long)bo.Coordinates.x * 100000 + bo.Coordinates.y);
-                if (bo.HasEntrance)
+                if (b.HasEntrance)
+                    entrances.Add((long)b.EntranceX * 100000 + b.EntranceY);
+            }
+
+            // natural resources (1x1, all data cached)
+            var resources = _naturalResourcesRead;
+            for (int ri = 0; ri < resources.Count; ri++)
+            {
+                var r = resources[ri];
+                if (r.X >= x1 && r.X <= x2 && r.Y >= y1 && r.Y <= y2)
                 {
-                    try { var ent = bo.PositionedEntrance.DoorstepCoordinates; entrances.Add((long)ent.x * 100000 + ent.y); } catch { }
-                }
-                try
-                {
-                    foreach (var block in bo.PositionedBlocks.GetAllBlocks())
-                    {
-                        var c = block.Coordinates;
-                        if (c.x >= x1 && c.x <= x2 && c.y >= y1 && c.y <= y2)
-                            occupants[(long)c.x * 100000 + c.y] = name;
-                    }
-                }
-                catch
-                {
-                    var c = bo.Coordinates;
-                    if (c.x >= x1 && c.x <= x2 && c.y >= y1 && c.y <= y2)
-                        occupants[(long)c.x * 100000 + c.y] = name;
+                    long key = (long)r.X * 100000 + r.Y;
+                    occupants[key] = r.Name;
+                    if (!r.Grown) seedlings.Add(key);
+                    if (!r.Alive) deadTiles.Add(key);
                 }
             }
 
@@ -1537,70 +1562,46 @@ namespace Timberbot
             x2 = Mathf.Clamp(x2, 0, size.x - 1);
             y2 = Mathf.Clamp(y2, 0, size.y - 1);
 
-            // build occupancy map from all entities -- use ALL occupied blocks, not just origin
+            // build occupancy map from cached indexes -- zero GetComponent, fully thread-safe
             // key = x*100000+y, value = list of (name, z) for vertical stacking
             var occupants = new Dictionary<long, List<(string name, int z)>>();
             var entrances = new HashSet<long>();
             var seedlings = new HashSet<long>();
             var deadTiles = new HashSet<long>();
-            foreach (var ec in _entityRegistry.Entities)
+
+            // buildings (multi-tile footprints cached at add-time)
+            var buildings = _buildingsRead;
+            for (int i = 0; i < buildings.Count; i++)
             {
-                var bo = ec.GetComponent<BlockObject>();
-                if (bo == null) continue;
-                var name = CleanName(ec.GameObject.name);
-
-                // track seedlings vs grown trees
-                var growable = ec.GetComponent<Timberborn.Growing.Growable>();
-                if (growable != null && !growable.IsGrown)
+                var c = buildings[i];
+                if (c.OccupiedTiles == null) continue;
+                foreach (var tile in c.OccupiedTiles)
                 {
-                    var c = bo.Coordinates;
-                    seedlings.Add((long)c.x * 100000 + c.y);
-                }
-
-                // track dead trees/plants (stumps -- buildable)
-                var lnr = ec.GetComponent<LivingNaturalResource>();
-                if (lnr != null && lnr.IsDead)
-                {
-                    var c = bo.Coordinates;
-                    deadTiles.Add((long)c.x * 100000 + c.y);
-                }
-
-                // record entrance tile
-                if (bo.HasEntrance)
-                {
-                    try
+                    if (tile.x >= x1 && tile.x <= x2 && tile.y >= y1 && tile.y <= y2)
                     {
-                        var ent = bo.PositionedEntrance.DoorstepCoordinates;
-                        entrances.Add((long)ent.x * 100000 + ent.y);
-                    }
-                    catch { }
-                }
-                try
-                {
-                    var positioned = bo.PositionedBlocks;
-                    foreach (var block in positioned.GetAllBlocks())
-                    {
-                        var c = block.Coordinates;
-                        if (c.x >= x1 && c.x <= x2 && c.y >= y1 && c.y <= y2)
-                        {
-                            long key = (long)c.x * 100000 + c.y;
-                            if (!occupants.ContainsKey(key))
-                                occupants[key] = new List<(string, int)>();
-                            occupants[key].Add((name, c.z));
-                        }
-                    }
-                }
-                catch
-                {
-                    // fallback to origin coordinate
-                    var c = bo.Coordinates;
-                    if (c.x >= x1 && c.x <= x2 && c.y >= y1 && c.y <= y2)
-                    {
-                        long key = (long)c.x * 100000 + c.y;
+                        long key = (long)tile.x * 100000 + tile.y;
                         if (!occupants.ContainsKey(key))
                             occupants[key] = new List<(string, int)>();
-                        occupants[key].Add((name, c.z));
+                        occupants[key].Add((c.Name, tile.z));
                     }
+                }
+                if (c.HasEntrance)
+                    entrances.Add((long)c.EntranceX * 100000 + c.EntranceY);
+            }
+
+            // natural resources (1x1, all data cached)
+            var resources = _naturalResourcesRead;
+            for (int i = 0; i < resources.Count; i++)
+            {
+                var r = resources[i];
+                if (r.X >= x1 && r.X <= x2 && r.Y >= y1 && r.Y <= y2)
+                {
+                    long key = (long)r.X * 100000 + r.Y;
+                    if (!occupants.ContainsKey(key))
+                        occupants[key] = new List<(string, int)>();
+                    occupants[key].Add((r.Name, r.Z));
+                    if (!r.Grown) seedlings.Add(key);
+                    if (!r.Alive) deadTiles.Add(key);
                 }
             }
 

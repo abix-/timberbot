@@ -60,8 +60,8 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 | Endpoint | What it does | Frequency | Why not indexed | Could cache? |
 |---|---|---|---|---|
 | `BuildAllIndexes` | Initial index build | **once on load** | populates all indexes | N/A |
-| `CollectScan` | Radius-filtered survey | rare | needs all entity types in region | could use building index + filter by region |
-| `CollectMap` | Region tile occupants | rare | needs all entity types in region | could pre-build occupancy grid from building index |
+| ~~`CollectScan`~~ | ~~Radius-filtered survey~~ | ~~scanned all entities~~ | **FIXED** | uses `_buildingsRead` + `_naturalResourcesRead` with cached footprints |
+| ~~`CollectMap`~~ | ~~Region tile occupants~~ | ~~scanned all entities~~ | **FIXED** | uses `_buildingsRead` + `_naturalResourcesRead` with cached footprints |
 | ~~`CollectPowerNetworks`~~ | ~~Group by power graph~~ | ~~scanned all entities~~ | **FIXED** | now uses `_buildingsRead` with cached `PowerNetworkId` (Graph hashcode) |
 | `CollectSummary` (districts) | District resource counts | every bot turn | iterates district centers live | partially cached, district loop still live |
 
