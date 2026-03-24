@@ -147,7 +147,7 @@ class TestRunner:
             ("summary", lambda: self.bot.summary()),
             ("alerts", lambda: self.bot.alerts()),
             ("buildings", lambda: self.bot.buildings()),
-            ("trees", lambda: self.bot.trees()),
+            ("natural_resources", lambda: self.bot.natural_resources()),
             ("gatherables", lambda: self.bot.gatherables()),
             ("beavers", lambda: self.bot.beavers()),
             ("resources", lambda: self.bot.resources()),
@@ -378,7 +378,7 @@ class TestRunner:
         print("\n=== tree marking ===\n")
 
         # find actual tree coords dynamically
-        trees = self.bot.trees()
+        trees = self.bot.natural_resources()
         alive_trees = [t for t in trees if t.get("alive")] if isinstance(trees, list) else []
         if not alive_trees:
             self.skip("tree marking", "no alive trees")
@@ -393,7 +393,7 @@ class TestRunner:
 
         # verify via trees endpoint - some should be marked
         self.wait_for_refresh()
-        trees = self.bot.trees()
+        trees = self.bot.natural_resources()
         marked = 0
         if isinstance(trees, list):
             marked = sum(1 for t in trees if t.get("marked"))
@@ -681,7 +681,7 @@ class TestRunner:
         # find an overridable entity (empty cut stump) -- should allow placement
         # use debug to check BlockObject.Overridable on each
 
-        trees = self.bot.trees(limit=500)
+        trees = self.bot.natural_resources(limit=500)
         if not isinstance(trees, list) or len(trees) == 0:
             self.skip("overridable placement", "no trees found")
             return
@@ -1565,7 +1565,7 @@ class TestRunner:
             ("summary", lambda: self.bot.summary()),
             ("buildings", lambda: self.bot.buildings()),
             ("buildings full", lambda: self.bot.buildings(detail="full")),
-            ("trees", lambda: self.bot.trees()),
+            ("natural_resources", lambda: self.bot.natural_resources()),
             ("gatherables", lambda: self.bot.gatherables()),
             ("beavers", lambda: self.bot.beavers()),
             ("alerts", lambda: self.bot.alerts()),
@@ -1627,9 +1627,9 @@ class TestRunner:
                    isinstance(b1, list) and isinstance(b2, list) and len(b1) == len(b2),
                    f"first={len(b1) if isinstance(b1,list) else '?'}, second={len(b2) if isinstance(b2,list) else '?'}")
 
-        t1 = self.bot.trees()
-        t2 = self.bot.trees()
-        self.check("trees cache consistent",
+        t1 = self.bot.natural_resources()
+        t2 = self.bot.natural_resources()
+        self.check("natural_resources cache consistent",
                    isinstance(t1, list) and isinstance(t2, list) and len(t1) == len(t2),
                    f"first={len(t1) if isinstance(t1,list) else '?'}, second={len(t2) if isinstance(t2,list) else '?'}")
 
@@ -1668,8 +1668,8 @@ class TestRunner:
         else:
             self.skip("cache invalidation", f"place failed: {placed}" if placed else "no valid spot")
 
-        # serialization A/B test: dict vs anon vs sb for trees
-        print("\n  serialization A/B test (trees)...\n")
+        # serialization A/B test: dict vs anon vs sb for natural_resources
+        print("\n  serialization A/B test (natural_resources)...\n")
         methods = ["dict", "anon", "sb"]
         iters = 5
         print(f"  {'method':<10} {'avg ms':>8} {'min ms':>8} {'max ms':>8} {'items':>6} {'bytes':>8}")
@@ -1680,7 +1680,7 @@ class TestRunner:
             raw = None
             for _ in range(iters):
                 t0 = time.perf_counter()
-                r = self.bot.s.get(f"{self.bot.url}/api/trees",
+                r = self.bot.s.get(f"{self.bot.url}/api/natural_resources",
                                    params={"format": self.bot._format, "serial": m}, timeout=10)
                 t1 = time.perf_counter()
                 times.append((t1 - t0) * 1000)
@@ -1698,7 +1698,7 @@ class TestRunner:
         self.bot.summary()
         self.bot.buildings()
         self.bot.beavers()
-        self.bot.trees()
+        self.bot.natural_resources()
         self.bot.alerts()
         self.bot.resources()
         self.bot.weather()

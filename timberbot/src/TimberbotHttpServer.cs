@@ -184,7 +184,7 @@ namespace Timberbot
                         return _service.CollectDistricts(format);
                     case "/api/buildings":
                         return _service.CollectBuildings(format, detail);
-                    case "/api/trees":
+                    case "/api/natural_resources":
                         return _service.CollectTrees();
                     case "/api/gatherables":
                         return _service.CollectGatherables();
@@ -374,7 +374,7 @@ namespace Timberbot
                     "GET  /api/weather",
                     "GET  /api/districts",
                     "GET  /api/buildings",
-                    "GET  /api/trees",
+                    "GET  /api/natural_resources",
                     "GET  /api/speed",
                     "GET  /api/prefabs",
                     "POST /api/speed              {speed: 0-3}",
