@@ -10,7 +10,7 @@
 | [Paths](api-reference.md#post-apipathroute) | Auto-stairs and platforms across z-levels | Yes |
 | [Crops](api-reference.md#post-apiplantingmark) | Plant, clear, find valid irrigated spots within farmhouse range | Yes |
 | [Trees](api-reference.md#get-apitrees) | Growth, cutting marks, densest clusters | Yes |
-| [Map](api-reference.md#post-apimap) | Terrain, water, badwater, moisture, occupants. [ASCII visual](api-reference.md#post-apivisual) with height shading | Yes |
+| [Map](api-reference.md#post-apimap) | Terrain, water, badwater, moisture, occupants. [ASCII visual](api-reference.md#visual) with height shading | Yes |
 | [Weather](api-reference.md#get-apiweather) | Drought countdown, badtide status | Yes |
 | [Power](api-reference.md#get-apibuildings) | Per-building input/output, generator/consumer, powered state | Yes |
 | [Science](api-reference.md#get-apiscience) | Points, unlock costs, unlock with one call | Yes |
@@ -23,7 +23,7 @@
 | [Game speed](api-reference.md#post-apispeed) | Pause, normal, fast, fastest | Yes |
 | [Alerts](api-reference.md#get-apialerts) | Unstaffed, unpowered, unreachable buildings | Yes |
 | [Scan](api-reference.md#post-apiscan) | Compact area snapshot with occupants | Yes |
-| [Visual](api-reference.md#post-apivisual) | ASCII map with terrain height shading and building markers | Yes |
+| [Visual](api-reference.md#visual) | ASCII map with terrain height shading and building markers | Yes |
 | [Summary](api-reference.md#get-apisummary) | Entire colony snapshot in one call | Yes |
 | [Debug](api-reference.md#post-apidebug) | Reflection-based inspection of any game object at runtime | Yes |
 | Bot condition/fuel | Bot needs via beavers endpoint | In-Progress |
