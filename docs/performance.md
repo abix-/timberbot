@@ -7,7 +7,7 @@ Single source of truth for Timberbot API performance. All optimization decisions
 Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame allocation, zero `GetComponent` calls per request, zero main-thread cost for reads.
 
 - **Double buffer:** main thread writes to `_*Write` lists, swaps to `_*Read`. Background thread only reads `_*Read`. Zero contention.
-- **Cached structs:** `CachedBuilding` (21 component refs + ~20 cached primitives) and `CachedNaturalResource` (5 refs + 7 primitives). All mutable state refreshed on main thread each frame.
+- **Cached structs:** `CachedBuilding` (18 component refs + ~25 cached primitives), `CachedNaturalResource` (5 refs + 7 primitives), `CachedBeaver` (10 refs + 14 primitives). Mutable state refreshed at 1Hz (configurable via settings.json).
 - **Background GET serving:** all reads served on HTTP listener thread. Only POST (writes) queue to main thread.
 
 | Index | Type | Mechanism | Per-frame cost | Rebuild trigger |
@@ -56,8 +56,8 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 |---|---|---|
 | `beavers` (position, district, carrying) | `_beaversRead` | x,y,z from transform, district from Citizen, GoodCarrier for carried goods |
 | `beavers detail:full` (all needs + groups) | `_beaversRead` | shows all 38 needs with NeedGroupId, liftingCapacity, deterioration |
-| `power` | all entities | groups buildings by MechanicalNode.Graph identity. Per-request only, no caching |
-| `map` (stacking) | all entities | occupants now `List<(name, z)>` per tile instead of last-wins string |
+| `power` | `_buildingsRead` | groups by cached `PowerNetworkId`. Zero GetComponent |
+| `map` (stacking) | `_buildingsRead` + `_naturalResourcesRead` | cached tile footprints. Zero GetComponent, fully thread-safe |
 
 ### Still scan all entities (not cached -- optimization gaps)
 
@@ -94,7 +94,7 @@ All reads served on the listener thread from double-buffered read lists. Zero ma
 | ~~`new Dictionary` for nutrients~~ | 277 | ~~5 dicts/frame~~ | **FIXED** | persistent dict in struct, `.Clear()` + repopulate |
 | ~~Static values re-read every frame~~ | various | ~~wasted cycles~~ | **FIXED** | moved to add-time only |
 | ~~60fps refresh~~ | UpdateSingleton | ~~60x/sec~~ | **FIXED** | cadenced to 1s (configurable) |
-| `Orientation` from `OrientNames[]` | 226 | 0 (array lookup, no alloc) | none | already good |
+| ~~`Orientation` from `OrientNames[]`~~ | ~~226~~ | ~~0~~ | **FIXED** | moved to add-time (immutable after placement) |
 | `foreach` over `BreedingPod.Nutrients` | 316 | ~5 enumerator boxes/refresh | **minor** | if `Nutrients` returns `IEnumerable<T>`, foreach boxes enumerator (~40 bytes). Only ~5 breeding pods |
 | `foreach` over `Inventories.AllInventories` | 330 | ~500 enumerator boxes/refresh | **minor** | same boxing concern for all buildings with inventories. At 1Hz cadence = ~500 small allocs/sec |
 | `foreach` over `inv.Stock` (nested) | 335 | ~500+ enumerator boxes/refresh | **minor** | nested inside AllInventories loop, same boxing concern |
@@ -193,13 +193,13 @@ All scaling is linear with item count. Zero main-thread cost for GET-only bot tu
 - **Bots scale free:** bots don't eat/drink/sleep but DO add to beaver index. 50+ bots = more entities to cache and serialize
 - **Multi-district:** each district has its own resource counters. 3+ districts increases summary/resources iteration
 - **Vertical builds:** heavy platform/stair stacking increases map `occupants` arrays (more allocs per tile)
-- **Power networks:** complex power grids fragment into many small networks. `power` endpoint scans all buildings every call (no caching)
+- **Power networks:** complex power grids fragment into many small networks. `power` endpoint uses cached `PowerNetworkId` but still iterates all buildings per call
 
 ## Test coverage
 
 Performance tests in `timberbot/script/test_validation.py`:
 
-- **Latency**: 20 endpoints x 100 iterations each (2000 calls total)
+- **Latency**: 20 endpoints x 100 iterations each (2000 calls total). All endpoints must be under 50ms min
 - **Reliability**: all 2000 responses must be valid (no errors, no corruption)
 - **Cache consistency**: same endpoint called twice returns same count (no stale refs)
 - **Cache invalidation**: place path -> count+1, demolish -> count back (EventBus + DoubleBuffer)
