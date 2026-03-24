@@ -429,7 +429,9 @@ namespace Timberbot
         private List<EntityComponent> _beaversWrite = new List<EntityComponent>();
         private List<EntityComponent> _beaversRead = new List<EntityComponent>();
         private readonly Dictionary<int, EntityComponent> _entityCache = new Dictionary<int, EntityComponent>();
-        private readonly System.Text.StringBuilder _sb = new System.Text.StringBuilder(500000); // reusable, zero alloc per request
+        // separate StringBuilders per endpoint to avoid contention on background thread
+        private readonly System.Text.StringBuilder _sbBuildings = new System.Text.StringBuilder(200000);
+        private readonly System.Text.StringBuilder _sbTrees = new System.Text.StringBuilder(400000);
 
         private void BuildAllIndexes()
         {
@@ -1029,7 +1031,7 @@ namespace Timberbot
             }
             bool fullDetail = detail == "full" || singleId.HasValue;
 
-            var sb = _sb;
+            var sb = _sbBuildings;
             sb.Clear();
             sb.Append('[');
             bool first = true;
@@ -1110,7 +1112,7 @@ namespace Timberbot
         // PERF: StringBuilder serialization -- 2ms for 3000 trees. No Dictionary, no Newtonsoft.
         public object CollectTrees()
         {
-            var sb = _sb;
+            var sb = _sbTrees;
             sb.Clear();
             sb.Append('[');
             bool first = true;
