@@ -27,6 +27,12 @@
 | [Summary](api-reference.md#get-apisummary) | Entire colony snapshot in one call | Yes |
 | [Debug](api-reference.md#post-apidebug) | Reflection-based inspection of any game object at runtime | Yes |
 | Bot condition/fuel | Bot needs via beavers endpoint | In-Progress |
+| Building material costs | What resources a building needs to construct (logs, planks, gears) | Planned |
+| Per-building inventory | How full each tank, warehouse, or stockpile is | Planned |
+| Available recipes | List recipe IDs for manufactories before setting them | Planned |
+| Breeding pod status | Breeding progress, nutrient needs | Planned |
+| Beaver activity | Hauling, idle, walking, sleeping, working | Planned |
+| Clutch control | Engage/disengage clutch on buildings | Planned |
 | Resource projection | Projected days of wood, planks, gears | Planned |
 
 ## By design
