@@ -55,14 +55,15 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 | `power` | all entities | groups buildings by MechanicalNode.Graph identity. Per-request only, no caching |
 | `map` (stacking) | all entities | occupants now `List<(name, z)>` per tile instead of last-wins string |
 
-### Still scan all entities (by design)
+### Still scan all entities (not cached -- optimization gaps)
 
-| Endpoint | What it does | Frequency | Why not indexed |
-|---|---|---|---|
-| `BuildAllIndexes` | Initial index build | **once on load** | populates all indexes |
-| `CollectScan` | Radius-filtered survey | rare | needs all entity types in region |
-| `CollectMap` | Region tile occupants | rare | needs all entity types in region |
-| `CollectPowerNetworks` | Group by power graph | rare | needs MechanicalNode on all buildings |
+| Endpoint | What it does | Frequency | Why not indexed | Could cache? |
+|---|---|---|---|---|
+| `BuildAllIndexes` | Initial index build | **once on load** | populates all indexes | N/A |
+| `CollectScan` | Radius-filtered survey | rare | needs all entity types in region | could use building index + filter by region |
+| `CollectMap` | Region tile occupants | rare | needs all entity types in region | could pre-build occupancy grid from building index |
+| ~~`CollectPowerNetworks`~~ | ~~Group by power graph~~ | ~~scanned all entities~~ | **FIXED** | now uses `_buildingsRead` with cached `PowerNetworkId` (Graph hashcode) |
+| `CollectSummary` (districts) | District resource counts | every bot turn | iterates district centers live | partially cached, district loop still live |
 
 ## Thread model
 

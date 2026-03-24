@@ -292,13 +292,19 @@ namespace Timberbot
                     if (c.Wonder != null) c.WonderActive = c.Wonder.IsActive;
                     if (c.PowerNode != null)
                     {
-                        try { var g = c.PowerNode.Graph; if (g != null) { c.PowerDemand = (int)g.PowerDemand; c.PowerSupply = (int)g.PowerSupply; } } catch { }
+                        try { var g = c.PowerNode.Graph; if (g != null) { c.PowerDemand = (int)g.PowerDemand; c.PowerSupply = (int)g.PowerSupply; c.PowerNetworkId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(g); } } catch { }
                     }
                     if (c.Manufactory != null)
                     {
                         c.CurrentRecipe = c.Manufactory.HasCurrentRecipe ? c.Manufactory.CurrentRecipe.Id : "";
                         c.ProductionProgress = c.Manufactory.ProductionProgress;
                         c.ReadyToProduce = c.Manufactory.IsReadyToProduce;
+                        if (c.Recipes == null)
+                        {
+                            c.Recipes = new List<string>();
+                            foreach (var r in c.Manufactory.ProductionRecipes)
+                                c.Recipes.Add(r.Id);
+                        }
                     }
                     if (c.BreedingPod != null)
                     {
@@ -317,6 +323,8 @@ namespace Timberbot
                     if (c.Inventories != null)
                     {
                         int totalStock = 0, totalCapacity = 0;
+                        if (c.Inventory == null) c.Inventory = new Dictionary<string, int>();
+                        c.Inventory.Clear();
                         try
                         {
                             foreach (var inv in c.Inventories.AllInventories)
@@ -324,6 +332,16 @@ namespace Timberbot
                                 if (inv.ComponentName == ConstructionSiteInventoryInitializer.InventoryComponentName) continue;
                                 totalStock += inv.TotalAmountInStock;
                                 totalCapacity += inv.Capacity;
+                                foreach (var ga in inv.Stock)
+                                {
+                                    if (ga.Amount > 0)
+                                    {
+                                        if (c.Inventory.ContainsKey(ga.GoodId))
+                                            c.Inventory[ga.GoodId] += ga.Amount;
+                                        else
+                                            c.Inventory[ga.GoodId] = ga.Amount;
+                                    }
+                                }
                             }
                         }
                         catch { }
@@ -380,16 +398,21 @@ namespace Timberbot
                     c.Contaminated = c.Contaminable != null && c.Contaminable.IsContaminated;
                     if (c.Life != null) c.LifeProgress = c.Life.LifeProgress;
                     if (c.Deteriorable != null) c.DeteriorationProgress = (float)System.Math.Round(c.Deteriorable.DeteriorationProgress, 3);
-                    if (c.Carrier != null && c.Carrier.IsCarrying)
+                    if (c.Carrier != null)
                     {
-                        c.IsCarrying = true;
-                        var ga = c.Carrier.CarriedGoods;
-                        c.CarryingGood = ga.GoodId;
-                        c.CarryAmount = ga.Amount;
-                    }
-                    else
-                    {
-                        c.IsCarrying = false;
+                        c.LiftingCapacity = c.Carrier.LiftingCapacity;
+                        c.Overburdened = c.Carrier.IsMovementSlowed;
+                        if (c.Carrier.IsCarrying)
+                        {
+                            c.IsCarrying = true;
+                            var ga = c.Carrier.CarriedGoods;
+                            c.CarryingGood = ga.GoodId;
+                            c.CarryAmount = ga.Amount;
+                        }
+                        else
+                        {
+                            c.IsCarrying = false;
+                        }
                     }
                     // needs
                     if (c.Needs == null) c.Needs = new List<CachedNeed>();
@@ -482,12 +505,14 @@ namespace Timberbot
             public bool WonderActive, HasWonder;
             public bool IsGenerator, IsConsumer;
             public int NominalPowerInput, NominalPowerOutput;
-            public int PowerDemand, PowerSupply;
+            public int PowerDemand, PowerSupply, PowerNetworkId;
             public string CurrentRecipe;
+            public List<string> Recipes;
             public float ProductionProgress;
             public bool ReadyToProduce;
             public bool NeedsNutrients;
             public Dictionary<string, int> NutrientStock;
+            public Dictionary<string, int> Inventory;
             public int EffectRadius;
             public int Stock, Capacity;
         }
@@ -523,7 +548,8 @@ namespace Timberbot
             public float LifeProgress, DeteriorationProgress;
             public bool IsCarrying;
             public string CarryingGood;
-            public int CarryAmount;
+            public int CarryAmount, LiftingCapacity;
+            public bool Overburdened;
             public bool AnyCritical;
             public List<CachedNeed> Needs;
         }
@@ -1194,11 +1220,42 @@ namespace Timberbot
                     if (c.PowerDemand > 0 || c.PowerSupply > 0) { sb.Append(",\"powerDemand\":"); sb.Append(c.PowerDemand); sb.Append(",\"powerSupply\":"); sb.Append(c.PowerSupply); }
                 }
                 if (c.Site != null) { sb.Append(",\"buildProgress\":"); sb.Append(c.BuildProgress.ToString("F2")); sb.Append(",\"materialProgress\":"); sb.Append(c.MaterialProgress.ToString("F2")); sb.Append(",\"hasMaterials\":"); sb.Append(c.HasMaterials ? "true" : "false"); }
-                if (c.Capacity > 0) { sb.Append(",\"stock\":"); sb.Append(c.Stock); sb.Append(",\"capacity\":"); sb.Append(c.Capacity); }
+                if (c.Capacity > 0)
+                {
+                    sb.Append(",\"stock\":"); sb.Append(c.Stock);
+                    sb.Append(",\"capacity\":"); sb.Append(c.Capacity);
+                    if (c.Inventory != null && c.Inventory.Count > 0)
+                    {
+                        sb.Append(",\"inventory\":{");
+                        bool ifirst = true;
+                        foreach (var kvp in c.Inventory)
+                        {
+                            if (!ifirst) sb.Append(',');
+                            ifirst = false;
+                            sb.Append('"'); sb.Append(kvp.Key); sb.Append("\":"); sb.Append(kvp.Value);
+                        }
+                        sb.Append('}');
+                    }
+                }
                 if (c.HasWonder) { sb.Append(",\"isWonder\":true,\"wonderActive\":"); sb.Append(c.WonderActive ? "true" : "false"); }
                 if (c.Dwelling != null) { sb.Append(",\"dwellers\":"); sb.Append(c.Dwellers); sb.Append(",\"maxDwellers\":"); sb.Append(c.MaxDwellers); }
                 if (c.HasClutch) { sb.Append(",\"isClutch\":true,\"clutchEngaged\":"); sb.Append(c.ClutchEngaged ? "true" : "false"); }
-                if (c.Manufactory != null) { sb.Append(",\"currentRecipe\":\""); sb.Append(c.CurrentRecipe ?? ""); sb.Append("\",\"productionProgress\":"); sb.Append(c.ProductionProgress.ToString("F2")); sb.Append(",\"readyToProduce\":"); sb.Append(c.ReadyToProduce ? "true" : "false"); }
+                if (c.Manufactory != null)
+                {
+                    if (c.Recipes != null && c.Recipes.Count > 0)
+                    {
+                        sb.Append(",\"recipes\":[");
+                        for (int ri = 0; ri < c.Recipes.Count; ri++)
+                        {
+                            if (ri > 0) sb.Append(',');
+                            sb.Append('"'); sb.Append(c.Recipes[ri]); sb.Append('"');
+                        }
+                        sb.Append(']');
+                    }
+                    sb.Append(",\"currentRecipe\":\""); sb.Append(c.CurrentRecipe ?? ""); sb.Append('"');
+                    sb.Append(",\"productionProgress\":"); sb.Append(c.ProductionProgress.ToString("F2"));
+                    sb.Append(",\"readyToProduce\":"); sb.Append(c.ReadyToProduce ? "true" : "false");
+                }
                 if (c.BreedingPod != null)
                 {
                     sb.Append(",\"needsNutrients\":"); sb.Append(c.NeedsNutrients ? "true" : "false");
@@ -1341,6 +1398,7 @@ namespace Timberbot
                 sb.Append(",\"contaminated\":"); sb.Append(c.Contaminated ? "true" : "false");
                 if (c.Life != null) { sb.Append(",\"lifeProgress\":"); sb.Append(c.LifeProgress.ToString("F2")); }
                 if (c.Deteriorable != null) { sb.Append(",\"deterioration\":"); sb.Append(c.DeteriorationProgress.ToString("F3")); }
+                if (c.Carrier != null) { sb.Append(",\"liftingCapacity\":"); sb.Append(c.LiftingCapacity); if (c.Overburdened) sb.Append(",\"overburdened\":true"); }
                 if (c.IsCarrying) { sb.Append(",\"carrying\":\""); sb.Append(c.CarryingGood); sb.Append("\",\"carryAmount\":"); sb.Append(c.CarryAmount); }
 
                 // needs array
@@ -1369,41 +1427,33 @@ namespace Timberbot
 
         public object CollectPowerNetworks()
         {
-            // group buildings by power network (same Graph instance = same network)
+            // group buildings by power network using cached PowerNetworkId
             var networks = new Dictionary<int, Dictionary<string, object>>();
-            foreach (var ec in _entityRegistry.Entities)
+            var buildings = _buildingsRead;
+            for (int i = 0; i < buildings.Count; i++)
             {
-                var building = ec.GetComponent<Building>();
-                if (building == null) continue;
-                var node = ec.GetComponent<MechanicalNode>();
-                if (node == null) continue;
-                try
+                var c = buildings[i];
+                if (c.PowerNode == null || c.PowerNetworkId == 0) continue;
+                int netId = c.PowerNetworkId;
+                if (!networks.ContainsKey(netId))
                 {
-                    var graph = node.Graph;
-                    if (graph == null) continue;
-                    int netId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(graph);
-                    if (!networks.ContainsKey(netId))
+                    networks[netId] = new Dictionary<string, object>
                     {
-                        networks[netId] = new Dictionary<string, object>
-                        {
-                            ["id"] = netId,
-                            ["supply"] = graph.PowerSupply,
-                            ["demand"] = graph.PowerDemand,
-                            ["buildings"] = new List<object>()
-                        };
-                    }
-                    var list = (List<object>)networks[netId]["buildings"];
-                    var bo = ec.GetComponent<BlockObject>();
-                    list.Add(new Dictionary<string, object>
-                    {
-                        ["name"] = CleanName(ec.GameObject.name),
-                        ["id"] = ec.GameObject.GetInstanceID(),
-                        ["isGenerator"] = node.IsGenerator,
-                        ["nominalOutput"] = node._nominalPowerOutput,
-                        ["nominalInput"] = node._nominalPowerInput
-                    });
+                        ["id"] = netId,
+                        ["supply"] = c.PowerSupply,
+                        ["demand"] = c.PowerDemand,
+                        ["buildings"] = new List<object>()
+                    };
                 }
-                catch { }
+                var list = (List<object>)networks[netId]["buildings"];
+                list.Add(new Dictionary<string, object>
+                {
+                    ["name"] = c.Name,
+                    ["id"] = c.Id,
+                    ["isGenerator"] = c.IsGenerator,
+                    ["nominalOutput"] = c.NominalPowerOutput,
+                    ["nominalInput"] = c.NominalPowerInput
+                });
             }
             return networks.Values.ToList();
         }
