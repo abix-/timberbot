@@ -856,6 +856,45 @@ namespace Timberbot
         // zipline
         [OnEvent] public void OnZiplineActivated(Timberborn.ZiplineSystem.ZiplineConnectionActivatedEvent e) => PushEvent("zipline.activated", null);
 
+        // blocks (lower-level than building -- paths, levees, platforms, everything)
+        [OnEvent] public void OnBlockSet(Timberborn.BlockSystem.BlockObjectSetEvent e) => PushEvent("block.set", null);
+        [OnEvent] public void OnBlockUnset(Timberborn.BlockSystem.BlockObjectUnsetEvent e) => PushEvent("block.unset", null);
+        [OnEvent] public void OnConstructionStarted(Timberborn.BlockSystem.EnteredUnfinishedStateEvent e) => PushEvent("construction.started", null);
+        [OnEvent] public void OnBuildingUnfinished(Timberborn.BlockSystem.ExitedFinishedStateEvent e) => PushEvent("building.unfinished", null);
+
+        // entities (lower-level)
+        [OnEvent] public void OnEntityCreated(Timberborn.EntitySystem.EntityCreatedEvent e) => PushEvent("entity.created", null);
+
+        // factions
+        [OnEvent] public void OnFactionUnlocked(Timberborn.FactionSystem.FactionUnlockedEvent e) => PushEvent("faction.unlocked", null);
+
+        // districts (connections)
+        [OnEvent] public void OnDistrictConnectionsChanged(Timberborn.GameDistricts.DistrictConnectionsChangedEvent e) => PushEvent("district.connections.changed", null);
+        [OnEvent] public void OnMigrationDistrictChanged(Timberborn.GameDistrictsMigration.MigrationDistrictChangedEvent e) => PushEvent("migration.district.changed", null);
+
+        // weather (selection)
+        [OnEvent] public void OnWeatherSelected(Timberborn.HazardousWeatherSystem.HazardousWeatherSelectedEvent e) => PushEvent("weather.selected", null);
+
+        // power (detailed)
+        [OnEvent] public void OnPowerGeneratorAdded(Timberborn.MechanicalSystem.MechanicalGraphGeneratorAddedEvent e) => PushEvent("power.generator.added", null);
+        [OnEvent] public void OnPowerGeneratorUpdated(Timberborn.MechanicalSystem.MechanicalGraphGeneratorUpdatedEvent e) => PushEvent("power.generator.updated", null);
+
+        // planting (coordinates)
+        [OnEvent] public void OnPlantingCoordsSet(Timberborn.Planting.PlantingCoordinatesSetEvent e) => PushEvent("planting.coords.set", null);
+        [OnEvent] public void OnPlantingCoordsUnset(Timberborn.Planting.PlantingCoordinatesUnsetEvent e) => PushEvent("planting.coords.unset", null);
+
+        // game startup
+        [OnEvent] public void OnNewGame(Timberborn.Common.NewGameInitializedEvent e) => PushEvent("game.new", null);
+        [OnEvent] public void OnStartingBuilding(Timberborn.GameStartup.StartingBuildingPlacedEvent e) => PushEvent("game.starting.building", null);
+        [OnEvent] public void OnSpeedLockChanged(Timberborn.TimeSystem.SpeedLockChangedEvent e) => PushEvent("speed.lock.changed", null);
+
+        // naming + alerts
+        [OnEvent] public void OnEntityRenamed(Timberborn.EntityNaming.EntityNameChangedEvent e) => PushEvent("entity.renamed", null);
+        [OnEvent] public void OnDynamicAlert(Timberborn.StatusSystem.DynamicStatusAlertAddedEvent e) => PushEvent("status.dynamic.alert", null);
+
+        // construction mode
+        [OnEvent] public void OnConstructionMode(Timberborn.ConstructionMode.ConstructionModeChangedEvent e) => PushEvent("construction.mode.changed", null);
+
         // strip Unity/faction suffixes so API returns clean names
         private static string CleanName(string name) =>
             name.Replace("(Clone)", "").Replace(".IronTeeth", "").Replace(".Folktails", "").Trim();

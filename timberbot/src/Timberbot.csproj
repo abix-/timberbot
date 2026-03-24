@@ -352,6 +352,9 @@
     <Reference Include="Timberborn.WindSystem" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.WindSystem.dll</HintPath></Reference>
     <Reference Include="Timberborn.ZiplineSystem" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.ZiplineSystem.dll</HintPath></Reference>
     <Reference Include="Timberborn.HazardousWeatherSystemUI" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.HazardousWeatherSystemUI.dll</HintPath></Reference>
+    <Reference Include="Timberborn.FactionSystem" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.FactionSystem.dll</HintPath></Reference>
+    <Reference Include="Timberborn.GameStartup" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.GameStartup.dll</HintPath></Reference>
+    <Reference Include="Timberborn.EntityNaming" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.EntityNaming.dll</HintPath></Reference>
 
     <Reference Include="System.Collections.Immutable">
       <Private>false</Private>
