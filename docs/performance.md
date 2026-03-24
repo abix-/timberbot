@@ -160,13 +160,25 @@ All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer,
 
 ## Late-game projections
 
-| Metric | Current | Late-game (est) | Scaling |
+| Endpoint | Current (items / time) | Late-game (est items / time) | Scaling notes |
 |---|---|---|---|
-| Buildings | 522 | 1500+ | linear with item count (dict alloc) |
-| Trees | 2986 | 5000+ | linear -- ~3.5ms at 5000 (StringBuilder scales well) |
-| Beavers | 65 | 200+ | linear but low base count |
-| Total entities | 4161 | 10000+ | only affects CollectScan/CollectMap (rare, region-bounded) |
-| Burst (7 calls) | 28ms | ~50ms est | zero main-thread cost |
+| `buildings` | 522 / 2.8ms | 1500+ / ~8ms | linear, StringBuilder serialization |
+| `buildings detail:full` | 522 / 1.3ms | 1500+ / ~4ms | linear, cached primitives |
+| `trees` | 2986 / 2.0ms | 5000+ / ~3.5ms | linear, StringBuilder scales well |
+| `beavers` | 65 / 0.9ms | 200+ beavers + 50 bots / ~3ms | linear, CachedBeaver struct |
+| `beavers detail:full` | 65 / ~2ms | 250 / ~7ms | all 38 needs per beaver, heavier |
+| `alerts` | 522 / 1.0ms | 1500+ / ~3ms | linear, cached primitives |
+| `power` | 17 networks / ~5ms | 50+ networks / ~15ms | full entity scan, per-request only |
+| `map` (region) | varies / ~10ms | larger maps / ~20ms | region-bounded, stacking adds overhead for vertical builds |
+| `summary` | 3500 entities / 1.2ms | 10000+ / ~3ms | reads from all 3 cached indexes |
+| Burst (7 calls) | 28ms total | ~50ms est | zero main-thread cost for all GETs |
+
+### Late-game risk factors
+
+- **Bots scale free:** bots don't eat/drink/sleep but DO add to beaver index. 50+ bots = more entities to cache and serialize
+- **Multi-district:** each district has its own resource counters. 3+ districts increases summary/resources iteration
+- **Vertical builds:** heavy platform/stair stacking increases map `occupants` arrays (more allocs per tile)
+- **Power networks:** complex power grids fragment into many small networks. `power` endpoint scans all buildings every call (no caching)
 
 ## Test coverage
 
