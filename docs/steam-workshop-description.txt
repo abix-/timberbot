@@ -35,7 +35,7 @@ timberbot.py top                                  # live colony dashboard
 timberbot.py beavers detail:full                  # every need on every beaver
 timberbot.py power                                # power networks with supply vs demand
 timberbot.py visual x:120 y:140 radius:10         # ASCII map
-timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2
+timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2 orientation:south
 [/code]
 Works with any language that speaks HTTP. Python client is optional. Raw curl works too.
 
