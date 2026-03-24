@@ -94,10 +94,8 @@ All reads served on the listener thread from double-buffered read lists. Zero ma
 | `foreach` over `BreedingPod.Nutrients` | 316 | ~5 enumerator boxes/refresh | **minor** | if `Nutrients` returns `IEnumerable<T>`, foreach boxes enumerator (~40 bytes). Only ~5 breeding pods |
 | `foreach` over `Inventories.AllInventories` | 330 | ~500 enumerator boxes/refresh | **minor** | same boxing concern for all buildings with inventories. At 1Hz cadence = ~500 small allocs/sec |
 | `foreach` over `inv.Stock` (nested) | 335 | ~500+ enumerator boxes/refresh | **minor** | nested inside AllInventories loop, same boxing concern |
-| `GetComponent<EntityComponent>()` per beaver | 381 | 65 GetComponent calls/refresh | **medium** | should cache `GameObject` ref at add-time instead of calling GetComponent every refresh |
-| `CleanName()` per employed beaver | 390 | ~50 string ops/refresh | **medium** | string Replace/Contains every refresh for workplace name. Should cache and only update on change |
-| Building X,Y,Z,Orientation re-read | 260-263 | wasted reads (immutable) | **low** | coordinates and orientation don't change after placement. Move to add-time |
-| `NeedMgr.GetNeeds()` per beaver | 423 | 65 calls/refresh | **unknown** | may allocate a new collection per call. ~38 needs x 65 beavers = 2470 CachedNeed structs added to Lists |
+| `CleanName()` per employed beaver | 390 | ~50 string allocs/refresh | **medium** | string Replace/Contains allocates new strings every refresh. Should cache workplace name, update on change |
+| `NeedMgr.GetNeeds()` per beaver | 423 | 65 calls + 2470 List.Add/refresh | **unknown** | may allocate new collection per call. 38 CachedNeed structs x 65 beavers copied to Lists |
 
 ### Per-request allocations (only when API called)
 
@@ -121,6 +119,8 @@ All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer,
 |---|---|---|---|---|
 | 1 | **Unity GC spikes** | random 0.5-2s | Unity garbage collector freezes all threads | reduced alloc pressure, but unavoidable from mod |
 | 2 | **sb.ToString() alloc** | 1 string per request (~100-500KB) | StringBuilder must create final string | unavoidable but once per request |
+| 3 | **GetComponent per beaver per refresh** | 65 calls/sec | `c.NeedMgr?.GetComponent<EntityComponent>()?.GameObject` to get position | cache `GameObject` ref at add-time |
+| 4 | **Building X,Y,Z,Orientation re-read** | 522 wasted reads/sec | coordinates and orientation are immutable after placement | move to add-time (same as EffectRadius etc.) |
 
 ## Resolved bottlenecks
 
