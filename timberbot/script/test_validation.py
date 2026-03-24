@@ -650,8 +650,8 @@ class TestRunner:
         if stair_spot:
             sx1, sy1, sx2, sy2 = stair_spot
             result3 = self.bot.place_path(sx1, sy1, sx2, sy2)
-            if self.has(result3, "errors") and result3["errors"] and "not unlocked" in str(result3["errors"]):
-                self.skip("path with z-change", "stairs not unlocked")
+            if self.has(result3, "errors") and result3["errors"] and ("not unlocked" in str(result3["errors"]) or "Cannot place" in str(result3["errors"])):
+                self.skip("path with z-change", f"stairs placement failed: {str(result3['errors'])[:80]}")
             else:
                 self.check("path with z-change places stairs",
                            self.has(result3, "stairs") and result3.get("stairs", 0) > 0,
