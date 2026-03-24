@@ -1,3 +1,22 @@
+// TimberbotService.Cache.cs -- Double-buffered entity caching system.
+//
+// The mod needs to serve GET requests on a background HTTP thread without touching
+// Unity's main thread. This file implements the solution: a double buffer.
+//
+// Main thread (UpdateSingleton, every 1s):
+//   1. Walk all cached entities, read their mutable state into the Write buffer
+//   2. Swap Write and Read buffers atomically
+//
+// Background thread (HTTP GET handlers):
+//   Read from the Read buffer. Never modified during reads. Zero contention.
+//
+// Entity lifecycle:
+//   EntityInitializedEvent -> AddToIndexes() caches the entity + immutable data (coords, size, components)
+//   EntityDeletedEvent     -> RemoveFromIndexes() removes from both buffers
+//
+// Structs: CachedBuilding, CachedBeaver, CachedNaturalResource hold pre-resolved
+// component references so RefreshCachedState never calls GetComponent<T>().
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -65,6 +84,14 @@ namespace Timberbot
 {
     public partial class TimberbotService
     {
+        // log-once: prevent spamming console with repeated errors from the same catch site
+        private static readonly System.Collections.Generic.HashSet<int> _loggedErrors = new System.Collections.Generic.HashSet<int>();
+        private static void LogOnce(int site, System.Exception ex)
+        {
+            if (_loggedErrors.Add(site))
+                Debug.LogWarning($"[Timberbot] error at site {site}: {ex.GetType().Name}: {ex.Message}");
+        }
+
         // snapshot all mutable state on main thread, then swap buffers.
         // background thread reads from _read lists (never modified during read).
         private void RefreshCachedState()
@@ -107,7 +134,7 @@ namespace Timberbot
                     if (c.Wonder != null) c.WonderActive = c.Wonder.IsActive;
                     if (c.PowerNode != null)
                     {
-                        try { var g = c.PowerNode.Graph; if (g != null) { c.PowerDemand = (int)g.PowerDemand; c.PowerSupply = (int)g.PowerSupply; c.PowerNetworkId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(g); } } catch { }
+                        try { var g = c.PowerNode.Graph; if (g != null) { c.PowerDemand = (int)g.PowerDemand; c.PowerSupply = (int)g.PowerSupply; c.PowerNetworkId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(g); } } catch (System.Exception _ex) { LogOnce(137, _ex); }
                     }
                     if (c.Manufactory != null)
                     {
@@ -131,7 +158,7 @@ namespace Timberbot
                             foreach (var ga in c.BreedingPod.Nutrients)
                                 if (ga.Amount > 0) c.NutrientStock[ga.GoodId] = ga.Amount;
                         }
-                        catch { }
+                        catch (System.Exception _ex) { LogOnce(161, _ex); }
                     }
                     // EffectRadius, IsGenerator, IsConsumer, NominalPower, HasFloodgate,
                     // HasClutch, HasWonder, FloodgateMaxHeight set at add-time (static values)
@@ -163,13 +190,13 @@ namespace Timberbot
                                 }
                             }
                         }
-                        catch { }
+                        catch (System.Exception _ex) { LogOnce(193, _ex); }
                         c.Stock = totalStock;
                         c.Capacity = totalCapacity;
                     }
                     _buildings.Write[i] = c;
                 }
-                catch { }
+                catch (System.Exception _ex) { LogOnce(199, _ex); }
             }
             for (int i = 0; i < _naturalResources.Write.Count; i++)
             {
@@ -187,7 +214,7 @@ namespace Timberbot
                     c.Growth = c.Growable != null ? c.Growable.GrowthProgress : 0f;
                     _naturalResources.Write[i] = c;
                 }
-                catch { }
+                catch (System.Exception _ex) { LogOnce(217, _ex); }
             }
             // beavers
             for (int i = 0; i < _beavers.Write.Count; i++)
@@ -255,7 +282,7 @@ namespace Timberbot
                     }
                     _beavers.Write[i] = c;
                 }
-                catch { }
+                catch (System.Exception _ex) { LogOnce(285, _ex); }
             }
             // swap: background thread gets the freshly updated buffer
             _buildings.Swap();
@@ -466,7 +493,7 @@ namespace Timberbot
                             cb.EntranceX = ent.x;
                             cb.EntranceY = ent.y;
                         }
-                        catch { }
+                        catch (System.Exception _ex) { LogOnce(496, _ex); }
                     }
                 }
                 // separate reference-type instances per buffer to avoid shared mutation
@@ -528,23 +555,29 @@ namespace Timberbot
         public void OnEntityInitialized(EntityInitializedEvent e)
         {
             AddToIndexes(e.Entity);
-            // webhooks
-            var ec = e.Entity;
-            if (ec.GetComponent<Building>() != null)
-                PushEvent("building.placed", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
-            else if (ec.GetComponent<NeedManager>() != null)
-                PushEvent("beaver.born", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name), isBot = ec.GetComponent<Bot>() != null });
+            // webhooks (guarded -- no alloc if 0 subscribers)
+            if (_webhooks.Count > 0)
+            {
+                var ec = e.Entity;
+                if (ec.GetComponent<Building>() != null)
+                    PushEvent("building.placed", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
+                else if (ec.GetComponent<NeedManager>() != null)
+                    PushEvent("beaver.born", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name), isBot = ec.GetComponent<Bot>() != null });
+            }
         }
 
         [OnEvent]
         public void OnEntityDeleted(EntityDeletedEvent e)
         {
-            // webhooks (before removing from indexes)
-            var ec = e.Entity;
-            if (ec.GetComponent<Building>() != null)
-                PushEvent("building.demolished", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
-            else if (ec.GetComponent<NeedManager>() != null)
-                PushEvent("beaver.died", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
+            // webhooks (guarded -- no alloc if 0 subscribers)
+            if (_webhooks.Count > 0)
+            {
+                var ec = e.Entity;
+                if (ec.GetComponent<Building>() != null)
+                    PushEvent("building.demolished", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
+                else if (ec.GetComponent<NeedManager>() != null)
+                    PushEvent("beaver.died", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
+            }
             RemoveFromIndexes(e.Entity);
         }
 

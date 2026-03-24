@@ -1,3 +1,17 @@
+// TimberbotService.Webhooks.cs -- Push event notifications to external URLs.
+//
+// Register a webhook URL via POST /api/webhooks, optionally filtering by event name.
+// When a game event fires (drought, beaver death, building placed, etc.), PushEvent()
+// sends a JSON POST to all matching subscribers on a background thread.
+//
+// This is NOT the same as Timberborn's vanilla HTTP Adapter system (port 8080), which
+// sends binary on/off signals from in-game sensor buildings. Our webhooks push 68
+// rich game events with data payloads, no in-game buildings required.
+//
+// All [OnEvent] handlers are one-liners that call PushEvent(name, data).
+// Fire-and-forget: no retries, no persistence, 5s timeout. Subscribers filter
+// by event name (null = all events).
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -104,15 +118,15 @@ namespace Timberbot
                 timestamp = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 data
             });
-            var content = new System.Net.Http.StringContent(payload, System.Text.Encoding.UTF8, "application/json");
-            foreach (var wh in _webhooks.ToArray())
+            for (int i = 0; i < _webhooks.Count; i++)
             {
+                var wh = _webhooks[i];
                 if (wh.Events != null && !wh.Events.Contains(eventName)) continue;
                 var url = wh.Url;
                 System.Threading.ThreadPool.QueueUserWorkItem(_ =>
                 {
                     try { _webhookClient.PostAsync(url, new System.Net.Http.StringContent(payload, System.Text.Encoding.UTF8, "application/json")).Wait(); }
-                    catch { }
+                    catch (System.Exception _ex) { LogOnce(1001, _ex); }
                 });
             }
         }
@@ -123,19 +137,19 @@ namespace Timberbot
         // ================================================================
 
         // weather
-        [OnEvent] public void OnDroughtStart(Timberborn.HazardousWeatherSystem.HazardousWeatherStartedEvent e) => PushEvent("drought.start", new { duration = _weatherService.HazardousWeatherDuration });
+        [OnEvent] public void OnDroughtStart(Timberborn.HazardousWeatherSystem.HazardousWeatherStartedEvent e) { if (_webhooks.Count > 0) PushEvent("drought.start", new { duration = _weatherService.HazardousWeatherDuration }); }
         [OnEvent] public void OnDroughtEnd(Timberborn.HazardousWeatherSystem.HazardousWeatherEndedEvent e) => PushEvent("drought.end", null);
         [OnEvent] public void OnDroughtApproaching(Timberborn.HazardousWeatherSystemUI.HazardousWeatherApproachingEvent e) => PushEvent("drought.approaching", null);
-        [OnEvent] public void OnCycleStart(Timberborn.GameCycleSystem.CycleStartedEvent e) => PushEvent("cycle.start", new { cycle = _gameCycleService.Cycle });
-        [OnEvent] public void OnCycleEnd(Timberborn.GameCycleSystem.CycleEndedEvent e) => PushEvent("cycle.end", new { cycle = _gameCycleService.Cycle });
-        [OnEvent] public void OnCycleDay(Timberborn.GameCycleSystem.CycleDayStartedEvent e) => PushEvent("cycle.day", new { cycle = _gameCycleService.Cycle, cycleDay = _gameCycleService.CycleDay });
+        [OnEvent] public void OnCycleStart(Timberborn.GameCycleSystem.CycleStartedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.start", new { cycle = _gameCycleService.Cycle }); }
+        [OnEvent] public void OnCycleEnd(Timberborn.GameCycleSystem.CycleEndedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.end", new { cycle = _gameCycleService.Cycle }); }
+        [OnEvent] public void OnCycleDay(Timberborn.GameCycleSystem.CycleDayStartedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.day", new { cycle = _gameCycleService.Cycle, cycleDay = _gameCycleService.CycleDay }); }
 
         // time
-        [OnEvent] public void OnDayStart(Timberborn.TimeSystem.DaytimeStartEvent e) => PushEvent("day.start", new { day = _dayNightCycle.DayNumber });
-        [OnEvent] public void OnNightStart(Timberborn.TimeSystem.NighttimeStartEvent e) => PushEvent("night.start", new { day = _dayNightCycle.DayNumber });
+        [OnEvent] public void OnDayStart(Timberborn.TimeSystem.DaytimeStartEvent e) { if (_webhooks.Count > 0) PushEvent("day.start", new { day = _dayNightCycle.DayNumber }); }
+        [OnEvent] public void OnNightStart(Timberborn.TimeSystem.NighttimeStartEvent e) { if (_webhooks.Count > 0) PushEvent("night.start", new { day = _dayNightCycle.DayNumber }); }
 
         // buildings (continued)
-        [OnEvent] public void OnBuildingFinished(Timberborn.BlockSystem.EnteredFinishedStateEvent e) { try { var go = e.BlockObject?.GetComponent<EntityComponent>()?.GameObject; PushEvent("building.finished", new { id = go?.GetInstanceID() ?? 0, name = go != null ? CleanName(go.name) : "" }); } catch { } }
+        [OnEvent] public void OnBuildingFinished(Timberborn.BlockSystem.EnteredFinishedStateEvent e) { try { var go = e.BlockObject?.GetComponent<EntityComponent>()?.GameObject; PushEvent("building.finished", new { id = go?.GetInstanceID() ?? 0, name = go != null ? CleanName(go.name) : "" }); } catch (System.Exception _ex) { LogOnce(1002, _ex); } }
         [OnEvent] public void OnDistrictChanged(Timberborn.GameDistricts.DistrictCenterRegistryChangedEvent e) => PushEvent("district.changed", null);
 
         // population
@@ -177,7 +191,7 @@ namespace Timberbot
 
         // game state
         [OnEvent] public void OnGameOver(Timberborn.GameOver.GameOverEvent e) => PushEvent("game.over", null);
-        [OnEvent] public void OnSpeedChanged(Timberborn.TimeSystem.CurrentSpeedChangedEvent e) => PushEvent("speed.changed", new { speed = _speedManager.CurrentSpeed });
+        [OnEvent] public void OnSpeedChanged(Timberborn.TimeSystem.CurrentSpeedChangedEvent e) { if (_webhooks.Count > 0) PushEvent("speed.changed", new { speed = _speedManager.CurrentSpeed }); }
         [OnEvent] public void OnWorkHoursChanged(Timberborn.WorkSystem.WorkingHoursChangedEvent e) => PushEvent("workhours.changed", null);
         [OnEvent] public void OnWorkHoursTransitioned(Timberborn.WorkSystem.WorkingHoursTransitionedEvent e) => PushEvent("workhours.transitioned", null);
         [OnEvent] public void OnAutosave(Timberborn.Autosaving.AutosaveEvent e) => PushEvent("autosave", null);
