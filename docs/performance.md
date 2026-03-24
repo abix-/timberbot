@@ -4,7 +4,11 @@ Single source of truth for Timberbot API performance. All optimization decisions
 
 ## Entity tracking
 
-Event-driven indexes via Timberborn's `EventBus` with cached component refs. Zero per-frame cost, zero `GetComponent` calls per request.
+Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame allocation, zero `GetComponent` calls per request, zero main-thread cost for reads.
+
+- **Double buffer:** main thread writes to `_*Write` lists, swaps to `_*Read`. Background thread only reads `_*Read`. Zero contention.
+- **Cached structs:** `CachedBuilding` (21 component refs + ~20 cached primitives) and `CachedNaturalResource` (5 refs + 7 primitives). All mutable state refreshed on main thread each frame.
+- **Background GET serving:** all reads served on HTTP listener thread. Only POST (writes) queue to main thread.
 
 | Index | Type | Mechanism | Per-frame cost | Rebuild trigger |
 |---|---|---|---|---|
@@ -31,16 +35,16 @@ Event-driven indexes via Timberborn's `EventBus` with cached component refs. Zer
 | Endpoint | Iterates | Items | Measured | GetComponent/item | Notes |
 |---|---|---|---|---|---|
 | `ping` | none | 1 | **1ms** | 0 | Listener thread |
-| `summary` | all 3 indexes | 3000+500+65 | **2ms** | 0 (buildings/trees), 2-3 (beavers) | Listener thread, three passes over subsets |
-| `buildings` | `_buildingIndex` | 522 | **6.5ms** | **0** | Listener thread, `detail:basic` skips full serialization |
-| `buildings detail:full` | `_buildingIndex` | 522 | **8ms** | **0** | Listener thread, all fields |
-| `trees` | `_naturalResourceIndex` | 2986 | **23ms** | **0** | Listener thread. Remaining cost: dict alloc + IsInCuttingArea |
-| `gatherables` | `_naturalResourceIndex` | ~150 | **<3ms** | **0** | Listener thread |
-| `beavers` | `_beaverIndex` | 65 | **3ms** | 5-8 | Listener thread |
-| `alerts` | `_buildingIndex` | 522 | **1.4ms** | **0** | Listener thread |
-| `resources` | district centers | 13 | **1.2ms** | 0 | Listener thread |
+| `summary` | all 3 read buffers | 3000+500+65 | **1.2ms** | 0 | Cached primitives only |
+| `buildings` | `_buildingsRead` | 522 | **2.8ms** | **0** | Cached primitives, TOON dict |
+| `buildings detail:full` | `_buildingsRead` | 522 | **1.3ms** | **0** | Cached primitives, full dict |
+| `trees` | `_naturalResourcesRead` | 2985 | **2.0ms** | **0** | StringBuilder serialization, no Newtonsoft |
+| `gatherables` | `_naturalResourcesRead` | ~150 | **<1ms** | **0** | Cached primitives |
+| `beavers` | `_beaversRead` | 65 | **2.4ms** | 5-8 | NeedManager still live-read (only 65 items) |
+| `alerts` | `_buildingsRead` | 522 | **1.0ms** | **0** | Cached primitives only |
+| `resources` | district centers | 13 | **0.9ms** | 0 | Listener thread |
 | `weather` | none | 1 | **0.8ms** | 0 | Listener thread |
-| `prefabs` | building templates | 157 | **4ms** | 0 | Listener thread |
+| `prefabs` | building templates | 157 | **3.8ms** | 0 | Listener thread |
 
 ### Still scan all entities (by design)
 
@@ -58,16 +62,17 @@ Event-driven indexes via Timberborn's `EventBus` with cached component refs. Zer
 | All GET requests (reads) | background (listener thread) | **no** |
 | All POST requests (writes) | main thread via `DrainRequests` | yes, for duration |
 | JSON serialization (`Respond`) | same thread as request | no for GETs |
+| `RefreshCachedState` (snapshot mutable values) | main thread, every frame | <1ms for 3500 entities |
+| Double buffer swap | main thread, every frame | ~0ms (ref swap + value copy) |
 
-All reads served on the listener thread. Zero main-thread cost for GET-only bot turns. Writes (POST) still queue to main thread for safe game state mutation. Per-item try/catch handles the race window where an entity is destroyed mid-read.
+All reads served on the listener thread from double-buffered read lists. Zero main-thread cost for GET-only bot turns. Writes (POST) still queue to main thread. Thread-unsafe properties (reachability, powered) cached as primitives on main thread -- background thread never calls Unity component properties directly.
 
 ## Remaining bottlenecks (ordered by impact)
 
 | # | Bottleneck | Cost | Root cause | Fix |
 |---|---|---|---|---|
-| 1 | **trees 23ms** | 2986 items | per-item Dictionary alloc + `IsInCuttingArea` + property reads | pre-allocated result arrays or TOON serialization bypass |
-| 2 | **buildings full 8ms** | 522 items | per-item Dictionary alloc + inventory iteration | same |
-| 3 | **Unity GC spikes** | random 0.5-2s | Unity garbage collector freezes all threads | unavoidable from mod code |
+| 1 | **Unity GC spikes** | random 0.5-2s | Unity garbage collector freezes all threads | unavoidable from mod code |
+| 2 | **beavers live reads** | 2.4ms / 65 items | NeedManager iteration still uses GetComponent | cache beaver needs in struct (low priority, only 65 items) |
 
 ## Resolved bottlenecks
 
@@ -84,6 +89,8 @@ All reads served on the listener thread. Zero main-thread cost for GET-only bot 
 | demolish_path_at full scan | O(4161) x up to 6 | switched to `_buildingIndex` with cached refs |
 | All reads blocking main thread | ~7ms overhead per call | GETs served on listener thread, zero main-thread cost |
 | JSON serialization on main thread | ~1-3ms/response | now serializes on listener thread for GETs |
+| Thread-unsafe property reads from background | game crash (nav mesh recalc) | all mutable state cached as primitives on main thread, double-buffered |
+| Trees Dictionary + Newtonsoft overhead | 23ms for 3000 trees | StringBuilder serialization: 2ms (11.5x faster) |
 | Pause/unpause missing UI icon | `.Paused` set directly | use `Pause()`/`Resume()` methods |
 
 ## Optimization history
@@ -94,19 +101,21 @@ All reads served on the listener thread. Zero main-thread cost for GET-only bot 
 | Typed entity indexes | 29ms | 9ms | 10ms | 67ms |
 | Event-driven (EventBus) | 28ms | 9ms | 13ms | 62ms |
 | Cached component refs | 25ms | 8ms | 13ms | 64ms |
-| GETs on listener thread | **23ms** | **6.5ms** | **8ms** | **39ms** |
+| GETs on listener thread | 23ms | 6.5ms | 8ms | 39ms |
+| Double buffer + cached primitives | 4.7ms | 2.8ms | 1.3ms | 28ms |
+| StringBuilder (trees) | **2.0ms** | **2.8ms** | **1.3ms** | **28ms** |
 
-The ~7ms floor in earlier measurements was main-thread frame scheduling overhead. Moving GETs to the listener thread eliminated it. Remaining cost is per-item Dictionary allocation, property reads, and `IsInCuttingArea`. Main-thread cost for reads is now **zero**.
+**A/B test results (trees, 2985 items):** Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), StringBuilder **2.0ms** (winner). StringBuilder skips Newtonsoft entirely -- manual JSON via `sb.Append()`. Main-thread cost for reads is **zero**.
 
 ## Late-game projections
 
 | Metric | Current | Late-game (est) | Scaling |
 |---|---|---|---|
 | Buildings | 522 | 1500+ | linear with item count (dict alloc) |
-| Trees | 2986 | 5000+ | linear -- trees endpoint could hit 40ms+ |
+| Trees | 2986 | 5000+ | linear -- ~3.5ms at 5000 (StringBuilder scales well) |
 | Beavers | 65 | 200+ | linear but low base count |
 | Total entities | 4161 | 10000+ | only affects CollectScan/CollectMap (rare, region-bounded) |
-| Burst (7 calls) | 39ms | ~70ms est | acceptable at 1 call/minute cadence |
+| Burst (7 calls) | 28ms | ~50ms est | zero main-thread cost |
 
 ## Test coverage
 

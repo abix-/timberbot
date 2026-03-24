@@ -105,15 +105,15 @@ namespace Timberbot
                 // extract query params
                 var format = ctx.Request.QueryString["format"] ?? "toon";
                 var detail = ctx.Request.QueryString["detail"] ?? "basic";
+                var serial = ctx.Request.QueryString["serial"] ?? "dict";
 
                 // GET: serve reads directly on listener thread -- zero main-thread cost.
-                // Reads access cached component refs (event-driven indexes).
-                // Race window: entity destroyed mid-read. Per-item try/catch in endpoints handles this.
+                // Exception: endpoints that trigger nav mesh recalc (Reachability) must use main thread.
                 if (method == "GET")
                 {
                     try
                     {
-                        var data = RouteRequest(path, method, null, format, detail);
+                        var data = RouteRequest(path, method, null, format, detail, serial);
                         Respond(ctx, 200, data);
                     }
                     catch (Exception ex)
@@ -123,7 +123,7 @@ namespace Timberbot
                     continue;
                 }
 
-                // POST: queue writes to main thread (mutate game state)
+                // POST: queue writes to main thread
                 JObject body = null;
                 if (ctx.Request.HasEntityBody)
                 {
@@ -157,7 +157,7 @@ namespace Timberbot
             }
         }
 
-        private object RouteRequest(string path, string method, JObject body, string format = "toon", string detail = "basic")
+        private object RouteRequest(string path, string method, JObject body, string format = "toon", string detail = "basic", string serial = "dict")
         {
             // GET endpoints (read)
             if (method == "GET")
@@ -392,7 +392,7 @@ namespace Timberbot
         {
             try
             {
-                var json = JsonConvert.SerializeObject(data, Formatting.Indented);
+                var json = data is string s ? s : JsonConvert.SerializeObject(data, Formatting.Indented);
                 var bytes = Encoding.UTF8.GetBytes(json);
                 ctx.Response.StatusCode = statusCode;
                 ctx.Response.ContentType = "application/json";

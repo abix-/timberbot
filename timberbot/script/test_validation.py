@@ -1573,6 +1573,30 @@ class TestRunner:
         else:
             self.skip("cache invalidation", f"place failed: {placed}")
 
+        # serialization A/B test: dict vs anon vs sb for trees
+        print("\n  serialization A/B test (trees)...\n")
+        methods = ["dict", "anon", "sb"]
+        iters = 5
+        print(f"  {'method':<10} {'avg ms':>8} {'min ms':>8} {'max ms':>8} {'items':>6} {'bytes':>8}")
+        print(f"  {'-'*10} {'-'*8} {'-'*8} {'-'*8} {'-'*6} {'-'*8}")
+        for m in methods:
+            times = []
+            result = None
+            raw = None
+            for _ in range(iters):
+                t0 = time.perf_counter()
+                r = self.bot.s.get(f"{self.bot.url}/api/trees",
+                                   params={"format": self.bot._format, "serial": m}, timeout=10)
+                t1 = time.perf_counter()
+                times.append((t1 - t0) * 1000)
+                raw = r.content
+                result = r.json()
+            avg = sum(times) / len(times)
+            mn = min(times)
+            mx = max(times)
+            count = len(result) if isinstance(result, list) else 1
+            print(f"  {m:<10} {avg:>8.1f} {mn:>8.1f} {mx:>8.1f} {count:>6} {len(raw):>8}")
+
         # burst test: simulate bot turn (multiple calls in quick succession)
         print("\n  burst test: simulating bot turn (7 calls)...")
         t0 = time.perf_counter()
