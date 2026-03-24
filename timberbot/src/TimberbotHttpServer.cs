@@ -209,6 +209,10 @@ namespace Timberbot
                         return _service.PauseBuilding(
                             body?.Value<int>("id") ?? 0,
                             body?.Value<bool>("paused") ?? false);
+                    case "/api/building/clutch":
+                        return _service.SetClutch(
+                            body?.Value<int>("id") ?? 0,
+                            body?.Value<bool>("engaged") ?? true);
                     case "/api/floodgate":
                         return _service.SetFloodgateHeight(
                             body?.Value<int>("id") ?? 0,

@@ -192,6 +192,10 @@ class Timberbot:
         """Unpause a building."""
         return self._post("/api/building/pause", {"id": building_id, "paused": False})
 
+    def set_clutch(self, building_id, engaged):
+        """Engage or disengage a clutch. engaged: True/False."""
+        return self._post("/api/building/clutch", {"id": building_id, "engaged": engaged})
+
     def set_priority(self, building_id, priority, type=""):
         """Set building priority. Values: VeryLow, Normal, VeryHigh. Type: workplace (finished) or construction (building)."""
         return self._post("/api/priority", {"id": building_id, "priority": priority, "type": type})

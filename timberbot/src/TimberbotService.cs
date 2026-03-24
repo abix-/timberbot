@@ -1394,6 +1394,21 @@ namespace Timberbot
             return new { id = buildingId, name = CleanName(ec.GameObject.name), paused = pausable.Paused };
         }
 
+        // engage/disengage clutch on a building
+        public object SetClutch(int buildingId, bool engaged)
+        {
+            var ec = FindEntity(buildingId);
+            if (ec == null)
+                return new { error = "building not found", id = buildingId };
+
+            var clutch = ec.GetComponent<Clutch>();
+            if (clutch == null)
+                return new { error = "building has no clutch", id = buildingId };
+
+            clutch.SetMode(engaged ? ClutchMode.Engaged : ClutchMode.Disengaged);
+            return new { id = buildingId, name = CleanName(ec.GameObject.name), engaged = clutch.IsEngaged };
+        }
+
         // adjust floodgate water gate height (clamped to max)
         public object SetFloodgateHeight(int buildingId, float height)
         {
