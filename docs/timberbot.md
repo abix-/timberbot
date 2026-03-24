@@ -83,6 +83,8 @@ Beavers die if food or water hits 0.
 | `set_distribution district:X good:Water import_option:Forced` | Import/export per good per district |
 | `unlock_building building:Name.IronTeeth` | Unlock building with science points |
 | `migrate from_district:X to_district:Y count:N` | Move beavers between districts |
+| **Forbidden** | |
+| `debug` | Reflection-based game internals inspector. Dev/testing only -- NEVER use during gameplay |
 
 ## Building placement
 
@@ -90,7 +92,7 @@ Beavers die if food or water hits 0.
 
 ## Path and stair placement
 
-`place_path` routes a straight-line path (axis-aligned: x1==x2 or y1==y2) and auto-places stairs at z-level changes and platforms for multi-level jumps. Returns `{placed, stairs, skipped, errors}`. NEVER use `place_building` for paths or stairs.
+`place_path` routes a straight-line path (axis-aligned: x1==x2 or y1==y2). It handles everything: auto-detects terrain height, places stairs at z-level changes, builds platforms for multi-level jumps, and skips occupied tiles. One call replaces dozens of individual `place_building` calls. Returns `{placed, stairs, skipped, errors}`. `place_building` with Path/Stairs prefabs does not handle z-transitions and will silently place at wrong heights.
 
 ## Z-level rules
 
