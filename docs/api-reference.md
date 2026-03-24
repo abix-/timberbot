@@ -1639,7 +1639,13 @@ python timberbot.py visual x:122 y:136 radius:10
 | `*` | red/yellow | Decoration (brazier, lantern, beaver bust) |
 | `^` | dim | Roof |
 | `R` | dim | Ruins, relics |
+| `Q` | bright yellow | Wonders (monuments, flame, tribute, repopulator) |
 | `A` | bright blue | Aquifer drill |
+| `i` | dim | Automation (lever, sensor, timer, memory, relay) |
+| `x` | red | Explosives (dynamite, detonator) |
+| `#` | dim | Terrain block, dirt excavator |
+| `!` | yellow | Banners, firework launcher |
+| `\|` | dim | Fences (metal, wood) |
 | `k` | bright green | Kohlrabi |
 | `c` | bright green | Carrot |
 | `p` | bright green | Potato |
