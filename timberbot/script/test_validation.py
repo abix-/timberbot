@@ -233,7 +233,7 @@ class TestRunner:
             # verify via map
             tile = self.bot.map(sx, sy, sx, sy)
             tiles = tile.get("tiles", [])
-            has_path = any(t.get("occupant") == "Path" for t in tiles)
+            has_path = any(t.get("occupant") == "Path" or any("Path" in o.get("name", "") for o in t.get("occupants", [])) for t in tiles)
             self.check("verify placement via map", has_path)
 
             # demolish
@@ -243,7 +243,7 @@ class TestRunner:
             # verify gone
             tile2 = self.bot.map(sx, sy, sx, sy)
             tiles2 = tile2.get("tiles", [])
-            no_path = not any(t.get("occupant") == "Path" for t in tiles2)
+            no_path = not any(t.get("occupant") == "Path" or any("Path" in o.get("name", "") for o in t.get("occupants", [])) for t in tiles2)
             self.check("verify demolish via map", no_path)
 
         # multi-tile z mismatch: find a spot where terrain changes within a footprint
@@ -467,8 +467,13 @@ class TestRunner:
                 # wait for cache then verify origin via map
                 self.wait_for_refresh()
                 region = self.bot.map(bx - 1, by - 1, bx + sx, by + sy)
-                occupied = [(t["x"], t["y"]) for t in region.get("tiles", [])
-                            if t.get("occupant") and prefab.split(".")[0] in t["occupant"]]
+                pname = prefab.split(".")[0]
+                occupied = []
+                for t in region.get("tiles", []):
+                    occ = t.get("occupant", "")
+                    occs = t.get("occupants", [])
+                    if (occ and pname in occ) or any(pname in o.get("name", "") for o in occs):
+                        occupied.append((t["x"], t["y"]))
                 min_x = min(t[0] for t in occupied) if occupied else -1
                 min_y = min(t[1] for t in occupied) if occupied else -1
                 self.check(f"{prefab.split('.')[0]} {orient} origin=({min_x},{min_y})",
@@ -655,7 +660,7 @@ class TestRunner:
                 # verify stairs on map (wait for cache refresh)
                 self.wait_for_refresh()
                 region = self.bot.map(sx1, sy1, sx2, sy2)
-                has_stairs = any("Stairs" in str(t.get("occupant", "")) for t in region.get("tiles", []))
+                has_stairs = any("Stairs" in str(t.get("occupant", "")) or any("Stairs" in o.get("name", "") for o in t.get("occupants", [])) for t in region.get("tiles", []))
                 self.check("verify stairs on map", has_stairs)
 
             # cleanup
