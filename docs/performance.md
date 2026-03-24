@@ -117,14 +117,39 @@ All reads served on the listener thread from double-buffered read lists. Zero ma
 
 All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer, NominalPower, HasFloodgate, HasClutch, HasWonder, FloodgateMaxHeight.
 
+### Webhook allocations (per event fire, main thread)
+
+68 event handlers registered on EventBus. Only matching event types fire. Each fires `PushEvent()` which early-exits if `_webhooks.Count == 0`.
+
+| Source | Allocs/event | Severity | Notes |
+|---|---|---|---|
+| `new { id, name }` data payload in event handler | 1 anonymous object (~30 bytes) | **medium** | allocated BEFORE PushEvent count check -- wasted if 0 webhooks |
+| `JsonConvert.SerializeObject` | 1 string (~100-200 bytes) | medium | only if webhooks registered |
+| `_webhooks.ToArray()` | 1 array (N * 8 bytes) | **medium** | per event fire, should use index loop instead |
+| `new StringContent` on line 159 | 1 object (~200 bytes) | **waste** | created then never used (dead code) |
+| `new StringContent` inside lambda | 1 per webhook | expected | actual HTTP payload |
+| Lambda closure | 1 per webhook (~30 bytes) | expected | ThreadPool work item |
+| `ThreadPool.QueueUserWorkItem` | 1 per webhook | expected | fire-and-forget |
+
+**High-frequency event risk:** `block.set`, `population.changed`, `wind.changed` can fire hundreds/sec during normal gameplay. Each fire allocates data payload + serialization + ToArray even if filtered out by subscriber. With 0 webhooks registered, only the data payload allocation leaks (PushEvent early-exits).
+
+**Fixes to consider:**
+- Move data payload creation inside PushEvent after count check (or use lazy allocation)
+- Remove dead StringContent on line 159
+- Replace `_webhooks.ToArray()` with index loop (main thread only, safe)
+- Document high-frequency events so users filter subscriptions
+
 ## Remaining bottlenecks (ordered by impact)
 
 | # | Bottleneck | Cost | Root cause | Fix |
 |---|---|---|---|---|
 | 1 | **Unity GC spikes** | random 0.5-2s | Unity garbage collector freezes all threads | reduced alloc pressure, but unavoidable from mod |
 | 2 | **sb.ToString() alloc** | 1 string per request (~100-500KB) | StringBuilder must create final string | unavoidable but once per request |
-| ~~3~~ | ~~GetComponent per beaver per refresh~~ | ~~65 calls/sec~~ | ~~GetComponent to get GameObject for position~~ | **FIXED** -- cached `Go` field at add-time |
-| ~~4~~ | ~~Building X,Y,Z,Orientation re-read~~ | ~~522 wasted reads/sec~~ | ~~immutable after placement~~ | **FIXED** -- moved to add-time in AddToIndexes |
+| 3 | **Webhook data alloc with 0 subscribers** | 68 anonymous objects/sec (high-freq events) | data payload created before count check | move alloc inside PushEvent or use lazy pattern |
+| 4 | **Webhook ToArray per event** | 1 array per event fire | `_webhooks.ToArray()` snapshot | replace with index loop |
+| 5 | **Dead StringContent alloc** | 1 per event fire | line 159 creates unused object | remove dead code |
+| ~~6~~ | ~~GetComponent per beaver per refresh~~ | ~~65 calls/sec~~ | ~~GetComponent to get GameObject for position~~ | **FIXED** -- cached `Go` field at add-time |
+| ~~7~~ | ~~Building X,Y,Z,Orientation re-read~~ | ~~522 wasted reads/sec~~ | ~~immutable after placement~~ | **FIXED** -- moved to add-time in AddToIndexes |
 
 ## Resolved bottlenecks
 
