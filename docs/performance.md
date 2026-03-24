@@ -91,8 +91,13 @@ All reads served on the listener thread from double-buffered read lists. Zero ma
 | ~~Static values re-read every frame~~ | various | ~~wasted cycles~~ | **FIXED** | moved to add-time only |
 | ~~60fps refresh~~ | UpdateSingleton | ~~60x/sec~~ | **FIXED** | cadenced to 1s (configurable) |
 | `Orientation` from `OrientNames[]` | 226 | 0 (array lookup, no alloc) | none | already good |
-| `foreach` over `BreedingPod.Nutrients` | 310 | ~5 enumerator boxes/refresh | **minor** | if `Nutrients` returns `IEnumerable<T>`, foreach boxes enumerator (~40 bytes). Only ~5 breeding pods |
-| `foreach` over `Inventories.AllInventories` | 322 | ~500 enumerator boxes/refresh | **minor** | same boxing concern for all buildings with inventories. At 1Hz cadence = ~500 small allocs/sec |
+| `foreach` over `BreedingPod.Nutrients` | 316 | ~5 enumerator boxes/refresh | **minor** | if `Nutrients` returns `IEnumerable<T>`, foreach boxes enumerator (~40 bytes). Only ~5 breeding pods |
+| `foreach` over `Inventories.AllInventories` | 330 | ~500 enumerator boxes/refresh | **minor** | same boxing concern for all buildings with inventories. At 1Hz cadence = ~500 small allocs/sec |
+| `foreach` over `inv.Stock` (nested) | 335 | ~500+ enumerator boxes/refresh | **minor** | nested inside AllInventories loop, same boxing concern |
+| `GetComponent<EntityComponent>()` per beaver | 381 | 65 GetComponent calls/refresh | **medium** | should cache `GameObject` ref at add-time instead of calling GetComponent every refresh |
+| `CleanName()` per employed beaver | 390 | ~50 string ops/refresh | **medium** | string Replace/Contains every refresh for workplace name. Should cache and only update on change |
+| Building X,Y,Z,Orientation re-read | 260-263 | wasted reads (immutable) | **low** | coordinates and orientation don't change after placement. Move to add-time |
+| `NeedMgr.GetNeeds()` per beaver | 423 | 65 calls/refresh | **unknown** | may allocate a new collection per call. ~38 needs x 65 beavers = 2470 CachedNeed structs added to Lists |
 
 ### Per-request allocations (only when API called)
 
