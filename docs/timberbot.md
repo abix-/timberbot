@@ -1,9 +1,9 @@
 ---
 name: timberbot
 description: Play Timberborn autonomously via timberbot.py. Keep beavers alive, wellbeing high, needs met.
-version: "4.5"
+version: "4.6"
 ---
-# Timberbot API - Game Reference
+# Timberbot - Game Reference
 
 Play the game using `timberbot.py` commands only. NEVER use inline python or pipe through python -c. See [getting-started.md](getting-started.md) for PATH setup.
 
@@ -86,7 +86,7 @@ Beavers die if food or water hits 0.
 | `unlock_building building:Name.IronTeeth` | Unlock building with science points |
 | `migrate from_district:X to_district:Y count:N` | Move beavers between districts |
 | **Forbidden** | |
-| `debug` | Reflection-based game internals inspector. Dev/testing only -- NEVER use during gameplay |
+| `debug` | Reflection-based game internals inspector. Disabled by default -- enable in `settings.json` |
 
 ## Building placement
 
@@ -164,3 +164,15 @@ Max wellbeing: 77. Each beaver's `beavers` entry shows unmet needs by name.
 | Awe | 26 | LaborerMonument (+3, 7-tile radius), FlameOfUnity (+5), TributeToIngenuity (+8), EarthRepopulator (+10) |
 
 Nutrition requires food VARIETY -- different food types, not more of the same. Each type needs its own production chain. Wellbeing drops fast during crises (-12 possible) and recovers slowly.
+
+## Settings
+
+`settings.json` in mod folder (`Documents/Timberborn/Mods/Timberbot/`):
+
+| Setting | Default | Description |
+|---|---|---|
+| `refreshIntervalSeconds` | 1.0 | cache refresh cadence (seconds). Higher = less CPU, more stale |
+| `debugEndpointEnabled` | false | enable `/api/debug` reflection endpoint |
+| `httpPort` | 8085 | HTTP server port |
+
+Data staleness: mutable values (paused, workers, wellbeing) are up to `refreshIntervalSeconds` stale. Entity presence (which buildings exist) is always current via EventBus.
