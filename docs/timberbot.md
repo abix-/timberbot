@@ -13,7 +13,7 @@ Beavers die if food or water hits 0.
 
 ## When you don't know something
 
-**API reference:** Read `docs/api-reference.md` for all available endpoints, request/response formats, and parameters. Don't guess at endpoint syntax -- look it up.
+**API reference:** Use `WebFetch` on `https://abix-.github.io/TimberbornMods/api-reference/` for all available endpoints, request/response formats, and parameters. Don't guess at endpoint syntax -- look it up.
 
 **Game mechanics:** Search the Timberborn wiki FIRST before guessing:
 
