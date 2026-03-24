@@ -4,7 +4,7 @@ Play Timberborn with an AI partner. Timberbot API gives Claude, ChatGPT, or your
 /loop 1m /timberbot keep my beavers alive and get to 77 wellbeing
 [/code]
 
-That's it. One line in Claude Code and the AI plays Timberborn for you. It checks water before drought, plants crops, builds housing, unlocks science, manages power grids, and assembles bots.
+One line in Claude Code. The AI checks your colony every minute, makes decisions based on what it sees, and takes action. Water running low before a drought? It builds tanks. Population growing? It places farms and housing. Need bots? It manages the entire supply chain.
 
 Or use it as a scripting API for your own tools, dashboards, and automation.
 
