@@ -315,41 +315,12 @@ namespace Timberbot
                 }
                 catch { }
             }
-            // swap read/write refs -- background thread gets the freshly updated buffer
+            // swap: background thread gets the freshly updated buffer.
+            // no copy-back -- both buffers always have same entities (add/remove updates both).
+            // new write buffer has 1-frame-stale mutable values, refreshed next frame.
             var tmpB = _buildingsRead; _buildingsRead = _buildingsWrite; _buildingsWrite = tmpB;
             var tmpN = _naturalResourcesRead; _naturalResourcesRead = _naturalResourcesWrite; _naturalResourcesWrite = tmpN;
             var tmpV = _beaversRead; _beaversRead = _beaversWrite; _beaversWrite = tmpV;
-            // copy read back to write so next frame's refresh has data to update
-            if (_buildingsWrite.Count != _buildingsRead.Count)
-            {
-                _buildingsWrite.Clear();
-                _buildingsWrite.AddRange(_buildingsRead);
-            }
-            else
-            {
-                for (int j = 0; j < _buildingsRead.Count; j++)
-                    _buildingsWrite[j] = _buildingsRead[j];
-            }
-            if (_naturalResourcesWrite.Count != _naturalResourcesRead.Count)
-            {
-                _naturalResourcesWrite.Clear();
-                _naturalResourcesWrite.AddRange(_naturalResourcesRead);
-            }
-            else
-            {
-                for (int j = 0; j < _naturalResourcesRead.Count; j++)
-                    _naturalResourcesWrite[j] = _naturalResourcesRead[j];
-            }
-            if (_beaversWrite.Count != _beaversRead.Count)
-            {
-                _beaversWrite.Clear();
-                _beaversWrite.AddRange(_beaversRead);
-            }
-            else
-            {
-                for (int j = 0; j < _beaversRead.Count; j++)
-                    _beaversWrite[j] = _beaversRead[j];
-            }
         }
 
         // PERF: event-driven entity indexes with cached component refs.
@@ -435,9 +406,9 @@ namespace Timberbot
 
         private void BuildAllIndexes()
         {
-            _buildingsWrite.Clear();
-            _naturalResourcesWrite.Clear();
-            _beaversWrite.Clear();
+            _buildingsWrite.Clear(); _buildingsRead.Clear();
+            _naturalResourcesWrite.Clear(); _naturalResourcesRead.Clear();
+            _beaversWrite.Clear(); _beaversRead.Clear();
             _entityCache.Clear();
             foreach (var ec in _entityRegistry.Entities)
                 AddToIndexes(ec);
@@ -448,7 +419,7 @@ namespace Timberbot
             _entityCache[ec.GameObject.GetInstanceID()] = ec;
             if (ec.GetComponent<Building>() != null)
             {
-                _buildingsWrite.Add(new CachedBuilding
+                var cb = new CachedBuilding
                 {
                     Entity = ec,
                     Id = ec.GameObject.GetInstanceID(),
@@ -481,11 +452,13 @@ namespace Timberbot
                     NominalPowerInput = ec.GetComponent<MechanicalNode>()?._nominalPowerInput ?? 0,
                     NominalPowerOutput = ec.GetComponent<MechanicalNode>()?._nominalPowerOutput ?? 0,
                     EffectRadius = ec.GetComponent<RangedEffectBuildingSpec>()?.EffectRadius ?? 0
-                });
+                };
+                _buildingsWrite.Add(cb);
+                _buildingsRead.Add(cb);
             }
             else if (ec.GetComponent<LivingNaturalResource>() != null)
             {
-                _naturalResourcesWrite.Add(new CachedNaturalResource
+                var nr = new CachedNaturalResource
                 {
                     Id = ec.GameObject.GetInstanceID(),
                     Name = CleanName(ec.GameObject.name),
@@ -494,11 +467,14 @@ namespace Timberbot
                     Cuttable = ec.GetComponent<Cuttable>(),
                     Gatherable = ec.GetComponent<Gatherable>(),
                     Growable = ec.GetComponent<Timberborn.Growing.Growable>()
-                });
+                };
+                _naturalResourcesWrite.Add(nr);
+                _naturalResourcesRead.Add(nr);
             }
             else if (ec.GetComponent<NeedManager>() != null)
             {
                 _beaversWrite.Add(ec);
+                _beaversRead.Add(ec);
             }
         }
 
@@ -507,8 +483,11 @@ namespace Timberbot
             int id = ec.GameObject.GetInstanceID();
             _entityCache.Remove(id);
             _buildingsWrite.RemoveAll(b => b.Id == id);
+            _buildingsRead.RemoveAll(b => b.Id == id);
             _naturalResourcesWrite.RemoveAll(n => n.Id == id);
+            _naturalResourcesRead.RemoveAll(n => n.Id == id);
             _beaversWrite.Remove(ec);
+            _beaversRead.Remove(ec);
         }
 
         [OnEvent]
