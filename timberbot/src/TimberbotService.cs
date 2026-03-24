@@ -203,11 +203,6 @@ namespace Timberbot
         private Dictionary<int, EntityComponent> _entityCache;
         private int _entityCacheFrame = -1;
 
-        // PERF: per-frame occupied tiles cache. O(n) build once, O(1) contains-check after.
-        // Used by find_placement scoring (path adjacency) and map occupant lookup
-        private HashSet<long> _occupiedCache;
-        private int _occupiedCacheFrame = -1;
-
         // strip Unity/faction suffixes so API returns clean names
         private static string CleanName(string name) =>
             name.Replace("(Clone)", "").Replace(".IronTeeth", "").Replace(".Folktails", "").Trim();
@@ -1605,7 +1600,7 @@ namespace Timberbot
             };
         }
 
-        // mark area for crop planting (validates tiles: skip occupied, water, wrong terrain)
+        // mark area for crop planting (validates via PlantingAreaValidator.CanPlant)
         public object MarkPlanting(int x1, int y1, int x2, int y2, int z, string crop)
         {
             var minX = Mathf.Min(x1, x2);
@@ -1909,82 +1904,6 @@ namespace Timberbot
 
         // PLACEMENT VALIDATION
         // ================================================================
-
-        private HashSet<long> GetOccupiedTiles()
-        {
-            int frame = Time.frameCount;
-            if (_occupiedCache != null && _occupiedCacheFrame == frame)
-                return _occupiedCache;
-
-            var occupied = new HashSet<long>();
-            foreach (var ec in _entityRegistry.Entities)
-            {
-                var bo = ec.GetComponent<BlockObject>();
-                if (bo == null) continue;
-                // skip entities the game marks as buildable-over (empty tree stumps, etc)
-                if (bo.Overridable) continue;
-                try
-                {
-                    foreach (var block in bo.PositionedBlocks.GetAllBlocks())
-                    {
-                        var c = block.Coordinates;
-                        occupied.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
-                    }
-                }
-                catch
-                {
-                    var c = bo.Coordinates;
-                    occupied.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
-                }
-            }
-            _occupiedCache = occupied;
-            _occupiedCacheFrame = frame;
-            return occupied;
-        }
-
-        private struct FootprintTile
-        {
-            public Vector3Int coords;
-            public bool isGroundFloor;
-        }
-
-        private List<FootprintTile> ComputeFootprint(BlockObjectSpec spec, int x, int y, int z, int orientation)
-        {
-            var size = spec.Size;
-            var tiles = new List<FootprintTile>();
-            for (int lx = 0; lx < size.x; lx++)
-            {
-                for (int ly = 0; ly < size.y; ly++)
-                {
-                    for (int lz = 0; lz < size.z; lz++)
-                    {
-                        // rotate local (lx, ly) by orientation
-                        int rx, ry;
-                        switch (orientation)
-                        {
-                            case 1: // Cw90
-                                rx = ly; ry = -lx;
-                                break;
-                            case 2: // Cw180
-                                rx = -lx; ry = -ly;
-                                break;
-                            case 3: // Cw270
-                                rx = -ly; ry = lx;
-                                break;
-                            default: // Cw0
-                                rx = lx; ry = ly;
-                                break;
-                        }
-                        tiles.Add(new FootprintTile
-                        {
-                            coords = new Vector3Int(x + rx, y + ry, z + lz),
-                            isGroundFloor = lz == 0
-                        });
-                    }
-                }
-            }
-            return tiles;
-        }
 
         private int GetTerrainHeight(int x, int y)
         {
@@ -2458,8 +2377,8 @@ namespace Timberbot
             }
         }
 
-        // PERF: O(n) entity scan for path/power tiles + O(area * 4) validation loop.
-        // GetOccupiedTiles is cached per-frame. Called once per bot turn.
+        // PERF: O(n) entity scan for path/power tiles + O(area * 4) preview validation loop.
+        // Cached preview reused via Reposition for each candidate. Called once per bot turn.
         public object FindPlacement(string prefabName, int x1, int y1, int x2, int y2)
         {
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
