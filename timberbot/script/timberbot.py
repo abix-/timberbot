@@ -548,7 +548,7 @@ _BBLU = "\033[94m"
 _BMAG = "\033[95m"
 _BCYN = "\033[96m"
 
-W = 78  # total width
+W = 86  # total width
 
 # ensure UTF-8 output on Windows
 import sys as _sys
@@ -566,37 +566,30 @@ def _bar(cur, mx, w=12):
     """progress bar with gradient: ████░░░░"""
     if mx <= 0:
         return f"{_DIM}{'░' * w}{_RST}"
-    ratio = min(cur / mx, 1.0)
+    ratio = max(0.0, min(cur / mx, 1.0))
     filled = int(ratio * w)
     c = _BRED if ratio < 0.25 else _BYEL if ratio < 0.5 else _BGRN
     return f"{c}{'█' * filled}{_DIM}{'░' * (w - filled)}{_RST}"
 
 
-def _hline(left="╠", mid="═", right="╣", split=None):
-    if split:
-        return f" {left}{mid * (split - 1)}{_DIM}╬{_RST}{mid * (W - split - 1)}{right}"
-    return f" {left}{mid * (W - 1)}{right}"
+def _hline():
+    return f" {_DIM}{'─' * W}{_RST}"
 
 
-def _row(left, right=None, split=37):
-    """two-column row with box borders. right=None for full-width, right="" for empty right column."""
+def _row(left, right=None, split=43):
+    """row with optional two-column layout. No side borders."""
     import re
-    plain_l = re.sub(r'\033\[[0-9;]*m', '', left)
     if right is None:
-        # full-width single column
-        full_pad = max(0, W - 3 - len(plain_l))
-        return f" {_DIM}║{_RST} {left}{' ' * full_pad}{_DIM}║{_RST}"
+        return f"  {left}"
     else:
-        # two-column with middle separator
-        plain_r = re.sub(r'\033\[[0-9;]*m', '', right)
-        pad_l = max(0, split - 2 - len(plain_l))
-        pad_r = max(0, W - split - 2 - len(plain_r))
-        return f" {_DIM}║{_RST} {left}{' ' * pad_l} {_DIM}║{_RST} {right}{' ' * pad_r}{_DIM}║{_RST}"
+        plain_l = re.sub(r'\033\[[0-9;]*m', '', left)
+        pad_l = max(0, split - len(plain_l))
+        return f"  {left}{' ' * pad_l}  {right}"
 
 
 def _top_render(summary, wellbeing_data):
     if not summary:
-        print(f"\n {_RED}── game not reachable ──{_RST}\n")
+        print(f"\n {_RED}-- game not reachable --{_RST}\n")
         return
 
     t = summary.get("time", {})
@@ -609,12 +602,12 @@ def _top_render(summary, wellbeing_data):
     remaining = temp_len + haz_len - cday + 1 if hazardous else temp_len - cday + 1
 
     season_str = f"{_BRED}{_BOLD}DROUGHT{_RST}" if hazardous else f"{_BGRN}Temperate{_RST}"
-    day_str = f"Day {_BCYN}{_BOLD}{day}{_RST} {_DIM}──{_RST} {season_str} {_DIM}{cday}/{temp_len}+{haz_len}{_RST} ({_BOLD}{remaining}d{_RST})"
+    day_str = f"Day {_BCYN}{_BOLD}{day}{_RST} {_DIM}--{_RST} {season_str} {_DIM}{cday}/{temp_len}+{haz_len}{_RST} ({_BOLD}{remaining}d{_RST})"
 
     # header
-    print(f" {_DIM}╔{'═' * (W - 1)}╗{_RST}")
-    print(_row(f"{_BCYN}{_BOLD}TIMBERBOT{_RST}", day_str))
-    print(_hline(split=37))
+    print(f" {_DIM}{'─' * W}{_RST}")
+    print(_row(f"{_BCYN}{_BOLD}TIMBERBOT{_RST}                                {day_str}"))
+    print(_hline())
 
     # population
     districts = summary.get("districts", [])
@@ -647,15 +640,9 @@ def _top_render(summary, wellbeing_data):
     idle_c = _BRED if unemployed == 0 else _BGRN if unemployed <= 4 else _BYEL
     crit_str = f"  {_BRED}{_BOLD}● {critical} critical{_RST}" if critical > 0 else ""
 
-    print(_row(
-        f"{_BCYN}{_BOLD}{total_pop}{_RST} beavers  {_DIM}({pop_parts}{_DIM}){_RST}",
-        f"Beds {_BOLD}{occ_beds}{_RST}/{tot_beds}  Workers {_BOLD}{assigned}{_RST}/{vacancies}"
-    ))
-    print(_row(
-        f"Wellbeing {_bar(wb_avg, 77)} {_cv(wb_avg, 8, 4, '.1f')}/77{crit_str}",
-        f"Idle {idle_c}{_BOLD}{unemployed}{_RST}"
-    ))
-    print(_hline(split=37))
+    print(_row(f"{_BCYN}{_BOLD}{total_pop}{_RST} beavers  {_DIM}({pop_parts}{_DIM}){_RST}    Beds {_BOLD}{occ_beds}{_RST}/{tot_beds}  Workers {_BOLD}{assigned}{_RST}/{vacancies}  Idle {idle_c}{_BOLD}{unemployed}{_RST}"))
+    print(_row(f"Wellbeing {_bar(wb_avg, 77, 20)} {_cv(wb_avg, 8, 4, '.1f')}/77{crit_str}"))
+    print(_hline())
 
     # food + water (left) | wellbeing categories (right)
     total_food = sum(resources.get(g, 0) for g in ["Berries", "Kohlrabi", "Bread", "Carrot", "CornRation", "AlgaeRation", "EggplantRation"])
@@ -689,7 +676,7 @@ def _top_render(summary, wellbeing_data):
         r = right_lines[i] if i < len(right_lines) else ""
         print(_row(l, r))
 
-    print(_hline(split=37))
+    print(_hline())
 
     # materials (left) | alerts + projections (right)
     mat_lines = [f"{_BCYN}{_BOLD}MATERIALS{_RST}"]
@@ -735,7 +722,7 @@ def _top_render(summary, wellbeing_data):
             dl = dlog.get("available", dlog) if isinstance(dlog, dict) else dlog
             print(_row(f"  {name:16s} {_BOLD}{dpop:>3}{_RST} pop   Water {_BBLU}{_BOLD}{dw:>4}{_RST}   Log {_BOLD}{dl:>4}{_RST}"))
 
-    print(f" {_DIM}╚{'═' * (W - 1)}╝{_RST}")
+    print(f" {_DIM}{'─' * W}{_RST}")
     print(f"{'':30s}{_DIM}refreshing every 3s  ·  ctrl+c to stop{_RST}")
 
 
