@@ -101,7 +101,7 @@ All reads served on the listener thread from double-buffered read lists. Zero ma
 | ~~`new List<object>` per endpoint~~ | ~~1 per call~~ | **FIXED** -- StringBuilder returns string |
 | `$"string interpolation"` in alerts/summary | ~20 per call | negligible |
 | `sb.ToString()` for trees/buildings | 1 per request | reusable `_sb` field, pre-allocated 500KB |
-| LINQ `.Select().ToList()` in map stacking | per stacked tile | **cosmetic** | anonymous objects + LINQ alloc, could be simple loop |
+| ~~LINQ `.Select().ToList()` in map stacking~~ | ~~per stacked tile~~ | **FIXED** | replaced with simple loop + Dictionary |
 | ~~`new Dictionary` per beaver~~ | ~~65 per call~~ | **FIXED** -- CachedBeaver + StringBuilder |
 | `new Dictionary` per power network | ~17 per call | expected | response-building, per-request only |
 
