@@ -366,6 +366,7 @@
     <Copy SourceFiles="$(OutputPath)Timberbot.dll" DestinationFolder="$(ModDir)" />
     <Copy SourceFiles="manifest.json" DestinationFolder="$(ModDir)" />
     <Copy SourceFiles="thumbnail.png" DestinationFolder="$(ModDir)" Condition="Exists('thumbnail.png')" />
+    <Copy SourceFiles="settings.json" DestinationFolder="$(ModDir)" Condition="!Exists('$(ModDir)\settings.json')" />
     <Copy SourceFiles="..\script\timberbot.py" DestinationFolder="$(ModDir)" />
     <MakeDir Directories="$(ModDir)\docs" />
     <Copy SourceFiles="..\..\docs\api-reference.md" DestinationFolder="$(ModDir)\docs" />

@@ -62,8 +62,8 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 | All GET requests (reads) | background (listener thread) | **no** |
 | All POST requests (writes) | main thread via `DrainRequests` | yes, for duration |
 | JSON serialization (`Respond`) | same thread as request | no for GETs |
-| `RefreshCachedState` (snapshot mutable values) | main thread, every frame | <1ms for 3500 entities |
-| Double buffer swap | main thread, every frame | ~0ms (ref swap + value copy) |
+| `RefreshCachedState` (snapshot mutable values) | main thread, cadenced (default 1s) | <1ms for 3500 entities |
+| Double buffer swap | main thread, after refresh | ~0ms (ref swap, no copy-back) |
 
 All reads served on the listener thread from double-buffered read lists. Zero main-thread cost for GET-only bot turns. Writes (POST) still queue to main thread. Thread-unsafe properties (reachability, powered) cached as primitives on main thread -- background thread never calls Unity component properties directly.
 
@@ -128,6 +128,8 @@ These don't change between frames but are re-read in `RefreshCachedState`:
 | Trees Dictionary + Newtonsoft overhead | 23ms for 3000 trees | StringBuilder serialization: 2ms (11.5x faster) |
 | Buildings Dictionary + Newtonsoft overhead | 8ms for 522 buildings | StringBuilder serialization |
 | Priority.ToString() 60K allocs/sec | per-frame GC pressure | static PriorityNames[] lookup, zero alloc |
+| RefreshCachedState 60x/sec | wasted CPU on main thread | cadenced to 1s (configurable via settings.json) |
+| Double-buffer copy-back race | "Collection was modified" errors | removed copy-back, add/remove updates both buffers |
 | new Dictionary per breeding pod per frame | ~5 allocs/frame | persistent dict, clear+repopulate |
 | Static values refreshed every frame | wasted cycles | moved to add-time only (EffectRadius, IsGenerator, etc.) |
 | Pause/unpause missing UI icon | `.Paused` set directly | use `Pause()`/`Resume()` methods |

@@ -111,6 +111,11 @@ namespace Timberbot
         private readonly EventBus _eventBus;                                    // game event bus for entity lifecycle events
         private TimberbotHttpServer _server;
 
+        // settings (loaded from settings.json in mod folder)
+        private float _refreshInterval = 1.0f;   // seconds between cache refreshes (default: 1s)
+        private bool _debugEnabled = false;       // enable /api/debug endpoint (default: off)
+        private int _httpPort = 8085;             // HTTP server port
+
         public TimberbotService(
             IGoodService goodService,
             DistrictCenterRegistry districtCenterRegistry,
@@ -189,10 +194,35 @@ namespace Timberbot
 
         public void Load()
         {
+            LoadSettings();
             _eventBus.Register(this);
             BuildAllIndexes();
-            _server = new TimberbotHttpServer(8085, this);
-            Debug.Log("[Timberbot] HTTP server started on port 8085");
+            _server = new TimberbotHttpServer(_httpPort, this, _debugEnabled);
+            Debug.Log($"[Timberbot] HTTP server started on port {_httpPort} (refresh={_refreshInterval}s, debug={_debugEnabled})");
+        }
+
+        private void LoadSettings()
+        {
+            try
+            {
+                var modDir = System.IO.Path.Combine(
+                    System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),
+                    "Timberborn", "Mods", "Timberbot");
+                var path = System.IO.Path.Combine(modDir, "settings.json");
+                if (System.IO.File.Exists(path))
+                {
+                    var json = Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(path));
+                    _refreshInterval = json.Value<float>("refreshIntervalSeconds");
+                    if (_refreshInterval <= 0) _refreshInterval = 1.0f;
+                    _debugEnabled = json.Value<bool>("debugEndpointEnabled");
+                    _httpPort = json.Value<int>("httpPort");
+                    if (_httpPort <= 0) _httpPort = 8085;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.Log($"[Timberbot] settings.json load failed, using defaults: {ex.Message}");
+            }
         }
 
         public void Unload()
@@ -203,9 +233,16 @@ namespace Timberbot
             Debug.Log("[Timberbot] HTTP server stopped");
         }
 
+        private float _lastRefreshTime = 0f;
+
         public void UpdateSingleton()
         {
-            RefreshCachedState();
+            float now = Time.realtimeSinceStartup;
+            if (now - _lastRefreshTime >= _refreshInterval)
+            {
+                _lastRefreshTime = now;
+                RefreshCachedState();
+            }
             _server?.DrainRequests();
         }
 

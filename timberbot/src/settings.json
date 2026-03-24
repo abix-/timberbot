@@ -1,0 +1,5 @@
+{
+  "refreshIntervalSeconds": 1.0,
+  "debugEndpointEnabled": false,
+  "httpPort": 8085
+}

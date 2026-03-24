@@ -20,6 +20,7 @@ namespace Timberbot
         private readonly Thread _listenerThread;
         private readonly ConcurrentQueue<PendingRequest> _pending = new ConcurrentQueue<PendingRequest>();
         private volatile bool _running;
+        private readonly bool _debugEnabled;
 
         class PendingRequest
         {
@@ -31,9 +32,10 @@ namespace Timberbot
             public string Detail;
         }
 
-        public TimberbotHttpServer(int port, TimberbotService service)
+        public TimberbotHttpServer(int port, TimberbotService service, bool debugEnabled = false)
         {
             _service = service;
+            _debugEnabled = debugEnabled;
             _listener = new HttpListener();
 
             try
@@ -329,6 +331,7 @@ namespace Timberbot
                         return _service.DemolishBuilding(
                             body?.Value<int>("id") ?? 0);
                     case "/api/debug":
+                        if (!_debugEnabled) return new { error = "debug endpoint disabled in settings.json" };
                         var debugArgs = new System.Collections.Generic.Dictionary<string, string>();
                         if (body != null)
                             foreach (var prop in body.Properties())
