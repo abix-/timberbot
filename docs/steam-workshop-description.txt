@@ -13,7 +13,7 @@ Or use it as a scripting API for your own tools, dashboards, and external automa
 
 [b]Every building:[/b] workers, power state, production progress, inventory, recipes, construction status, effect radius. Place and demolish buildings with full game-native validation.
 
-[b]The whole map:[/b] terrain height, water depth, badwater contamination, soil moisture, every occupant on every tile (including vertical stacking). ASCII visual with height shading.
+[b]The whole map:[/b] terrain height, water depth, badwater contamination, soil moisture, every occupant on every tile (including vertical stacking). ASCII map with height shading.
 
 [b]Colony management:[/b] worker assignment, priorities, crops, tree marking, science unlocks, floodgates, stockpiles, distribution, breeding, clutch control, work schedule, game speed.
 
@@ -36,7 +36,7 @@ timberbot.py summary                              # full colony snapshot
 timberbot.py top                                  # live colony dashboard
 timberbot.py beavers detail:full                  # every need on every beaver
 timberbot.py power                                # power networks with supply vs demand
-timberbot.py visual x:120 y:140 radius:10         # ASCII map
+timberbot.py map x:120 y:140 radius:10             # ASCII map
 timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2 orientation:south
 timberbot.py crops                                  # crops in the ground with growth status
 timberbot.py register_webhook url:http://localhost:9000/events events:drought.start,beaver.died

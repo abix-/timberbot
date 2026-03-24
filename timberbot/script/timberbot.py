@@ -78,15 +78,15 @@ class Timberbot:
         data = {"url": url}
         if events:
             data["events"] = events
-        return self._post("/api/webhooks/register", data)
+        return self._post("/api/webhooks", data)
 
     def unregister_webhook(self, webhook_id):
         """Unregister a webhook by ID."""
-        return self._post("/api/webhooks/unregister", {"id": webhook_id})
+        return self._post("/api/webhooks/delete", {"id": webhook_id})
 
     def list_webhooks(self):
         """List all registered webhooks."""
-        return self._post("/api/webhooks/list", {})
+        return self._get("/api/webhooks")
 
     # -- read state (nouns) --
 
@@ -215,11 +215,9 @@ class Timberbot:
         """Current game speed: {speed: 0-3}."""
         return self._get("/api/speed")
 
-    def map(self, x1=0, y1=0, x2=0, y2=0):
-        """Terrain + water for a region. No args = map size only."""
-        if x1 == 0 and y1 == 0 and x2 == 0 and y2 == 0:
-            return self._get("/api/map")
-        return self._post("/api/map", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
+    def tiles(self, x1=0, y1=0, x2=0, y2=0):
+        """Tile data for a region: terrain, water, occupants, moisture, contamination. No args = map size only."""
+        return self._post("/api/tiles", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
 
     # -- write actions (verb_noun) --
 
@@ -360,12 +358,8 @@ class Timberbot:
         low = name.lower()
         return [i for i in items if low in i.get("name", "").lower()]
 
-    def scan(self, x, y, radius=10):
-        """Scan an area. Returns occupied tiles + water tiles, skipping empty ground."""
-        return self._post("/api/scan", {"x": x, "y": y, "radius": radius})
-
-    def visual(self, x, y, radius=10):
-        """Colored ASCII map for humans. Same data as scan() but rendered as a roguelike grid."""
+    def map(self, x, y, radius=10):
+        """Colored ASCII map with terrain height shading, buildings, water, trees."""
         R = "\033[0m"
         DIM = "\033[2m"
         RED = "\033[31m"
@@ -482,7 +476,7 @@ class Timberbot:
                 shade = 254 + min(z - 20, 1)
             return f"\033[48;5;{min(shade, 255)}m"
 
-        data = self.map(x - radius, y - radius, x + radius, y + radius)
+        data = self.tiles(x - radius, y - radius, x + radius, y + radius)
         tiles = {(t["x"], t["y"]): t for t in data.get("tiles", [])}
         legend = {}
         z_levels = set()
@@ -1035,7 +1029,7 @@ def main():
     if isinstance(result, str):
         print(result)
     elif isinstance(result, dict) and result.get("rendered"):
-        pass  # visual() already printed
+        pass  # map() already printed to terminal
     elif json_mode:
         print(json.dumps(result, indent=2))
     else:

@@ -16,7 +16,7 @@ timberbot.py register_webhook url:http://localhost:9000/events events:drought.st
 
 Or via API:
 ```
-POST /api/webhooks/register
+POST /api/webhooks
 { "url": "http://localhost:9000/events", "events": ["drought.start", "drought.end"] }
 ```
 
@@ -35,8 +35,8 @@ Omit `events` to receive all events.
 ## Management
 
 ```bash
-timberbot.py list_webhooks                    # show registered webhooks
-timberbot.py unregister_webhook webhook_id:wh_1   # remove a webhook
+timberbot.py list_webhooks                         # GET /api/webhooks
+timberbot.py unregister_webhook webhook_id:wh_1    # POST /api/webhooks/delete
 ```
 
 Webhooks are stored in memory -- they reset on game restart. Re-register on startup.

@@ -22,7 +22,7 @@ python timberbot.py beavers                              # beaver wellbeing + cr
 python timberbot.py distribution                         # import/export settings per district
 python timberbot.py science                               # science points + unlockable buildings
 python timberbot.py tree_clusters                         # find densest tree clusters
-python timberbot.py scan x:120 y:140 radius:10           # compact map for AI
+python timberbot.py map x:120 y:140 radius:10             # ASCII map with terrain height
 python timberbot.py top                                  # live colony dashboard
 python timberbot.py                                      # list all methods
 ```

@@ -1,0 +1,494 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Timberborn.BlockSystem;
+using Timberborn.BuilderPrioritySystem;
+using Timberborn.Buildings;
+using Timberborn.BaseComponentSystem;
+using Timberborn.BlockObjectTools;
+using Timberborn.Coordinates;
+using Timberborn.Cutting;
+using Timberborn.TemplateInstantiation;
+using Timberborn.MapIndexSystem;
+using Timberborn.TerrainSystem;
+using Timberborn.WaterSystem;
+using Timberborn.EntitySystem;
+using Timberborn.Forestry;
+using Timberborn.Planting;
+using Timberborn.Gathering;
+using Timberborn.GameCycleSystem;
+using Timberborn.GameDistricts;
+using Timberborn.Goods;
+using Timberborn.InventorySystem;
+using Timberborn.NaturalResourcesLifecycle;
+using Timberborn.PrioritySystem;
+using Timberborn.ResourceCountingSystem;
+using Timberborn.SingletonSystem;
+using Timberborn.Stockpiles;
+using Timberborn.TimeSystem;
+using Timberborn.WaterBuildings;
+using Timberborn.WeatherSystem;
+using Timberborn.WorkSystem;
+using Timberborn.NeedSystem;
+using Timberborn.LifeSystem;
+using Timberborn.Wellbeing;
+using Timberborn.BuildingsReachability;
+using Timberborn.ConstructionSites;
+using Timberborn.MechanicalSystem;
+using Timberborn.ScienceSystem;
+using Timberborn.BeaverContaminationSystem;
+using Timberborn.Bots;
+using Timberborn.Carrying;
+using Timberborn.DeteriorationSystem;
+using Timberborn.Wonders;
+using Timberborn.NotificationSystem;
+using Timberborn.StatusSystem;
+using Timberborn.DwellingSystem;
+using Timberborn.PowerManagement;
+using Timberborn.SoilContaminationSystem;
+using Timberborn.Hauling;
+using Timberborn.Workshops;
+using Timberborn.Reproduction;
+using Timberborn.Fields;
+using Timberborn.GameDistrictsMigration;
+using Timberborn.ToolButtonSystem;
+using Timberborn.ToolSystem;
+using Timberborn.PlantingUI;
+using Timberborn.BuildingsNavigation;
+using Timberborn.SoilMoistureSystem;
+using Timberborn.NeedSpecs;
+using Timberborn.GameFactionSystem;
+using Timberborn.RangedEffectSystem;
+using UnityEngine;
+
+namespace Timberbot
+{
+    public partial class TimberbotService
+    {
+        public object RunBenchmark(int iterations)
+        {
+            var results = new List<object>();
+            var buildings = _buildings.Read;
+
+            // --- Test 1: BreedingPod.Nutrients foreach vs for ---
+            var breedingPods = new List<CachedBuilding>();
+            for (int i = 0; i < buildings.Count; i++)
+                if (buildings[i].BreedingPod != null) breedingPods.Add(buildings[i]);
+
+            if (breedingPods.Count > 0)
+            {
+                // Warmup
+                for (int w = 0; w < 10; w++)
+                    for (int pi = 0; pi < breedingPods.Count; pi++)
+                        foreach (var ga in breedingPods[pi].BreedingPod.Nutrients) { var _ = ga.Amount; }
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                long gcBefore = GC.CollectionCount(0);
+                for (int iter = 0; iter < iterations; iter++)
+                    for (int pi = 0; pi < breedingPods.Count; pi++)
+                        foreach (var ga in breedingPods[pi].BreedingPod.Nutrients) { var _ = ga.Amount; }
+                sw.Stop();
+                long gcForeach = GC.CollectionCount(0) - gcBefore;
+                double foreachMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
+                // Nutrients is IEnumerable<GoodAmount> -- not indexable
+                // Test alternative: .ToList() then iterate (trades enumerator box for list alloc)
+                results.Add(new { test = "BreedingPod.Nutrients", count = breedingPods.Count, iterations,
+                    foreachMs, forLoopMs = -1.0, foreachGC0 = gcForeach, forLoopGC0 = -1L,
+                    speedup = -1.0, note = "IEnumerable -- not indexable, foreach is the only option" });
+            }
+
+            // --- Test 2: Inventories.AllInventories + inv.Stock foreach vs for ---
+            var withInv = new List<CachedBuilding>();
+            for (int i = 0; i < buildings.Count; i++)
+                if (buildings[i].Inventories != null) withInv.Add(buildings[i]);
+
+            if (withInv.Count > 0)
+            {
+                // Warmup
+                for (int w = 0; w < 10; w++)
+                    for (int bi = 0; bi < withInv.Count; bi++)
+                        foreach (var inv in withInv[bi].Inventories.AllInventories)
+                            foreach (var ga in inv.Stock) { var _ = ga.Amount; }
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                long gcBefore = GC.CollectionCount(0);
+                for (int iter = 0; iter < iterations; iter++)
+                    for (int bi = 0; bi < withInv.Count; bi++)
+                        foreach (var inv in withInv[bi].Inventories.AllInventories)
+                            foreach (var ga in inv.Stock) { var _ = ga.Amount; }
+                sw.Stop();
+                long gcForeach = GC.CollectionCount(0) - gcBefore;
+                double foreachMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
+                // for-loop version
+                sw.Restart();
+                gcBefore = GC.CollectionCount(0);
+                for (int iter = 0; iter < iterations; iter++)
+                    for (int bi = 0; bi < withInv.Count; bi++)
+                    {
+                        var allInv = withInv[bi].Inventories.AllInventories;
+                        for (int ii = 0; ii < allInv.Count; ii++)
+                        {
+                            var stock = allInv[ii].Stock;
+                            for (int si = 0; si < stock.Count; si++) { var _ = stock[si].Amount; }
+                        }
+                    }
+                sw.Stop();
+                long gcFor = GC.CollectionCount(0) - gcBefore;
+                double forMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
+                results.Add(new { test = "Inventories.AllInventories+Stock", count = withInv.Count, iterations,
+                    foreachMs, forLoopMs = forMs, foreachGC0 = gcForeach, forLoopGC0 = gcFor,
+                    speedup = foreachMs > 0 ? foreachMs / forMs : 0 });
+            }
+
+            // --- Endpoint benchmarks: functional + performance ---
+            object BenchCall(string name, int iters, System.Func<object> fn, int knownItems = -1)
+            {
+                object result = null;
+                for (int w = 0; w < 3; w++) result = fn();
+
+                var bsw = System.Diagnostics.Stopwatch.StartNew();
+                long bgc = GC.CollectionCount(0);
+                for (int bi = 0; bi < iters; bi++) result = fn();
+                bsw.Stop();
+                double bms = bsw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                long bgc0 = GC.CollectionCount(0) - bgc;
+
+                int items = knownItems >= 0 ? knownItems
+                    : result is System.Collections.IList blist ? blist.Count
+                    : result != null ? 1 : 0;
+
+                bool pass = !(result is Dictionary<string, object> bd && bd.ContainsKey("error"));
+
+                return new { test = name, iterations = iters, totalMs = bms,
+                             perCallMs = bms / iters, gc0 = bgc0, items, pass };
+            }
+
+            int n = System.Math.Max(iterations, 10);
+            int nHeavy = System.Math.Max(n / 10, 1);
+            int nb = _buildings.Read.Count;
+            int nv = _beavers.Read.Count;
+            int nr = _naturalResources.Read.Count;
+
+            results.Add(BenchCall("CollectSummary", n, () => CollectSummary("json")));
+            results.Add(BenchCall("CollectBuildings", n, () => CollectBuildings("json", "basic"), nb));
+            results.Add(BenchCall("CollectBuildings.full", nHeavy, () => CollectBuildings("json", "full"), nb));
+            results.Add(BenchCall("CollectBeavers", n, () => CollectBeavers("json", "basic"), nv));
+            results.Add(BenchCall("CollectBeavers.full", nHeavy, () => CollectBeavers("json", "full"), nv));
+            results.Add(BenchCall("CollectTrees", n, () => CollectTrees(), nr));
+            results.Add(BenchCall("CollectCrops", n, () => CollectCrops(), nr));
+            results.Add(BenchCall("CollectGatherables", n, () => CollectGatherables()));
+            results.Add(BenchCall("CollectPowerNetworks", n, () => CollectPowerNetworks()));
+            results.Add(BenchCall("CollectAlerts", n, () => CollectAlerts()));
+            results.Add(BenchCall("CollectWellbeing", n, () => CollectWellbeing(), nv));
+            results.Add(BenchCall("CollectScience", n, () => CollectScience()));
+            results.Add(BenchCall("CollectResources", n, () => CollectResources("json")));
+            results.Add(BenchCall("CollectPopulation", n, () => CollectPopulation(), nv));
+            results.Add(BenchCall("CollectDistricts", n, () => CollectDistricts("json")));
+            results.Add(BenchCall("CollectDistribution", n, () => CollectDistribution()));
+            results.Add(BenchCall("CollectTime", n, () => CollectTime()));
+            results.Add(BenchCall("CollectWeather", n, () => CollectWeather()));
+            results.Add(BenchCall("CollectSpeed", n, () => CollectSpeed()));
+            results.Add(BenchCall("CollectWorkHours", n, () => CollectWorkHours()));
+            results.Add(BenchCall("CollectNotifications", n, () => CollectNotifications()));
+            results.Add(BenchCall("CollectTreeClusters", nHeavy, () => CollectTreeClusters()));
+            results.Add(BenchCall("CollectPrefabs", nHeavy, () => CollectPrefabs()));
+            results.Add(BenchCall("CollectTiles.20x20", nHeavy, () => CollectTiles(120, 130, 140, 150), 400));
+            results.Add(BenchCall("FindPlacement", nHeavy, () => FindPlacement("Path", 120, 135, 130, 145)));
+
+            // metadata
+            results.Insert(0, new { test = "_meta",
+                buildings = _buildings.Read.Count,
+                beavers = _beavers.Read.Count,
+                trees = _naturalResources.Read.Count });
+
+            return new { benchmarks = results };
+        }
+
+        // ================================================================
+        // DEBUG -- reflection-based game state inspector
+        // ================================================================
+        // all params passed as args dict from POST body
+        private static object _debugLastResult;
+
+        public object DebugInspect(string target, Dictionary<string, string> args = null)
+        {
+            var info = new Dictionary<string, object>();
+            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public
+                      | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static;
+            args = args ?? new Dictionary<string, string>();
+
+            string Arg(string key, string def = "") => args.ContainsKey(key) ? args[key] : def;
+
+            // parse a string arg into any supported type
+            object ParseArg(string argStr, System.Type pType)
+            {
+                if (argStr == "$") return _debugLastResult;
+                if (pType == typeof(string)) return argStr;
+                if (pType == typeof(int)) return int.Parse(argStr);
+                if (pType == typeof(float)) return float.Parse(argStr);
+                if (pType == typeof(double)) return double.Parse(argStr);
+                if (pType == typeof(bool)) return bool.Parse(argStr);
+                if (pType == typeof(long)) return long.Parse(argStr);
+                if (pType == typeof(Vector3Int))
+                {
+                    var c = argStr.Split(',');
+                    return new Vector3Int(int.Parse(c[0]), int.Parse(c[1]), int.Parse(c[2]));
+                }
+                if (pType == typeof(Vector3))
+                {
+                    var c = argStr.Split(',');
+                    return new Vector3(float.Parse(c[0]), float.Parse(c[1]), float.Parse(c[2]));
+                }
+                if (pType == typeof(Vector2Int))
+                {
+                    var c = argStr.Split(',');
+                    return new Vector2Int(int.Parse(c[0]), int.Parse(c[1]));
+                }
+                // try Convert.ChangeType as fallback
+                try { return System.Convert.ChangeType(argStr, pType); } catch { }
+                return null;
+            }
+
+            // resolve a dot-path from this service to a nested object
+            // supports: fields, properties, parameterless methods, list indexing [N], GetComponent<T>
+            // $ = last debug result (for chaining calls)
+            // e.g. "_districtCenterRegistry.FinishedDistrictCenters.[0].AllComponents"
+            // e.g. "$.HasNode" (call method on last result)
+            object Resolve(string path)
+            {
+                var parts = path.Split('.');
+                object current = parts[0] == "$" ? _debugLastResult : (object)this;
+                if (parts[0] == "$") parts = parts.Skip(1).ToArray();
+                foreach (var part in parts)
+                {
+                    if (current == null) return null;
+
+                    // list/array indexing: [N]
+                    if (part.StartsWith("[") && part.EndsWith("]"))
+                    {
+                        int idx = int.Parse(part.Substring(1, part.Length - 2));
+                        if (current is System.Collections.IList list)
+                        {
+                            current = idx < list.Count ? list[idx] : null;
+                        }
+                        else if (current is System.Collections.IEnumerable enumerable)
+                        {
+                            int i = 0;
+                            current = null;
+                            foreach (var item in enumerable)
+                            {
+                                if (i == idx) { current = item; break; }
+                                i++;
+                            }
+                        }
+                        else return null;
+                        continue;
+                    }
+
+                    // GetComponent<TypeName> syntax: ~TypeName
+                    if (part.StartsWith("~"))
+                    {
+                        var typeName = part.Substring(1);
+                        var getCompMethod = current.GetType().GetMethod("GetComponent",
+                            System.Type.EmptyTypes);
+                        // try finding the right generic overload by iterating AllComponents
+                        var allCompsProp = current.GetType().GetProperty("AllComponents", flags);
+                        if (allCompsProp != null)
+                        {
+                            var allComps = allCompsProp.GetValue(current) as System.Collections.IEnumerable;
+                            if (allComps != null)
+                            {
+                                current = null;
+                                foreach (var comp in allComps)
+                                {
+                                    if (comp.GetType().Name == typeName || comp.GetType().FullName.Contains(typeName))
+                                    { current = comp; break; }
+                                }
+                            }
+                        }
+                        continue;
+                    }
+
+                    var t = current.GetType();
+                    var field = t.GetField(part, flags);
+                    if (field != null) { current = field.GetValue(current); continue; }
+                    var prop = t.GetProperty(part, flags);
+                    if (prop != null) { current = prop.GetValue(current); continue; }
+                    // try as parameterless method
+                    var method = t.GetMethod(part, flags, null, System.Type.EmptyTypes, null);
+                    if (method != null) { current = method.Invoke(current, null); continue; }
+                    return null;
+                }
+                return current;
+            }
+
+            // dump an object's fields and properties
+            void DumpObject(object obj, Dictionary<string, object> into, int maxItems = 5)
+            {
+                if (obj == null) { into["value"] = "null"; return; }
+                into["type"] = obj.GetType().FullName;
+                if (obj is string s) { into["value"] = s; return; }
+                if (obj is System.Collections.IEnumerable enumerable)
+                {
+                    int count = 0;
+                    var samples = new List<string>();
+                    foreach (var item in enumerable)
+                    {
+                        count++;
+                        if (samples.Count < maxItems) samples.Add(item?.ToString() ?? "null");
+                    }
+                    into["count"] = count;
+                    into["samples"] = samples;
+                    return;
+                }
+                into["value"] = obj.ToString();
+            }
+
+            try
+            {
+                switch (target)
+                {
+                    case "help":
+                        info["targets"] = new[]
+                        {
+                            "help -- this message",
+                            "get -- navigate object chain. args: path (dot-separated from TimberbotService)",
+                            "fields -- list members. args: path, filter",
+                            "call -- call method. args: path (to object), method, arg0..argN (string args, Vector3Int as x,y,z)",
+                        };
+                        info["roots"] = new[]
+                        {
+                            "_buildingService", "_entityRegistry", "_districtCenterRegistry",
+                            "_navMeshService", "_soilMoistureService", "_toolButtonService",
+                            "_blockObjectPlacerService", "_scienceService", "_buildingUnlockingService",
+                            "_districtPathNavRegistrar", "_toolUnlockingService"
+                        };
+                        info["examples"] = new[]
+                        {
+                            "debug target:fields path:_navMeshService filter:Road",
+                            "debug target:get path:_scienceService.SciencePoints",
+                            "debug target:call path:_navMeshService method:AreConnectedRoadInstant arg0:120,142,2 arg1:130,142,2",
+                        };
+                        break;
+
+                    case "get":
+                    {
+                        var path = Arg("path", "");
+                        if (string.IsNullOrEmpty(path)) { info["error"] = "pass path:_fieldName.nested.field"; break; }
+                        var obj = Resolve(path);
+                        _debugLastResult = obj;
+                        info["path"] = path;
+                        DumpObject(obj, info);
+                        break;
+                    }
+
+                    case "fields":
+                    {
+                        var path = Arg("path", "");
+                        object obj = string.IsNullOrEmpty(path) ? (object)this : Resolve(path);
+                        if (obj == null) { info["error"] = $"could not resolve '{path}'"; break; }
+                        info["type"] = obj.GetType().FullName;
+                        var filter = Arg("filter", "");
+                        var members = new List<string>();
+                        foreach (var f in obj.GetType().GetFields(flags))
+                            if (string.IsNullOrEmpty(filter) || f.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                                members.Add($"F {f.Name}:{f.FieldType.Name}");
+                        foreach (var p in obj.GetType().GetProperties(flags))
+                            if (string.IsNullOrEmpty(filter) || p.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                                members.Add($"P {p.Name}:{p.PropertyType.Name}");
+                        foreach (var m in obj.GetType().GetMethods(flags))
+                        {
+                            if (m.DeclaringType == typeof(object) || m.IsSpecialName) continue;
+                            if (!string.IsNullOrEmpty(filter) && m.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                            var parms = m.GetParameters();
+                            members.Add($"M {m.Name}({string.Join(",", System.Linq.Enumerable.Select(parms, p => p.ParameterType.Name))})->{m.ReturnType.Name}");
+                        }
+                        info["members"] = members;
+                        break;
+                    }
+
+                    case "call":
+                    {
+                        var path = Arg("path", "");
+                        var methodName = Arg("method", "");
+                        if (string.IsNullOrEmpty(methodName)) { info["error"] = "pass method:MethodName"; break; }
+                        object obj = string.IsNullOrEmpty(path) ? (object)this : Resolve(path);
+                        if (obj == null) { info["error"] = $"could not resolve '{path}'"; break; }
+                        // find all overloads
+                        var methods = obj.GetType().GetMethods(flags);
+                        System.Reflection.MethodInfo bestMethod = null;
+                        foreach (var m in methods)
+                            if (m.Name == methodName) { bestMethod = m; break; }
+                        if (bestMethod == null) { info["error"] = $"method {methodName} not found on {obj.GetType().Name}"; break; }
+                        // build args from arg0, arg1, etc
+                        var methodParams = bestMethod.GetParameters();
+                        var callArgs = new object[methodParams.Length];
+                        for (int i = 0; i < methodParams.Length; i++)
+                        {
+                            var argStr = Arg($"arg{i}", "");
+                            callArgs[i] = ParseArg(argStr, methodParams[i].ParameterType);
+                        }
+                        var result = bestMethod.Invoke(obj, callArgs);
+                        _debugLastResult = result;
+                        DumpObject(result, info);
+                        info["stored"] = "result stored in $ for chaining";
+                        break;
+                    }
+
+                    default:
+                        info["error"] = $"unknown target '{target}'. use: help, get, fields, call";
+                        break;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                info["error"] = ex.ToString();
+            }
+            return info;
+        }
+
+        // validate placement using the game's own preview system (same as player UI)
+        // PreviewFactory.Create() handles water buildings, terrain, occupancy -- all 9 validators
+        private bool ValidatePlacement(BuildingSpec buildingSpec, BlockObjectSpec blockObjectSpec, int x, int y, int z, int orientation)
+        {
+            var size = blockObjectSpec.Size;
+            int rx = size.x, ry = size.y;
+            if (orientation == 1 || orientation == 3) { rx = size.y; ry = size.x; }
+            int gx = x, gy = y;
+            switch (orientation)
+            {
+                case 1: gy = y + ry - 1; break;
+                case 2: gx = x + rx - 1; gy = y + ry - 1; break;
+                case 3: gx = x + rx - 1; break;
+            }
+
+            var placeableSpec = buildingSpec.GetSpec<PlaceableBlockObjectSpec>();
+            if (placeableSpec == null) return false;
+            Preview preview = null;
+            try
+            {
+                var placement = new Placement(new Vector3Int(gx, gy, z),
+                    (Timberborn.Coordinates.Orientation)orientation, FlipMode.Unflipped);
+                preview = _previewFactory.Create(placeableSpec);
+                preview.Reposition(placement);
+                return preview.BlockObject.IsValid();
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[Timberbot] ValidatePlacement error at ({x},{y},{z}): {ex.Message}\n{ex.StackTrace}");
+                return false;
+            }
+            finally
+            {
+                if (preview != null)
+                    UnityEngine.Object.Destroy(preview.GameObject);
+            }
+        }
+
+        // PERF: O(n) entity scan for path/power tiles + O(area * 4) preview validation loop.
+        // Cached preview reused via Reposition for each candidate. Called once per bot turn.
+    }
+}

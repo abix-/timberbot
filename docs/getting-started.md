@@ -76,7 +76,7 @@ After this, commands work from any directory:
 
 ```bash
 timberbot.py summary
-timberbot.py visual x:120 y:140 radius:10
+timberbot.py map x:120 y:140 radius:10
 ```
 
 !!! note "Shebang for Git Bash / WSL"
@@ -110,15 +110,15 @@ timberbot.py summary                                # colony snapshot: populatio
 timberbot.py buildings                              # all buildings with workers, priority, power
 timberbot.py beavers                                # wellbeing and critical needs per beaver
 timberbot.py set_speed speed:3                      # fast forward (0=pause, 1/2/3)
-timberbot.py visual x:120 y:140 radius:10          # ASCII map with terrain height shading
+timberbot.py map x:120 y:140 radius:10          # ASCII map with terrain height shading
 ```
 
 ### Visual map
 
-`visual` renders a colored ASCII grid of your colony. Background shading shows terrain height, characters represent buildings, trees, water, and crops. A legend is printed below the grid.
+`map` renders a colored ASCII grid of your colony. Background shading shows terrain height, characters represent buildings, trees, water, and crops. A legend is printed below the grid.
 
 ```bash
-timberbot.py visual x:120 y:140 radius:15
+timberbot.py map x:120 y:140 radius:15
 ```
 
 ### Live dashboard

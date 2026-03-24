@@ -203,14 +203,14 @@ namespace Timberbot
                     case "/api/workhours":
                         return _service.CollectWorkHours();
 
-                    case "/api/map":
-                        return _service.CollectMap(0, 0, 0, 0);
                     case "/api/power":
                         return _service.CollectPowerNetworks();
                     case "/api/speed":
                         return _service.CollectSpeed();
                     case "/api/prefabs":
                         return _service.CollectPrefabs();
+                    case "/api/webhooks":
+                        return _service.ListWebhooks();
                 }
             }
 
@@ -318,29 +318,22 @@ namespace Timberbot
                             body?.Value<string>("good") ?? "",
                             body?.Value<string>("import") ?? "",
                             body?.Value<int>("exportThreshold") ?? -1);
-                    case "/api/map":
-                        return _service.CollectMap(
+                    case "/api/tiles":
+                        return _service.CollectTiles(
                             body?.Value<int>("x1") ?? 0,
                             body?.Value<int>("y1") ?? 0,
                             body?.Value<int>("x2") ?? 0,
                             body?.Value<int>("y2") ?? 0);
-                    case "/api/scan":
-                        return _service.CollectScan(
-                            body?.Value<int>("x") ?? 128,
-                            body?.Value<int>("y") ?? 128,
-                            body?.Value<int>("radius") ?? 10);
                     case "/api/building/demolish":
                         return _service.DemolishBuilding(
                             body?.Value<int>("id") ?? 0);
-                    case "/api/webhooks/register":
+                    case "/api/webhooks":
                         return _service.RegisterWebhook(
                             body?.Value<string>("url") ?? "",
                             body?["events"]?.ToObject<System.Collections.Generic.List<string>>());
-                    case "/api/webhooks/unregister":
+                    case "/api/webhooks/delete":
                         return _service.UnregisterWebhook(
                             body?.Value<string>("id") ?? "");
-                    case "/api/webhooks/list":
-                        return _service.ListWebhooks();
                     case "/api/debug":
                         if (!_debugEnabled) return new { error = "debug endpoint disabled in settings.json" };
                         var debugArgs = new System.Collections.Generic.Dictionary<string, string>();

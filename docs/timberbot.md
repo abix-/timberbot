@@ -54,7 +54,6 @@ Beavers die if food or water hits 0.
 | `find source:buildings x:X y:Y radius:R` | Find buildings near a point |
 | `find source:trees name:Pine` | Find specific tree types |
 | `building_range building_id:X` | Work radius tiles for farmhouse, lumberjack, forester, gatherer |
-| `scan x:X y:Y radius:10` | Quick area survey -- occupied + water tiles only |
 | **Placement** | |
 | `find_placement prefab:Name x1:X y1:Y x2:X2 y2:Y2` | Find valid building spots sorted by reachability |
 | `find_planting crop:Kohlrabi building_id:X` | Find irrigated spots within farmhouse range |
@@ -62,8 +61,8 @@ Beavers die if food or water hits 0.
 | `place_path x1:X y1:Y x2:X2 y2:Y2` | Roads + auto-stairs + platforms. Straight line only |
 | `demolish_building building_id:X` | Remove a building |
 | **Map** | |
-| `visual x:X y:Y radius:10` | ASCII map with terrain height shading |
-| `map x1:X y1:Y x2:X2 y2:Y2` | Raw terrain, water depth, badwater, occupants (with z-stacking), moisture |
+| `map x:X y:Y radius:10` | ASCII map with terrain height shading |
+| `tiles x1:X y1:Y x2:X2 y2:Y2` | Per-tile terrain, water, badwater, occupants (z-stacking), moisture, contamination |
 | **Crops and trees** | |
 | `plant_crop x1:X y1:Y x2:X2 y2:Y2 z:Z crop:Kohlrabi` | Mark area for planting |
 | `clear_planting x1:X y1:Y x2:X2 y2:Y2 z:Z` | Clear planting marks |
@@ -89,9 +88,9 @@ Beavers die if food or water hits 0.
 | `unlock_building building:Name.IronTeeth` | Unlock building with science points |
 | `migrate from_district:X to_district:Y count:N` | Move beavers between districts |
 | **Webhooks** | |
-| `register_webhook url:URL events:drought.start,beaver.died` | Push notifications for 68 game events. See [webhooks.md](webhooks.md) |
-| `unregister_webhook webhook_id:wh_1` | Remove a registered webhook |
-| `list_webhooks` | Show all registered webhooks |
+| `register_webhook url:URL events:drought.start,beaver.died` | POST /api/webhooks. 68 push events. See [webhooks.md](webhooks.md) |
+| `unregister_webhook webhook_id:wh_1` | POST /api/webhooks/delete |
+| `list_webhooks` | GET /api/webhooks |
 | **Forbidden** | |
 | `debug` | Reflection-based game internals inspector. Disabled by default -- enable in `settings.json` |
 
@@ -125,14 +124,14 @@ Buildings placed in water become **flooded** and completely non-functional. Beav
 
 ## Z-level rules
 
-- `visual` shows terrain height: empty ground shows z % 10 digit, background shading encodes height (dark=z0-9, medium=z10-19, bright=z20-22). Height legend at bottom shows exact z values. Use `map` for raw data when needed
+- `map` shows terrain height: empty ground shows z % 10 digit, background shading encodes height (dark=z0-9, medium=z10-19, bright=z20-22). Height legend at bottom shows exact z values. Use `tiles` for raw data when needed
 - z MUST equal the terrain height at the placement location
 - Placing at wrong z causes underground clipping (building invisible/broken)
 - Different areas of the map have different terrain heights -- never assume z:2
 
 ## Orientation
 
-Entrance directions on the visual map: **north** = +y (up), **south** = -y (down), **east** = +x (right), **west** = -x (left). Point the entrance FROM the building TOWARD the nearest path.
+Entrance directions on the map: **north** = +y (up), **south** = -y (down), **east** = +x (right), **west** = -x (left). Point the entrance FROM the building TOWARD the nearest path.
 
 ## Building priorities
 

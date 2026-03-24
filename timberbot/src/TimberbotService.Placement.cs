@@ -1,0 +1,640 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Timberborn.BlockSystem;
+using Timberborn.BuilderPrioritySystem;
+using Timberborn.Buildings;
+using Timberborn.BaseComponentSystem;
+using Timberborn.BlockObjectTools;
+using Timberborn.Coordinates;
+using Timberborn.Cutting;
+using Timberborn.TemplateInstantiation;
+using Timberborn.MapIndexSystem;
+using Timberborn.TerrainSystem;
+using Timberborn.WaterSystem;
+using Timberborn.EntitySystem;
+using Timberborn.Forestry;
+using Timberborn.Planting;
+using Timberborn.Gathering;
+using Timberborn.GameCycleSystem;
+using Timberborn.GameDistricts;
+using Timberborn.Goods;
+using Timberborn.InventorySystem;
+using Timberborn.NaturalResourcesLifecycle;
+using Timberborn.PrioritySystem;
+using Timberborn.ResourceCountingSystem;
+using Timberborn.SingletonSystem;
+using Timberborn.Stockpiles;
+using Timberborn.TimeSystem;
+using Timberborn.WaterBuildings;
+using Timberborn.WeatherSystem;
+using Timberborn.WorkSystem;
+using Timberborn.NeedSystem;
+using Timberborn.LifeSystem;
+using Timberborn.Wellbeing;
+using Timberborn.BuildingsReachability;
+using Timberborn.ConstructionSites;
+using Timberborn.MechanicalSystem;
+using Timberborn.ScienceSystem;
+using Timberborn.BeaverContaminationSystem;
+using Timberborn.Bots;
+using Timberborn.Carrying;
+using Timberborn.DeteriorationSystem;
+using Timberborn.Wonders;
+using Timberborn.NotificationSystem;
+using Timberborn.StatusSystem;
+using Timberborn.DwellingSystem;
+using Timberborn.PowerManagement;
+using Timberborn.SoilContaminationSystem;
+using Timberborn.Hauling;
+using Timberborn.Workshops;
+using Timberborn.Reproduction;
+using Timberborn.Fields;
+using Timberborn.GameDistrictsMigration;
+using Timberborn.ToolButtonSystem;
+using Timberborn.ToolSystem;
+using Timberborn.PlantingUI;
+using Timberborn.BuildingsNavigation;
+using Timberborn.SoilMoistureSystem;
+using Timberborn.NeedSpecs;
+using Timberborn.GameFactionSystem;
+using Timberborn.RangedEffectSystem;
+using UnityEngine;
+
+namespace Timberbot
+{
+    public partial class TimberbotService
+    {
+        // ================================================================
+
+        private int GetTerrainHeight(int x, int y)
+        {
+            var size = _terrainService.Size;
+            if (x < 0 || x >= size.x || y < 0 || y >= size.y) return 0;
+            var index2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));
+            var stride = _mapIndexService.VerticalStride;
+            var columnCount = _terrainMap.ColumnCounts[index2D];
+            if (columnCount <= 0) return 0;
+            var topIndex = index2D + (columnCount - 1) * stride;
+            return _terrainMap.GetColumnCeiling(topIndex);
+        }
+
+        // ================================================================
+        // WRITE ENDPOINTS -- Tier 3
+        // ================================================================
+
+        public object CollectPrefabs()
+        {
+            var results = new List<object>();
+            foreach (var building in _buildingService.Buildings)
+            {
+                var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
+                var blockSpec = building.GetSpec<BlockObjectSpec>();
+
+                var entry = new Dictionary<string, object>
+                {
+                    ["name"] = templateSpec?.TemplateName ?? "unknown"
+                };
+
+                if (blockSpec != null)
+                {
+                    var size = blockSpec.Size;
+                    entry["sizeX"] = size.x;
+                    entry["sizeY"] = size.y;
+                    entry["sizeZ"] = size.z;
+                }
+
+                var bs = building.GetSpec<BuildingSpec>();
+                if (bs != null)
+                {
+                    if (bs.ScienceCost > 0)
+                    {
+                        entry["scienceCost"] = bs.ScienceCost;
+                        entry["unlocked"] = _buildingUnlockingService.Unlocked(bs);
+                    }
+                    var costs = new List<object>();
+                    try
+                    {
+                        foreach (var ga in bs.BuildingCost)
+                        {
+                            var goodProp = ga.GetType().GetProperty("GoodId") ?? ga.GetType().GetProperty("Id");
+                            var amtProp = ga.GetType().GetProperty("Amount");
+                            if (goodProp != null && amtProp != null)
+                                costs.Add(new { good = goodProp.GetValue(ga)?.ToString(), amount = amtProp.GetValue(ga) });
+                        }
+                    }
+                    catch { }
+                    if (costs.Count > 0)
+                        entry["cost"] = costs;
+                }
+
+                results.Add(entry);
+            }
+            return results;
+        }
+
+        // remove a building from the world
+        public object DemolishBuilding(int buildingId)
+        {
+            var ec = FindEntity(buildingId);
+            if (ec == null)
+                return new { error = "entity not found", id = buildingId };
+
+            var name = CleanName(ec.GameObject.name);
+            _entityService.Delete(ec);
+            return new { id = buildingId, name, demolished = true };
+        }
+
+        // route a straight-line path from (x1,y1) to (x2,y2), auto-placing stairs at z-level changes
+        public object RoutePath(int x1, int y1, int x2, int y2)
+        {
+            if (x1 != x2 && y1 != y2)
+                return new { error = "path must be a straight line (x1==x2 or y1==y2)" };
+
+            int dx = x2 > x1 ? 1 : x2 < x1 ? -1 : 0;
+            int dy = y2 > y1 ? 1 : y2 < y1 ? -1 : 0;
+            // stairs orientation: direction of travel when going uphill
+            // south=0, west=1, north=2, east=3
+            int stairsOrient = dx > 0 ? 3 : dx < 0 ? 1 : dy > 0 ? 2 : 0;
+
+            int placed = 0, skipped = 0, stairs = 0;
+            var errors = new List<string>();
+            int cx = x1, cy = y1;
+            int prevZ = GetTerrainHeight(cx, cy);
+
+            while (true)
+            {
+                int tz = GetTerrainHeight(cx, cy);
+                if (tz <= 0)
+                {
+                    errors.Add($"no terrain at ({cx},{cy})");
+                    if (cx == x2 && cy == y2) break;
+                    cx += dx; cy += dy;
+                    continue;
+                }
+
+                int zDiff = tz - prevZ;
+
+                if (zDiff != 0)
+                {
+                    int levels = System.Math.Abs(zDiff);
+                    int baseZ = System.Math.Min(prevZ, tz);
+                    bool goingUp = zDiff > 0;
+                    int rampOrient = goingUp ? stairsOrient : (stairsOrient + 2) % 4;
+
+                    // helper: demolish any path at a tile position
+                    // O(n) scan but only called once per z-level change (max ~6 times per route)
+                    void DemolishPathAt(int px, int py, int pz)
+                    {
+                        foreach (var cb in _buildings.Read)
+                        {
+                            if (cb.BlockObject == null) continue;
+                            var c = cb.BlockObject.Coordinates;
+                            if (c.x == px && c.y == py && c.z == pz && cb.Name.Contains("Path"))
+                            {
+                                DemolishBuilding(cb.Id);
+                                placed--;
+                                break;
+                            }
+                        }
+                    }
+
+                    // build ramp: N tiles, each with (tileIndex) platforms + 1 stair on top
+                    // going up: ramp starts at previous tile, extends backward
+                    // going down: ramp starts at current tile, extends forward
+                    for (int step = 0; step < levels; step++)
+                    {
+                        int rampTileX, rampTileY;
+                        if (goingUp)
+                        {
+                            // going up: first ramp tile is the previous tile, then go backward
+                            rampTileX = cx - dx * (levels - step);
+                            rampTileY = cy - dy * (levels - step);
+                        }
+                        else
+                        {
+                            // going down: ramp tiles go forward from current position
+                            rampTileX = cx + dx * step;
+                            rampTileY = cy + dy * step;
+                        }
+
+                        // demolish any path we placed on this ramp tile
+                        DemolishPathAt(rampTileX, rampTileY, GetTerrainHeight(rampTileX, rampTileY));
+
+                        // stack platforms: step count of them
+                        for (int p = 0; p < step; p++)
+                        {
+                            var platResult = PlaceBuilding("Platform.IronTeeth", rampTileX, rampTileY, baseZ + p, "south");
+                            if (platResult.GetType().GetProperty("id") == null)
+                            {
+                                var err = platResult.GetType().GetProperty("error")?.GetValue(platResult);
+                                if (err != null && !err.ToString().Contains("occupied"))
+                                    errors.Add($"platform at ({rampTileX},{rampTileY},z={baseZ + p}): {err}");
+                            }
+                        }
+
+                        // place stair on top
+                        int stairZ = baseZ + step;
+                        var stairResult = PlaceBuilding("Stairs.IronTeeth", rampTileX, rampTileY, stairZ, OrientNames[rampOrient]);
+                        if (stairResult.GetType().GetProperty("id") != null)
+                            stairs++;
+                        else
+                        {
+                            var err = stairResult.GetType().GetProperty("error")?.GetValue(stairResult);
+                            if (err != null && !err.ToString().Contains("occupied"))
+                                errors.Add($"stairs at ({rampTileX},{rampTileY},z={stairZ}): {err}");
+                        }
+                    }
+
+                    if (!goingUp)
+                    {
+                        // skip past the ramp tiles we just built
+                        for (int skip = 0; skip < levels - 1; skip++)
+                        {
+                            cx += dx; cy += dy;
+                        }
+                    }
+
+                    prevZ = tz;
+                    // fall through to place path at current tile (first tile at new z-level)
+                }
+
+                // place path at current tile
+                var result = PlaceBuilding("Path", cx, cy, tz, "south");
+                if (result.GetType().GetProperty("id") != null)
+                    placed++;
+                else
+                {
+                    var err = result.GetType().GetProperty("error")?.GetValue(result);
+                    if (err != null && !err.ToString().Contains("occupied"))
+                        errors.Add($"path at ({cx},{cy}): {err}");
+                    else
+                        skipped++;
+                }
+
+                prevZ = tz;
+                if (cx == x2 && cy == y2) break;
+                cx += dx; cy += dy;
+            }
+
+            var ret = new { placed, stairs, skipped,
+                            errors = errors.Count > 0 ? errors.ToArray() : null };
+            return ret;
+        }
+
+        // general purpose debug endpoint -- navigate, inspect, and call methods on any game object
+        // chain through objects with dot-separated paths: "type._field1._field2.MethodName"
+        // ================================================================
+        // BENCHMARK -- compare foreach vs for-loop on game collections
+        // ================================================================
+
+
+        public object FindPlacement(string prefabName, int x1, int y1, int x2, int y2)
+        {
+            var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
+            if (buildingSpec == null)
+                return new { error = "unknown prefab", prefab = prefabName };
+            var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
+            if (blockObjectSpec == null)
+                return new { error = "no block object spec", prefab = prefabName };
+
+            var size = blockObjectSpec.Size;
+
+            // get all road nodes reachable from DC using the game's own range service
+            // same method the game uses to draw the green-to-red path line
+            var reachableRoadCoords = new HashSet<Vector3Int>();
+            try
+            {
+                var reflFlags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                var nodeIdSvc = _navMeshService.GetType().GetField("_nodeIdService", reflFlags)
+                    ?.GetValue(_navMeshService) as Timberborn.Navigation.NodeIdService;
+
+                foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+                {
+                    var cachingFF = dc.GetComponent<BuildingCachingFlowField>();
+                    if (cachingFF == null || nodeIdSvc == null) continue;
+                    var accessCoords = (Vector3Int)cachingFF.GetType().GetField("_accessCoordinates", reflFlags).GetValue(cachingFF);
+                    int dcNodeId = nodeIdSvc.GridToId(accessCoords);
+                    Vector3 dcWorldPos = nodeIdSvc.IdToWorld(dcNodeId);
+
+                    var drawer = dc.GetComponent<DistrictPathNavRangeDrawer>();
+                    if (drawer == null) continue;
+                    var navRangeSvc = drawer.GetType().GetField("_navigationRangeService", reflFlags)?.GetValue(drawer);
+                    if (navRangeSvc == null) continue;
+
+                    var nodesInRange = navRangeSvc.GetType().GetMethod("GetRoadNodesInRange")
+                        ?.Invoke(navRangeSvc, new object[] { dcWorldPos }) as System.Collections.IEnumerable;
+                    if (nodesInRange == null) continue;
+
+                    foreach (var wc in nodesInRange)
+                    {
+                        var coordsProp = wc.GetType().GetProperty("Coordinates");
+                        if (coordsProp != null)
+                            reachableRoadCoords.Add((Vector3Int)coordsProp.GetValue(wc));
+                    }
+                    break;
+                }
+            }
+            catch { }
+
+            // collect path and power tile positions for placement scoring
+            var pathTiles = new HashSet<long>();
+            var powerTiles = new HashSet<long>();
+            foreach (var cb in _buildings.Read)
+            {
+                if (cb.BlockObject == null) continue;
+                if (cb.Name.Contains("Path") || cb.Name.Contains("Stairs"))
+                {
+                    foreach (var block in cb.BlockObject.PositionedBlocks.GetAllBlocks())
+                    {
+                        var c = block.Coordinates;
+                        pathTiles.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
+                    }
+                }
+                if (cb.PowerNode != null)
+                {
+                    foreach (var block in cb.BlockObject.PositionedBlocks.GetAllBlocks())
+                    {
+                        var c = block.Coordinates;
+                        powerTiles.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
+                    }
+                }
+            }
+
+            var orientNames = new[] { "south", "west", "north", "east" };
+            var results = new List<object>();
+
+            // PERF: create ONE preview, reuse with Reposition for each candidate
+            var placeableSpec = buildingSpec.GetSpec<PlaceableBlockObjectSpec>();
+            Preview cachedPreview = null;
+            try { if (placeableSpec != null) cachedPreview = _previewFactory.Create(placeableSpec); } catch { }
+            try
+            {
+
+            for (int ty = y1; ty <= y2; ty++)
+            {
+                for (int tx = x1; tx <= x2; tx++)
+                {
+                    int tz = GetTerrainHeight(tx, ty);
+                    if (tz <= 0) continue;
+
+                    // find best orientation (most path tiles adjacent to entrance side)
+                    int bestOrient = -1;
+                    int bestPathCount = -1;
+
+                    for (int orient = 0; orient < 4; orient++)
+                    {
+                        // validate using cached preview
+                        if (cachedPreview == null) continue;
+                        int vrx = size.x, vry = size.y;
+                        if (orient == 1 || orient == 3) { vrx = size.y; vry = size.x; }
+                        int vgx = tx, vgy = ty;
+                        switch (orient)
+                        {
+                            case 1: vgy = ty + vry - 1; break;
+                            case 2: vgx = tx + vrx - 1; vgy = ty + vry - 1; break;
+                            case 3: vgx = tx + vrx - 1; break;
+                        }
+                        var placement = new Placement(new Vector3Int(vgx, vgy, tz),
+                            (Timberborn.Coordinates.Orientation)orient, FlipMode.Unflipped);
+                        cachedPreview.Reposition(placement);
+                        if (!cachedPreview.BlockObject.IsValid()) continue;
+
+                        // count path tiles on entrance side
+                        int rx = size.x, ry = size.y;
+                        if (orient == 1 || orient == 3) { rx = size.y; ry = size.x; }
+
+                        int pathCount = 0;
+                        switch (orient)
+                        {
+                            case 0: // south: check y-1 row
+                                for (int px = tx; px < tx + rx; px++)
+                                    if (pathTiles.Contains((long)px * 1000000 + (long)(ty - 1) * 1000 + tz)) pathCount++;
+                                break;
+                            case 1: // west: check x-1 column
+                                for (int py = ty; py < ty + ry; py++)
+                                    if (pathTiles.Contains((long)(tx - 1) * 1000000 + (long)py * 1000 + tz)) pathCount++;
+                                break;
+                            case 2: // north: check y+ry row
+                                for (int px = tx; px < tx + rx; px++)
+                                    if (pathTiles.Contains((long)px * 1000000 + (long)(ty + ry) * 1000 + tz)) pathCount++;
+                                break;
+                            case 3: // east: check x+rx column
+                                for (int py = ty; py < ty + ry; py++)
+                                    if (pathTiles.Contains((long)(tx + rx) * 1000000 + (long)py * 1000 + tz)) pathCount++;
+                                break;
+                        }
+
+                        if (pathCount > bestPathCount)
+                        {
+                            bestPathCount = pathCount;
+                            bestOrient = orient;
+                        }
+                    }
+
+                    if (bestOrient >= 0)
+                    {
+                        // check district road reachability on entrance-side path tiles
+                        bool reachable = false;
+                        if (bestPathCount > 0)
+                        {
+                            int erx = size.x, ery = size.y;
+                            if (bestOrient == 1 || bestOrient == 3) { erx = size.y; ery = size.x; }
+                            var checkCoords = new List<Vector3Int>();
+                            switch (bestOrient)
+                            {
+                                case 0:
+                                    for (int px = tx; px < tx + erx; px++)
+                                        checkCoords.Add(new Vector3Int(px, ty - 1, tz));
+                                    break;
+                                case 1:
+                                    for (int py = ty; py < ty + ery; py++)
+                                        checkCoords.Add(new Vector3Int(tx - 1, py, tz));
+                                    break;
+                                case 2:
+                                    for (int px = tx; px < tx + erx; px++)
+                                        checkCoords.Add(new Vector3Int(px, ty + ery, tz));
+                                    break;
+                                case 3:
+                                    for (int py = ty; py < ty + ery; py++)
+                                        checkCoords.Add(new Vector3Int(tx + erx, py, tz));
+                                    break;
+                            }
+                            foreach (var coord in checkCoords)
+                            {
+                                if (reachableRoadCoords.Contains(coord))
+                                { reachable = true; break; }
+                            }
+                        }
+
+                        // check power adjacency on all 4 sides of footprint
+                        int brx = size.x, bry = size.y;
+                        if (bestOrient == 1 || bestOrient == 3) { brx = size.y; bry = size.x; }
+                        bool nearPower = false;
+                        for (int px = tx - 1; px <= tx + brx && !nearPower; px++)
+                            for (int py = ty - 1; py <= ty + bry && !nearPower; py++)
+                            {
+                                if (px >= tx && px < tx + brx && py >= ty && py < ty + bry) continue;
+                                if (powerTiles.Contains((long)px * 1000000 + (long)py * 1000 + tz))
+                                    nearPower = true;
+                            }
+
+                        // check flooding: any water on footprint tiles means building will flood
+                        int frx = size.x, fry = size.y;
+                        if (bestOrient == 1 || bestOrient == 3) { frx = size.y; fry = size.x; }
+                        bool flooded = false;
+                        for (int fx = tx; fx < tx + frx && !flooded; fx++)
+                            for (int fy = ty; fy < ty + fry && !flooded; fy++)
+                            {
+                                try
+                                {
+                                    float wh = _waterMap.CeiledWaterHeight(new Vector3Int(fx, fy, tz));
+                                    if (wh > 0) flooded = true;
+                                }
+                                catch { }
+                            }
+
+                        results.Add(new { x = tx, y = ty, z = tz,
+                                          orientation = orientNames[bestOrient],
+                                          pathAccess = bestPathCount > 0,
+                                          pathCount = bestPathCount,
+                                          reachable,
+                                          nearPower,
+                                          flooded });
+                    }
+                }
+            }
+
+            // sort: non-flooded > reachable > path access > power > path count
+            results.Sort((a, b) =>
+            {
+                var aType = a.GetType();
+                var bType = b.GetType();
+                bool fa = (bool)aType.GetProperty("flooded").GetValue(a);
+                bool fb = (bool)bType.GetProperty("flooded").GetValue(b);
+                if (fa != fb) return fa ? 1 : -1;
+                bool ra = (bool)aType.GetProperty("reachable").GetValue(a);
+                bool rb = (bool)bType.GetProperty("reachable").GetValue(b);
+                if (ra != rb) return rb ? 1 : -1;
+                bool pa = (bool)aType.GetProperty("pathAccess").GetValue(a);
+                bool pb = (bool)bType.GetProperty("pathAccess").GetValue(b);
+                if (pa != pb) return pb ? 1 : -1;
+                bool pwa = (bool)aType.GetProperty("nearPower").GetValue(a);
+                bool pwb = (bool)bType.GetProperty("nearPower").GetValue(b);
+                if (pwa != pwb) return pwb ? 1 : -1;
+                int ca = (int)aType.GetProperty("pathCount").GetValue(a);
+                int cb = (int)bType.GetProperty("pathCount").GetValue(b);
+                return cb - ca;
+            });
+
+            } // end try
+            finally
+            {
+                if (cachedPreview != null)
+                    UnityEngine.Object.Destroy(cachedPreview.GameObject);
+            }
+
+            if (results.Count > 10) results = results.GetRange(0, 10);
+
+            return new { prefab = prefabName, sizeX = size.x, sizeY = size.y,
+                         placements = results };
+        }
+
+        // place with full validation before calling Place():
+        // 1. exists + unlocked
+        // 2. origin correction (user coords = bottom-left regardless of orientation)
+        // 3. per-tile: terrain height == z, no water (unless water building), no occupancy (dead trees ok), no underground clipping
+        // 4. Place() only after all checks pass
+        private static readonly string[] OrientNames = { "south", "west", "north", "east" };
+        private static readonly string[] PriorityNames = { "VeryLow", "Low", "Normal", "High", "VeryHigh" };
+
+        private static string GetPriorityName(Timberborn.PrioritySystem.Priority p)
+        {
+            int i = (int)p;
+            return (i >= 0 && i < PriorityNames.Length) ? PriorityNames[i] : "Normal";
+        }
+
+        private static int ParseOrientation(string orient)
+        {
+            if (string.IsNullOrEmpty(orient)) return 0;
+            var lower = orient.Trim().ToLowerInvariant();
+            switch (lower)
+            {
+                case "south": return 0;
+                case "west":  return 1;
+                case "north": return 2;
+                case "east":  return 3;
+                default: return -1;
+            }
+        }
+
+        public object PlaceBuilding(string prefabName, int x, int y, int z, string orientationStr)
+        {
+            int orientation = ParseOrientation(orientationStr);
+            if (orientation < 0)
+                return new { error = $"invalid orientation '{orientationStr}', use: south, west, north, east",
+                             prefab = prefabName };
+
+            var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
+            if (buildingSpec == null)
+                return new { error = "unknown prefab", prefab = prefabName };
+
+            var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
+            if (blockObjectSpec == null)
+                return new { error = "no block object spec", prefab = prefabName };
+
+            // check building is unlocked
+            var bs = buildingSpec.GetSpec<BuildingSpec>();
+            if (bs != null && bs.ScienceCost > 0 && !_buildingUnlockingService.Unlocked(bs))
+                return new { error = "building not unlocked", prefab = prefabName,
+                             scienceCost = bs.ScienceCost,
+                             currentPoints = _scienceService.SciencePoints };
+
+            // correct origin so user coords = bottom-left corner regardless of orientation
+            // orientations 1,3 swap x/y dimensions
+            var size = blockObjectSpec.Size;
+            int rx = size.x, ry = size.y;
+            if (orientation == 1 || orientation == 3) { rx = size.y; ry = size.x; }
+            int gx = x, gy = y;
+            switch (orientation)
+            {
+                case 1: gy = y + ry - 1; break;
+                case 2: gx = x + rx - 1; gy = y + ry - 1; break;
+                case 3: gx = x + rx - 1; break;
+            }
+
+            // validate using the game's own preview system (same as player UI)
+            if (!ValidatePlacement(buildingSpec, blockObjectSpec, x, y, z, orientation))
+                return new { error = $"Cannot place BlockObject {prefabName} at ({gx}, {gy}, {z}).",
+                             prefab = prefabName, x, y, z, orientation = OrientNames[orientation] };
+
+            // validation passed -- place the building
+            var orient = (Timberborn.Coordinates.Orientation)orientation;
+            var placement = new Placement(new Vector3Int(gx, gy, z), orient,
+                FlipMode.Unflipped);
+
+            var placer = _blockObjectPlacerService.GetMatchingPlacer(blockObjectSpec);
+            int placedId = 0;
+            string placedName = "";
+            placer.Place(blockObjectSpec, placement, (entity) =>
+            {
+                placedId = entity.GameObject.GetInstanceID();
+                placedName = CleanName(entity.GameObject.name);
+            });
+
+            if (placedId == 0)
+            {
+                return new
+                {
+                    error = "placement rejected by game engine",
+                    prefab = prefabName,
+                    x, y, z, orientation,
+                    sizeX = size.x, sizeY = size.y, sizeZ = size.z,
+                    hint = "passed pre-validation but game rejected it"
+                };
+            }
+
+            return new { id = placedId, name = placedName, x, y, z, orientation = OrientNames[orientation] };
+        }
+    }
+}

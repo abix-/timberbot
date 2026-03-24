@@ -616,6 +616,24 @@ Pagination available in Python client only: `bot.trees(limit=50)`
 
 ---
 
+### GET /api/crops
+
+All crops (Kohlrabi, Soybean, Corn, etc) with growth status.
+
+**CLI:** `python timberbot.py crops`
+
+#### Response
+
+Same fields as `/api/trees`. Filters to crop species only.
+
+```json
+[
+  {"id": 78900, "name": "Kohlrabi", "x": 125, "y": 141, "z": 2, "alive": true, "marked": false, "grown": false, "growth": 0.45}
+]
+```
+
+---
+
 ### GET /api/gatherables
 
 Berry bushes and other gatherable resources.
@@ -773,25 +791,11 @@ Top 5 clusters of grown trees by density.
 
 ## Map & Terrain
 
-### GET /api/map
-
-Returns map dimensions when called without parameters.
-
-**CLI:** `python timberbot.py map` (returns map size only)
-
-#### Response
-
-```json
-{"mapSize": {"x": 256, "y": 256, "z": 22}}
-```
-
----
-
-### POST /api/map
+### POST /api/tiles
 
 Terrain, water, occupants, and contamination for a rectangular region.
 
-**CLI:** `python timberbot.py map x1:100 y1:100 x2:110 y2:110`
+**CLI:** `python timberbot.py tiles x1:100 y1:100 x2:110 y2:110`
 
 #### Request Body
 
@@ -829,51 +833,6 @@ Terrain, water, occupants, and contamination for a rectangular region.
     {"x": 100, "y": 100, "terrain": 2, "water": 0.0},
     {"x": 100, "y": 101, "terrain": 2, "water": 1.5, "badwater": 0.3},
     {"x": 100, "y": 102, "terrain": 2, "water": 0.0, "occupant": "Path", "moist": true}
-  ]
-}
-```
-
----
-
-### POST /api/scan
-
-Occupied and water tiles in a circular area, skipping empty ground.
-
-**CLI:** `python timberbot.py scan x:122 y:136 radius:10`
-
-#### Request Body
-
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| x | int | no | 128 | Center X |
-| y | int | no | 128 | Center Y |
-| radius | int | no | 10 | Scan radius |
-
-#### Response
-
-| Field | Type | Description |
-|-------|------|-------------|
-| center | string | `"x,y"` center coordinates |
-| radius | int | Scan radius |
-| default | string | Always `"ground"` (tiles not listed are empty ground) |
-| occupied | array | `[{x, y, what}]` -- entity name with suffixes |
-| water | array | `[{x, y}]` or `[{x, y, badwater}]` for contaminated |
-
-Occupant suffixes: `.dead` = dead stump (buildable), `.seedling` = growing, `.entrance` = building entrance.
-
-```json
-{
-  "center": "122,136",
-  "radius": 10,
-  "default": "ground",
-  "occupied": [
-    {"x": 119, "y": 131, "what": "SmallTank.entrance"},
-    {"x": 120, "y": 133, "what": "Path"},
-    {"x": 123, "y": 138, "what": "Kohlrabi.seedling"}
-  ],
-  "water": [
-    {"x": 122, "y": 131},
-    {"x": 123, "y": 131, "badwater": 0.45}
   ]
 }
 ```
@@ -1148,13 +1107,16 @@ Find valid placements for a building within a rectangular area. Results sorted b
 | placements[].pathCount | int | Number of adjacent path tiles |
 | placements[].reachable | bool | Connected to district road network |
 | placements[].nearPower | bool | Adjacent to power building |
+| placements[].flooded | bool | Water on footprint tiles. Flooded buildings are non-functional |
+
+Results sorted by: non-flooded > reachable > pathAccess > nearPower > pathCount.
 
 ```json
 {
   "prefab": "LumberjackFlag.IronTeeth",
   "sizeX": 2, "sizeY": 2,
   "placements": [
-    {"x": 120, "y": 130, "z": 2, "orientation": "south", "pathAccess": true, "pathCount": 2, "reachable": true, "nearPower": false}
+    {"x": 120, "y": 130, "z": 2, "orientation": "south", "pathAccess": true, "pathCount": 2, "reachable": true, "nearPower": false, "flooded": false}
   ]
 }
 ```
@@ -1584,6 +1546,55 @@ Route a straight-line path from point A to point B, auto-placing stairs at z-lev
 
 ---
 
+## Webhooks
+
+Push notifications for game events. See [webhooks.md](webhooks.md) for the full list of 68 events.
+
+### POST /api/webhooks
+
+Register a webhook URL.
+
+**CLI:** `python timberbot.py register_webhook url:http://localhost:9000/events events:drought.start,beaver.died`
+
+#### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| url | string | yes | URL to receive POST notifications |
+| events | array | no | Event names to subscribe to. Omit for all events |
+
+```json
+{"id": "wh_1", "url": "http://localhost:9000/events", "events": ["drought.start", "drought.end"]}
+```
+
+---
+
+### GET /api/webhooks
+
+List all registered webhooks.
+
+**CLI:** `python timberbot.py list_webhooks`
+
+```json
+[{"Id": "wh_1", "Url": "http://localhost:9000/events", "events": ["drought.start", "drought.end"]}]
+```
+
+---
+
+### POST /api/webhooks/delete
+
+Remove a webhook by ID.
+
+**CLI:** `python timberbot.py unregister_webhook webhook_id:wh_1`
+
+#### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | string | yes | Webhook ID from registration |
+
+---
+
 ## Debug
 
 ### POST /api/debug
@@ -1641,12 +1652,12 @@ Reflection-based inspector for game internals. Navigates object graphs, lists fi
 
 These are convenience methods in `timberbot.py` that have no direct HTTP equivalent.
 
-### visual
+### map
 
 Colored ASCII grid with terrain height display. Background shading encodes z-level, foreground characters represent entities.
 
 ```bash
-python timberbot.py visual x:122 y:136 radius:10
+python timberbot.py map x:122 y:136 radius:10
 ```
 
 | Char | Color | Meaning |
