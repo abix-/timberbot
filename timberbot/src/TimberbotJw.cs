@@ -92,6 +92,16 @@ namespace Timberbot
 
         public override string ToString() => _sb.ToString();
 
+        // Returns the content inside the outermost {} or [] without the braces.
+        // Use when pre-serializing object contents to embed later with Raw().
+        // Example: jw.Reset().OpenObj().Key("a").Int(1).Key("b").Int(2).CloseObj().ToInnerString()
+        //   -> "a":1,"b":2  (no outer braces)
+        public string ToInnerString()
+        {
+            var s = _sb.ToString();
+            return s.Length > 2 ? s.Substring(1, s.Length - 2) : "";
+        }
+
         // Insert a comma separator if there's already a value at this nesting depth.
         // This is the core trick: we never need to "look ahead" -- just track whether
         // the current depth has seen a value yet.

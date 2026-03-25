@@ -387,7 +387,7 @@ namespace Timberbot
                     if (counter != null)
                     {
                         cd.Resources = new Dictionary<string, (int, int)>();
-                        // pre-serialize toon: {"Water":50,"Log":236} -> strip outer {}
+                        // pre-serialize toon: "Water":50,"Log":236
                         var dj = _districtJw.Reset().OpenObj();
                         foreach (var goodId in goods)
                         {
@@ -399,10 +399,9 @@ namespace Timberbot
                             }
                         }
                         dj.CloseObj();
-                        var toonStr = dj.ToString();
-                        cd.ResourcesToon = toonStr.Length > 2 ? toonStr.Substring(1, toonStr.Length - 2) : "";
+                        cd.ResourcesToon = dj.ToInnerString();
 
-                        // pre-serialize json: {"Water":{"available":50,"all":54}} -> strip outer {}
+                        // pre-serialize json: "Water":{"available":50,"all":54}
                         dj.Reset().OpenObj();
                         foreach (var goodId in goods)
                         {
@@ -411,8 +410,7 @@ namespace Timberbot
                                 dj.Key(goodId).OpenObj().Key("available").Int(rc.AvailableStock).Key("all").Int(rc.AllStock).CloseObj();
                         }
                         dj.CloseObj();
-                        var jsonStr = dj.ToString();
-                        cd.ResourcesJson = jsonStr.Length > 2 ? jsonStr.Substring(1, jsonStr.Length - 2) : "";
+                        cd.ResourcesJson = dj.ToInnerString();
                     }
                     Districts.Add(cd);
                 }
