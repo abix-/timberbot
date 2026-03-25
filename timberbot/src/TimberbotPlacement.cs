@@ -1,4 +1,4 @@
-// TimberbotService.Placement.cs -- Building placement, path routing, terrain queries.
+// TimberbotPlacement.cs -- Building placement, path routing, terrain queries.
 //
 // FindPlacement: searches a region for valid building spots using the game's own
 // validation (PreviewFactory.Create + BlockObject.IsValid). Checks flooding via
@@ -79,8 +79,56 @@ using UnityEngine;
 
 namespace Timberbot
 {
-    public partial class TimberbotService
+    public class TimberbotPlacement
     {
+        private readonly ITerrainService _terrainService;
+        private readonly IThreadSafeWaterMap _waterMap;
+        private readonly MapIndexService _mapIndexService;
+        private readonly IThreadSafeColumnTerrainMap _terrainMap;
+        private readonly BuildingService _buildingService;
+        private readonly BuildingUnlockingService _buildingUnlockingService;
+        private readonly BlockObjectPlacerService _blockObjectPlacerService;
+        private readonly EntityService _entityService;
+        private readonly Timberborn.Navigation.INavMeshService _navMeshService;
+        private readonly DistrictCenterRegistry _districtCenterRegistry;
+        private readonly PreviewFactory _previewFactory;
+        private readonly ScienceService _scienceService;
+        private readonly TimberbotEntityCache _cache;
+
+        public TimberbotPlacement(
+            ITerrainService terrainService,
+            IThreadSafeWaterMap waterMap,
+            MapIndexService mapIndexService,
+            IThreadSafeColumnTerrainMap terrainMap,
+            BuildingService buildingService,
+            BuildingUnlockingService buildingUnlockingService,
+            BlockObjectPlacerService blockObjectPlacerService,
+            EntityService entityService,
+            Timberborn.Navigation.INavMeshService navMeshService,
+            DistrictCenterRegistry districtCenterRegistry,
+            PreviewFactory previewFactory,
+            ScienceService scienceService,
+            TimberbotEntityCache cache)
+        {
+            _terrainService = terrainService;
+            _waterMap = waterMap;
+            _mapIndexService = mapIndexService;
+            _terrainMap = terrainMap;
+            _buildingService = buildingService;
+            _buildingUnlockingService = buildingUnlockingService;
+            _blockObjectPlacerService = blockObjectPlacerService;
+            _entityService = entityService;
+            _navMeshService = navMeshService;
+            _districtCenterRegistry = districtCenterRegistry;
+            _previewFactory = previewFactory;
+            _scienceService = scienceService;
+            _cache = cache;
+        }
+
+        private static readonly string[] OrientNames = TimberbotEntityCache.OrientNames;
+        private static readonly string[] PriorityNames = TimberbotEntityCache.PriorityNames;
+        private static string GetPriorityName(Timberborn.PrioritySystem.Priority p) => TimberbotEntityCache.GetPriorityName(p);
+
         // ================================================================
 
         private int GetTerrainHeight(int x, int y)
@@ -101,7 +149,7 @@ namespace Timberbot
 
         public object CollectPrefabs()
         {
-            var jw = Cache.Jw.Reset().OpenArr();
+            var jw = _cache.Jw.Reset().OpenArr();
             foreach (var building in _buildingService.Buildings)
             {
                 var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
@@ -147,7 +195,7 @@ namespace Timberbot
         // remove a building from the world
         public object DemolishBuilding(int buildingId)
         {
-            var ec = Cache.FindEntity(buildingId);
+            var ec = _cache.FindEntity(buildingId);
             if (ec == null)
                 return new { error = "entity not found", id = buildingId };
 
@@ -197,7 +245,7 @@ namespace Timberbot
                     // O(n) scan but only called once per z-level change (max ~6 times per route)
                     void DemolishPathAt(int px, int py, int pz)
                     {
-                        foreach (var cb in Cache.Buildings.Read)
+                        foreach (var cb in _cache.Buildings.Read)
                         {
                             if (cb.BlockObject == null) continue;
                             var c = cb.BlockObject.Coordinates;
@@ -246,7 +294,7 @@ namespace Timberbot
 
                         // place stair on top
                         int stairZ = baseZ + step;
-                        var stairResult = PlaceBuilding("Stairs.IronTeeth", rampTileX, rampTileY, stairZ, TimberbotEntityCache.OrientNames[rampOrient]);
+                        var stairResult = PlaceBuilding("Stairs.IronTeeth", rampTileX, rampTileY, stairZ, OrientNames[rampOrient]);
                         if (stairResult.GetType().GetProperty("id") != null)
                             stairs++;
                         else
@@ -351,7 +399,7 @@ namespace Timberbot
             // collect path and power tile positions for placement scoring
             var pathTiles = new HashSet<long>();
             var powerTiles = new HashSet<long>();
-            foreach (var cb in Cache.Buildings.Read)
+            foreach (var cb in _cache.Buildings.Read)
             {
                 if (cb.BlockObject == null) continue;
                 if (cb.Name.Contains("Path") || cb.Name.Contains("Stairs"))
@@ -529,7 +577,7 @@ namespace Timberbot
 
             int count = results.Count > 10 ? 10 : results.Count;
 
-            var jw = Cache.Jw.Reset().OpenObj()
+            var jw = _cache.Jw.Reset().OpenObj()
                 .Key("prefab").Str(prefabName)
                 .Key("sizeX").Int(size.x).Key("sizeY").Int(size.y)
                 .Key("placements").OpenArr();
@@ -555,7 +603,6 @@ namespace Timberbot
         // 2. origin correction (user coords = bottom-left regardless of orientation)
         // 3. per-tile: terrain height == z, no water (unless water building), no occupancy (dead trees ok), no underground clipping
         // 4. Place() only after all checks pass
-        private static string GetPriorityName(Timberborn.PrioritySystem.Priority p) => TimberbotEntityCache.GetPriorityName(p);
 
         private static int ParseOrientation(string orient)
         {
@@ -609,7 +656,7 @@ namespace Timberbot
             // validate using the game's own preview system (same as player UI)
             if (!ValidatePlacement(buildingSpec, blockObjectSpec, x, y, z, orientation))
                 return new { error = $"Cannot place BlockObject {prefabName} at ({gx}, {gy}, {z}).",
-                             prefab = prefabName, x, y, z, orientation = TimberbotEntityCache.OrientNames[orientation] };
+                             prefab = prefabName, x, y, z, orientation = OrientNames[orientation] };
 
             // validation passed -- place the building
             var orient = (Timberborn.Coordinates.Orientation)orientation;
@@ -637,7 +684,7 @@ namespace Timberbot
                 };
             }
 
-            return new { id = placedId, name = placedName, x, y, z, orientation = TimberbotEntityCache.OrientNames[orientation] };
+            return new { id = placedId, name = placedName, x, y, z, orientation = OrientNames[orientation] };
         }
 
         private bool ValidatePlacement(BuildingSpec buildingSpec, BlockObjectSpec blockObjectSpec, int x, int y, int z, int orientation)

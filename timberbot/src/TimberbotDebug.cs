@@ -162,6 +162,52 @@ namespace Timberbot
                 results.Add(new { test = "Inventories.AllInventories+Stock", count = withInv.Count, iterations,
                     foreachMs, forLoopMs = forMs, foreachGC0 = gcForeach, forLoopGC0 = gcFor,
                     speedup = foreachMs > 0 ? foreachMs / forMs : 0 });
+
+                // breakdown: AllInventories access only (no Stock iteration)
+                sw.Restart();
+                gcBefore = GC.CollectionCount(0);
+                for (int iter = 0; iter < iterations; iter++)
+                    for (int bi = 0; bi < withInv.Count; bi++)
+                    {
+                        var allInv = withInv[bi].Inventories.AllInventories;
+                        for (int ii = 0; ii < allInv.Count; ii++) { var _ = allInv[ii].TotalAmountInStock; }
+                    }
+                sw.Stop();
+                results.Add(new { test = "Inventories.AllInventories.only", count = withInv.Count, iterations,
+                    totalMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency,
+                    perCallMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency / iterations,
+                    gc0 = GC.CollectionCount(0) - gcBefore });
+
+                // breakdown: Stock iteration with Dictionary insert (simulates real refresh)
+                var testDict = new Dictionary<string, int>();
+                sw.Restart();
+                gcBefore = GC.CollectionCount(0);
+                for (int iter = 0; iter < iterations; iter++)
+                    for (int bi = 0; bi < withInv.Count; bi++)
+                    {
+                        testDict.Clear();
+                        var allInv = withInv[bi].Inventories.AllInventories;
+                        for (int ii = 0; ii < allInv.Count; ii++)
+                        {
+                            var stock = allInv[ii].Stock;
+                            for (int si = 0; si < stock.Count; si++)
+                            {
+                                var ga = stock[si];
+                                if (ga.Amount > 0)
+                                {
+                                    if (testDict.ContainsKey(ga.GoodId))
+                                        testDict[ga.GoodId] += ga.Amount;
+                                    else
+                                        testDict[ga.GoodId] = ga.Amount;
+                                }
+                            }
+                        }
+                    }
+                sw.Stop();
+                results.Add(new { test = "Inventories.FullRefreshSim", count = withInv.Count, iterations,
+                    totalMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency,
+                    perCallMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency / iterations,
+                    gc0 = GC.CollectionCount(0) - gcBefore });
             }
 
             // --- Test: NeedMgr.GetNeeds() allocation ---
@@ -259,9 +305,9 @@ namespace Timberbot
             results.Add(BenchCall("CollectWorkHours", n, () => Service.Read.CollectWorkHours()));
             results.Add(BenchCall("CollectNotifications", n, () => Service.Write.CollectNotifications()));
             results.Add(BenchCall("CollectTreeClusters", nHeavy, () => Service.Read.CollectTreeClusters()));
-            results.Add(BenchCall("CollectPrefabs", nHeavy, () => Service.CollectPrefabs()));
+            results.Add(BenchCall("CollectPrefabs", nHeavy, () => Service.Placement.CollectPrefabs()));
             results.Add(BenchCall("CollectTiles.20x20", nHeavy, () => Service.Write.CollectTiles(120, 130, 140, 150), 400));
-            results.Add(BenchCall("FindPlacement", nHeavy, () => Service.FindPlacement("Path", 120, 135, 130, 145)));
+            results.Add(BenchCall("FindPlacement", nHeavy, () => Service.Placement.FindPlacement("Path", 120, 135, 130, 145)));
 
             // metadata
             results.Insert(0, new { test = "_meta",

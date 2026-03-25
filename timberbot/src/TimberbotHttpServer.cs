@@ -230,7 +230,7 @@ namespace Timberbot
                     case "/api/speed":
                         return _service.Read.CollectSpeed();
                     case "/api/prefabs":
-                        return _service.CollectPrefabs();
+                        return _service.Placement.CollectPrefabs();
                     case "/api/webhooks":
                         return _service.WebhookMgr.ListWebhooks();
                 }
@@ -347,7 +347,7 @@ namespace Timberbot
                             body?.Value<int>("x2") ?? 0,
                             body?.Value<int>("y2") ?? 0);
                     case "/api/building/demolish":
-                        return _service.DemolishBuilding(
+                        return _service.Placement.DemolishBuilding(
                             body?.Value<int>("id") ?? 0);
                     case "/api/webhooks":
                         return _service.WebhookMgr.RegisterWebhook(
@@ -369,20 +369,20 @@ namespace Timberbot
                         return _service.DebugTool.RunBenchmark(
                             body?.Value<int>("iterations") ?? 100);
                     case "/api/path/place":
-                        return _service.RoutePath(
+                        return _service.Placement.RoutePath(
                             body?.Value<int>("x1") ?? 0,
                             body?.Value<int>("y1") ?? 0,
                             body?.Value<int>("x2") ?? 0,
                             body?.Value<int>("y2") ?? 0);
                     case "/api/placement/find":
-                        return _service.FindPlacement(
+                        return _service.Placement.FindPlacement(
                             body?.Value<string>("prefab") ?? "",
                             body?.Value<int>("x1") ?? 0,
                             body?.Value<int>("y1") ?? 0,
                             body?.Value<int>("x2") ?? 0,
                             body?.Value<int>("y2") ?? 0);
                     case "/api/building/place":
-                        return _service.PlaceBuilding(
+                        return _service.Placement.PlaceBuilding(
                             body?.Value<string>("prefab") ?? "",
                             body?.Value<int>("x") ?? 0,
                             body?.Value<int>("y") ?? 0,

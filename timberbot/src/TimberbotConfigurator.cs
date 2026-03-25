@@ -16,6 +16,7 @@ namespace Timberbot
             Bind<TimberbotWebhook>().AsSingleton();
             Bind<TimberbotRead>().AsSingleton();
             Bind<TimberbotWrite>().AsSingleton();
+            Bind<TimberbotPlacement>().AsSingleton();
             Bind<TimberbotDebug>().AsSingleton();
             Bind<TimberbotService>().AsSingleton();
         }
