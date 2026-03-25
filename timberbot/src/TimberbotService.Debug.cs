@@ -1,3 +1,14 @@
+// TimberbotService.Debug.cs -- Reflection inspector and built-in benchmark.
+//
+// DebugInspect: walks any game object graph at runtime using reflection.
+// Lets you inspect fields, properties, call methods, and chain results with $.
+// Gated behind debugEndpointEnabled in settings.json. Not for production use.
+//
+// RunBenchmark: profiles all read endpoints with Stopwatch timing and GC0 counts.
+// Runs both foreach vs for-loop comparisons on collection iteration and full
+// endpoint profiling (CollectBuildings, CollectBeavers, etc.) against real game data.
+// Returns pass/fail + timing per endpoint. Used to catch performance regressions.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -248,7 +259,7 @@ namespace Timberbot
                     return new Vector2Int(int.Parse(c[0]), int.Parse(c[1]));
                 }
                 // try Convert.ChangeType as fallback
-                try { return System.Convert.ChangeType(argStr, pType); } catch { }
+                try { return System.Convert.ChangeType(argStr, pType); } catch (System.Exception _ex) { TimberbotLog.Error("debug", _ex); }
                 return null;
             }
 

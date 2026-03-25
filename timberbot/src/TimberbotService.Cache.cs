@@ -84,23 +84,22 @@ namespace Timberbot
 {
     public partial class TimberbotService
     {
-        // log-once: prevent spamming console with repeated errors from the same catch site
-        private static readonly System.Collections.Generic.HashSet<int> _loggedErrors = new System.Collections.Generic.HashSet<int>();
-        private static void LogOnce(int site, System.Exception ex)
-        {
-            if (_loggedErrors.Add(site))
-                Debug.LogWarning($"[Timberbot] error at site {site}: {ex.GetType().Name}: {ex.Message}");
-        }
-
-        // snapshot all mutable state on main thread, then swap buffers.
-        // background thread reads from _read lists (never modified during read).
+        // Called every 1 second on the main thread (cadence set by refreshIntervalSeconds).
+        // Reads mutable fields from live game components into the Write buffer.
+        // After the loop, Swap() makes the new data available to the background HTTP thread.
+        //
+        // Why not just read game objects on the HTTP thread?
+        // Unity components can only be accessed from the main thread. This refresh loop
+        // snapshots everything once per second so HTTP GETs never touch Unity directly.
         private void RefreshCachedState()
         {
+            // --- Buildings: read mutable state from each cached building's components ---
             for (int i = 0; i < _buildings.Write.Count; i++)
             {
                 var c = _buildings.Write[i];
                 try
                 {
+                    // BlockObject.IsFinished changes from false->true when construction completes
                     if (c.BlockObject != null)
                         c.Finished = c.BlockObject.IsFinished;
                     // X, Y, Z, Orientation set at add-time (immutable after placement)
@@ -134,7 +133,7 @@ namespace Timberbot
                     if (c.Wonder != null) c.WonderActive = c.Wonder.IsActive;
                     if (c.PowerNode != null)
                     {
-                        try { var g = c.PowerNode.Graph; if (g != null) { c.PowerDemand = (int)g.PowerDemand; c.PowerSupply = (int)g.PowerSupply; c.PowerNetworkId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(g); } } catch (System.Exception _ex) { LogOnce(137, _ex); }
+                        try { var g = c.PowerNode.Graph; if (g != null) { c.PowerDemand = (int)g.PowerDemand; c.PowerSupply = (int)g.PowerSupply; c.PowerNetworkId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(g); } } catch (System.Exception _ex) { TimberbotLog.Error("cache.power", _ex); }
                     }
                     if (c.Manufactory != null)
                     {
@@ -158,7 +157,7 @@ namespace Timberbot
                             foreach (var ga in c.BreedingPod.Nutrients)
                                 if (ga.Amount > 0) c.NutrientStock[ga.GoodId] = ga.Amount;
                         }
-                        catch (System.Exception _ex) { LogOnce(161, _ex); }
+                        catch (System.Exception _ex) { TimberbotLog.Error("cache.nutrients", _ex); }
                     }
                     // EffectRadius, IsGenerator, IsConsumer, NominalPower, HasFloodgate,
                     // HasClutch, HasWonder, FloodgateMaxHeight set at add-time (static values)
@@ -190,13 +189,13 @@ namespace Timberbot
                                 }
                             }
                         }
-                        catch (System.Exception _ex) { LogOnce(193, _ex); }
+                        catch (System.Exception _ex) { TimberbotLog.Error("cache.inventory", _ex); }
                         c.Stock = totalStock;
                         c.Capacity = totalCapacity;
                     }
                     _buildings.Write[i] = c;
                 }
-                catch (System.Exception _ex) { LogOnce(199, _ex); }
+                catch (System.Exception _ex) { TimberbotLog.Error("cache.building", _ex); }
             }
             for (int i = 0; i < _naturalResources.Write.Count; i++)
             {
@@ -214,7 +213,7 @@ namespace Timberbot
                     c.Growth = c.Growable != null ? c.Growable.GrowthProgress : 0f;
                     _naturalResources.Write[i] = c;
                 }
-                catch (System.Exception _ex) { LogOnce(217, _ex); }
+                catch (System.Exception _ex) { TimberbotLog.Error("cache.natural_resource", _ex); }
             }
             // beavers
             for (int i = 0; i < _beavers.Write.Count; i++)
@@ -282,7 +281,7 @@ namespace Timberbot
                     }
                     _beavers.Write[i] = c;
                 }
-                catch (System.Exception _ex) { LogOnce(285, _ex); }
+                catch (System.Exception _ex) { TimberbotLog.Error("cache.beaver", _ex); }
             }
             // swap: background thread gets the freshly updated buffer
             _buildings.Swap();
@@ -290,12 +289,21 @@ namespace Timberbot
             _beavers.Swap();
         }
 
-        // PERF: event-driven entity indexes with cached component refs.
-        // Components resolved once at add-time. Zero GetComponent calls per request.
+        // ================================================================
+        // CACHED STRUCTS
+        //
+        // Each struct holds both:
+        //   - Component references (set once in AddToIndexes, never change)
+        //   - Mutable state (refreshed every 1s in RefreshCachedState)
+        //
+        // Why structs instead of classes? Value types live inline in the List<T>
+        // array, giving cache-friendly sequential memory access during refresh.
+        // We copy by value when writing back: _buildings.Write[i] = c;
+        // ================================================================
 
         private struct CachedNaturalResource
         {
-            // immutable refs (set at add-time)
+            // immutable refs (set at add-time, never change for the entity's lifetime)
             public int Id;
             public string Name;
             public BlockObject BlockObject;
@@ -427,9 +435,20 @@ namespace Timberbot
                 AddToIndexes(ec);
         }
 
+        // Called when any entity is created (building placed, beaver born, tree grown).
+        // We check what kind of entity it is using GetComponent<T>() -- this is the ONLY
+        // time we call GetComponent per entity. The results are stored in the cached struct
+        // so RefreshCachedState never needs to resolve components again.
+        //
+        // Timberborn entities are Unity GameObjects with components attached via their
+        // entity system. A "building" has Building + BlockObject + maybe Workplace, etc.
+        // A "beaver" has NeedManager + Citizen + maybe Worker, etc.
         private void AddToIndexes(EntityComponent ec)
         {
+            // Cache the entity for O(1) lookup by ID in write commands
             _entityCache[ec.GameObject.GetInstanceID()] = ec;
+
+            // Is it a building? (has Building component)
             if (ec.GetComponent<Building>() != null)
             {
                 var cb = new CachedBuilding
@@ -493,7 +512,7 @@ namespace Timberbot
                             cb.EntranceX = ent.x;
                             cb.EntranceY = ent.y;
                         }
-                        catch (System.Exception _ex) { LogOnce(496, _ex); }
+                        catch (System.Exception _ex) { TimberbotLog.Error("cache.entrance", _ex); }
                     }
                 }
                 // separate reference-type instances per buffer to avoid shared mutation

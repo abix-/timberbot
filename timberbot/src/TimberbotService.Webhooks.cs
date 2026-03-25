@@ -126,7 +126,7 @@ namespace Timberbot
                 System.Threading.ThreadPool.QueueUserWorkItem(_ =>
                 {
                     try { _webhookClient.PostAsync(url, new System.Net.Http.StringContent(payload, System.Text.Encoding.UTF8, "application/json")).Wait(); }
-                    catch (System.Exception _ex) { LogOnce(1001, _ex); }
+                    catch (System.Exception _ex) { TimberbotLog.Error("webhook.post", _ex); }
                 });
             }
         }
@@ -149,7 +149,7 @@ namespace Timberbot
         [OnEvent] public void OnNightStart(Timberborn.TimeSystem.NighttimeStartEvent e) { if (_webhooks.Count > 0) PushEvent("night.start", new { day = _dayNightCycle.DayNumber }); }
 
         // buildings (continued)
-        [OnEvent] public void OnBuildingFinished(Timberborn.BlockSystem.EnteredFinishedStateEvent e) { try { var go = e.BlockObject?.GetComponent<EntityComponent>()?.GameObject; PushEvent("building.finished", new { id = go?.GetInstanceID() ?? 0, name = go != null ? CleanName(go.name) : "" }); } catch (System.Exception _ex) { LogOnce(1002, _ex); } }
+        [OnEvent] public void OnBuildingFinished(Timberborn.BlockSystem.EnteredFinishedStateEvent e) { try { var go = e.BlockObject?.GetComponent<EntityComponent>()?.GameObject; PushEvent("building.finished", new { id = go?.GetInstanceID() ?? 0, name = go != null ? CleanName(go.name) : "" }); } catch (System.Exception _ex) { TimberbotLog.Error("webhook.building_finished", _ex); } }
         [OnEvent] public void OnDistrictChanged(Timberborn.GameDistricts.DistrictCenterRegistryChangedEvent e) => PushEvent("district.changed", null);
 
         // population

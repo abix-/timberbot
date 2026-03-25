@@ -1,3 +1,19 @@
+// TimberbotService.Placement.cs -- Building placement, path routing, terrain queries.
+//
+// FindPlacement: searches a region for valid building spots using the game's own
+// validation (PreviewFactory.Create + BlockObject.IsValid). Checks flooding via
+// _waterMap, path connectivity via reflection into NavMesh internals, and power
+// adjacency via cached power tile positions. Returns top 10 spots sorted by:
+// non-flooded > reachable > pathAccess > nearPower > pathCount.
+//
+// PlaceBuilding: origin-corrects coordinates (user always specifies bottom-left),
+// creates a preview, validates, then calls BlockObjectPlacerService.Place().
+//
+// RoutePath: places a straight-line path with auto-stairs at z-level changes.
+// Handles multi-level jumps by stacking platforms + stairs automatically.
+//
+// GetTerrainHeight: reads terrain column data for a single tile.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -123,7 +139,7 @@ namespace Timberbot
                                 costs.Add(new { good = goodProp.GetValue(ga)?.ToString(), amount = amtProp.GetValue(ga) });
                         }
                     }
-                    catch { }
+                    catch (System.Exception _ex) { TimberbotLog.Error("placement", _ex); }
                     if (costs.Count > 0)
                         entry["cost"] = costs;
                 }
@@ -335,7 +351,7 @@ namespace Timberbot
                     break;
                 }
             }
-            catch { }
+            catch (System.Exception _ex) { TimberbotLog.Error("placement", _ex); }
 
             // collect path and power tile positions for placement scoring
             var pathTiles = new HashSet<long>();
@@ -367,7 +383,7 @@ namespace Timberbot
             // PERF: create ONE preview, reuse with Reposition for each candidate
             var placeableSpec = buildingSpec.GetSpec<PlaceableBlockObjectSpec>();
             Preview cachedPreview = null;
-            try { if (placeableSpec != null) cachedPreview = _previewFactory.Create(placeableSpec); } catch { }
+            try { if (placeableSpec != null) cachedPreview = _previewFactory.Create(placeableSpec); } catch (System.Exception _ex) { TimberbotLog.Error("placement", _ex); }
             try
             {
 
@@ -491,7 +507,7 @@ namespace Timberbot
                                     float wh = _waterMap.CeiledWaterHeight(new Vector3Int(fx, fy, tz));
                                     if (wh > 0) flooded = true;
                                 }
-                                catch { }
+                                catch (System.Exception _ex) { TimberbotLog.Error("placement", _ex); }
                             }
 
                         results.Add(new { x = tx, y = ty, z = tz,

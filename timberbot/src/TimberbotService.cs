@@ -1,3 +1,18 @@
+// TimberbotService.cs -- Core service: DI constructor, fields, lifecycle, settings.
+//
+// This is the main entry point for the Timberbot API mod. Timberborn's Bindito DI
+// system injects ~35 game services into the constructor. The service runs as a game
+// singleton: Load() starts the HTTP server, UpdateSingleton() refreshes cached state
+// every N seconds and drains queued POST requests on the Unity main thread.
+//
+// The actual API logic is split across partial class files:
+//   TimberbotService.Cache.cs      -- Double-buffered entity caching, structs, indexes
+//   TimberbotService.Collect.cs    -- All GET read methods (CollectBuildings, CollectBeavers, etc.)
+//   TimberbotService.Write.cs      -- All POST write methods (SetSpeed, PlaceBuilding, etc.)
+//   TimberbotService.Placement.cs  -- Building placement validation, path routing, terrain queries
+//   TimberbotService.Webhooks.cs   -- Push event notifications to registered URLs
+//   TimberbotService.Debug.cs      -- Reflection inspector and benchmark endpoint
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -196,10 +211,15 @@ namespace Timberbot
         public void Load()
         {
             LoadSettings();
+            var modDir = System.IO.Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),
+                "Timberborn", "Mods", "Timberbot");
+            TimberbotLog.Init(modDir);
+            TimberbotLog.Info($"v0.6.0 port={_httpPort} refresh={_refreshInterval}s debug={_debugEnabled} webhooks={_webhooksEnabled}");
             _eventBus.Register(this);
             BuildAllIndexes();
             _server = new TimberbotHttpServer(_httpPort, this, _debugEnabled);
-            Debug.Log($"[Timberbot] HTTP server started on port {_httpPort} (refresh={_refreshInterval}s, debug={_debugEnabled})");
+            TimberbotLog.Info($"HTTP server started on port {_httpPort}");
         }
 
         private void LoadSettings()

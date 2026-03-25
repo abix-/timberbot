@@ -1,3 +1,17 @@
+// TimberbotService.Write.cs -- All state-modifying API endpoints.
+//
+// POST requests that change game state: speed, workers, priorities, crops, trees,
+// stockpiles, floodgates, recipes, science, distribution, migration, work hours.
+// Also includes CollectTiles (the map/tiles endpoint) which reads live water state
+// and must run on the main thread.
+//
+// All write methods run on the Unity main thread (queued via DrainRequests).
+// They call game services directly (not cached data) and return result objects
+// that TimberbotHttpServer serializes to JSON.
+//
+// Pattern: each method takes primitive params, finds the entity, calls the game
+// service, returns {id, name, field: newValue} on success or {error} on failure.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -145,7 +159,7 @@ namespace Timberbot
                     float waterHeight = 0f;
                     float waterContamination = 0f;
                     var waterCoord = new Vector3Int(x, y, terrainHeight);
-                    try { waterHeight = _waterMap.CeiledWaterHeight(waterCoord); } catch { }
+                    try { waterHeight = _waterMap.CeiledWaterHeight(waterCoord); } catch (System.Exception _ex) { TimberbotLog.Error("write", _ex); }
                     try
                     {
                         int wIdx2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));
@@ -161,7 +175,7 @@ namespace Timberbot
                             }
                         }
                     }
-                    catch { }
+                    catch (System.Exception _ex) { TimberbotLog.Error("write", _ex); }
 
                     long key = (long)x * 100000 + y;
                     occupants.TryGetValue(key, out var occList);
@@ -196,13 +210,13 @@ namespace Timberbot
                         if (_soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight)))
                             tile["contaminated"] = true;
                     }
-                    catch { }
+                    catch (System.Exception _ex) { TimberbotLog.Error("write", _ex); }
                     try
                     {
                         if (_soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight)))
                             tile["moist"] = true;
                     }
-                    catch { }
+                    catch (System.Exception _ex) { TimberbotLog.Error("write", _ex); }
                     tiles.Add(tile);
                 }
             }
@@ -352,7 +366,7 @@ namespace Timberbot
             }
 
             RecipeSpec recipe = null;
-            try { recipe = _recipeSpecService.GetRecipe(recipeId); } catch { }
+            try { recipe = _recipeSpecService.GetRecipe(recipeId); } catch (System.Exception _ex) { TimberbotLog.Error("write", _ex); }
             if (recipe == null)
             {
                 var available = new List<string>();
@@ -809,7 +823,7 @@ namespace Timberbot
                     });
                 }
             }
-            catch { }
+            catch (System.Exception _ex) { TimberbotLog.Error("write", _ex); }
             return results;
         }
 
@@ -834,7 +848,7 @@ namespace Timberbot
                         });
                     }
                 }
-                catch { }
+                catch (System.Exception _ex) { TimberbotLog.Error("write", _ex); }
 
                 results.Add(new
                 {
