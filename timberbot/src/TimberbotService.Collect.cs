@@ -462,7 +462,7 @@ namespace Timberbot
             }
             bool fullDetail = detail == "full" || singleId.HasValue;
 
-            var jw = _jwBuildings.Reset().OpenArr();
+            var jw = _jw.Reset().OpenArr();
             foreach (var c in _buildings.Read)
             {
                 if (singleId.HasValue && c.Id != singleId.Value)
@@ -568,12 +568,12 @@ namespace Timberbot
             return jw.ToString();
         }
 
-        public object CollectTrees() => CollectNaturalResourcesJw(_jwTrees, _treeSpecies);
-        public object CollectCrops() => CollectNaturalResourcesJw(_jwCrops, _cropSpecies);
+        public object CollectTrees() => CollectNaturalResourcesJw(_jw, _treeSpecies);
+        public object CollectCrops() => CollectNaturalResourcesJw(_jw, _cropSpecies);
 
         public object CollectGatherables()
         {
-            var jw = _jwGatherables.Reset().OpenArr();
+            var jw = _jw.Reset().OpenArr();
             foreach (var c in _naturalResources.Read)
             {
                 if (c.Gatherable == null) continue;
@@ -599,7 +599,7 @@ namespace Timberbot
             }
             bool fullDetail = detail == "full" || singleId.HasValue;
 
-            var jw = _jwBeavers.Reset().OpenArr();
+            var jw = _jw.Reset().OpenArr();
             foreach (var c in _beavers.Read)
             {
                 if (singleId.HasValue && c.Id != singleId.Value)
