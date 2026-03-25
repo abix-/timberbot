@@ -1562,7 +1562,7 @@ Get the work range tiles for a building. Same green circle the player sees when 
 
 ### POST /api/path/place
 
-Route a straight-line path from point A to point B, auto-placing stairs at z-level changes. Path must be axis-aligned (x1==x2 or y1==y2).
+Route a straight-line path from point A to point B, auto-placing stairs at z-level changes. Path must be axis-aligned (x1==x2 or y1==y2). Checks science unlocks: stairs must be unlocked for any z-change, platforms must be unlocked for multi-level jumps (2+ z-levels). Skips z-changes with an error if the required building isn't unlocked.
 
 **CLI:** `python timberbot.py place_path x1:120 y1:130 x2:120 y2:145`
 

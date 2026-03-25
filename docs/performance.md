@@ -94,7 +94,7 @@ See [zero-alloc.md](zero-alloc.md) for the full allocation audit with per-field 
 | # | Issue | Effort | Details |
 |---|---|---|---|
 | ~~1~~ | ~~Webhook rate limiting~~ | -- | **FIXED** -- 200ms batching window (configurable via `webhookBatchMs`). Events accumulate, one POST per webhook per flush |
-| ~~2~~ | ~~Webhook circuit breaker~~ | -- | **FIXED** -- 5 consecutive failures disables webhook, logged via TimberbotLog |
+| ~~2~~ | ~~Webhook circuit breaker~~ | -- | **FIXED** -- 30 consecutive failures (configurable) disables webhook, logged via TimberbotLog |
 | ~~3~~ | ~~TimberbotService split~~ | -- | **FIXED** -- 8 independent classes (TimberbotService 7 DI params, TimberbotRead 10, TimberbotWrite 20, TimberbotPlacement 13, TimberbotEntityCache 5, TimberbotWebhook 5, TimberbotDebug 1) |
 | ~~4~~ | ~~RefreshCachedState error isolation~~ | -- | **Already done** -- per-entity try/catch in all 3 loops |
 | ~~5~~ | ~~NeedMgr.GetNeeds() allocation~~ | -- | **CONFIRMED zero-alloc** via 10K benchmark (0 GC0 across 760K calls) |
@@ -170,7 +170,7 @@ Total measured cost: ~0.4ms/sec (0.04% of frame budget at 60fps).
 | `new StringBuilder(256)` per webhook per flush | Medium | **FIXED** -- reuses field-level `_webhookSb` |
 | ~~`JsonConvert.SerializeObject` per event~~ | -- | **FIXED** -- TimberbotJw writes directly, zero Newtonsoft on hot path |
 | Batching (200ms window) | Good | Reduces ThreadPool items for high-frequency events |
-| Circuit breaker (5 failures) | Good | Disables dead URLs automatically |
+| Circuit breaker (30 failures, configurable) | Good | Disables dead URLs automatically |
 
 ### JsonWriter bugs and fixes
 

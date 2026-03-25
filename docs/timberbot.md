@@ -121,7 +121,7 @@ Buildings placed in water become **flooded** and completely non-functional. Beav
 
 ## Path and stair placement
 
-`place_path` routes a straight-line path (axis-aligned: x1==x2 or y1==y2). It handles everything: auto-detects terrain height, places stairs at z-level changes, builds platforms for multi-level jumps, and skips occupied tiles. One call replaces dozens of individual `place_building` calls. Returns `{placed, stairs, skipped, errors}`. `place_building` with Path/Stairs prefabs does not handle z-transitions and will silently place at wrong heights.
+`place_path` routes a straight-line path (axis-aligned: x1==x2 or y1==y2). It handles everything: auto-detects terrain height, places stairs at z-level changes, builds platforms for multi-level jumps, and skips occupied tiles. One call replaces dozens of individual `place_building` calls. Returns `{placed, stairs, skipped, errors}`. Checks science unlocks: stairs must be unlocked for any z-change, platforms for multi-level jumps. Reports errors if required buildings aren't unlocked.
 
 ## Z-level rules
 
