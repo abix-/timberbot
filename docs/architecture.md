@@ -140,7 +140,17 @@ Key differences:
 
 The Python client (`timberbot.py`) defaults to toon format for CLI output. Internal methods that parse data programmatically (e.g. `map()`) force JSON via `_post_json()` to get structured arrays.
 
-The test suite uses `Timberbot(json_mode=True)` for functional tests (structured data) and `Timberbot()` (toon) for format validation tests.
+### Test suite bots
+
+| Bot | Mode | Purpose |
+|---|---|---|
+| `self.bot` | JSON | All functional tests -- structured data for assertions |
+| `self.strict_bot` | JSON | Error tests -- raises TimberbotError |
+| `self.toon_bot` | toon | Format validation -- verifies toon output is compact |
+| `jbot` (local) | JSON | json_schema test -- validates JSON structure |
+| `tbot` (local) | toon | toon_schema test -- validates toon structure |
+
+Rule: functional tests that parse data use JSON. Tests that validate output format use toon.
 
 ## Webhooks
 

@@ -1619,7 +1619,7 @@ class TestRunner:
 
     def test_bot_toon_format(self):
         """Verify bot shows correctly in TOON beavers output."""
-        beavers = self.bot.beavers()
+        beavers = self.toon_bot.beavers()
         bots = [b for b in beavers if b.get("isBot")]
         if bots:
             bot = bots[0]
@@ -1675,36 +1675,39 @@ class TestRunner:
                        len(with_district[0]["district"]) > 0)
 
     def test_map_stacking(self):
-        """Test map shows multiple occupants at different z-levels."""
+        """Test tiles occupants format in both json and toon modes."""
         print("\n=== map stacking ===\n")
-        # find an area with stairs/platforms by looking for Platform buildings
-        platform = self.find_building("Platform") or self.find_building("Stairs")
-        if not platform:
-            self.skip("map stacking", "no platform/stairs found")
-            return
-        pb = self.bot.buildings(detail=f"id:{platform}")
-        if not pb or not isinstance(pb, list) or not pb:
-            self.skip("map stacking", "cannot get platform details")
-            return
-        px, py = pb[0].get("x", 139), pb[0].get("y", 147)
-        result = self.bot.tiles(px - 1, py - 1, px + 1, py + 1)
-        tiles = result.get("tiles", [])
-        self.check("map returns tiles", len(tiles) > 0)
-
-        # check occupants format (toon = string "Name:z/Name:z", json = array)
-        occupied = [t for t in tiles if "occupants" in t]
-        if occupied:
-            t = occupied[0]
-            occ = t["occupants"]
-            self.check("occupants is string (toon)", isinstance(occ, str),
-                       f"type={type(occ).__name__}")
-            if isinstance(occ, str):
-                self.check("occupants has name:z format", ":" in occ, f"got {occ}")
+        # find an area with buildings by using DC location
+        px, py = self.center_x, self.center_y
+        # JSON format: occupants is array of {name, z}
+        json_result = self.bot.tiles(px - 1, py - 1, px + 1, py + 1)
+        json_tiles = json_result.get("tiles", [])
+        self.check("json tiles returned", len(json_tiles) > 0)
+        json_occupied = [t for t in json_tiles if "occupants" in t]
+        if json_occupied:
+            occ = json_occupied[0]["occupants"]
+            self.check("json occupants is array", isinstance(occ, list), f"type={type(occ).__name__}")
+            if isinstance(occ, list) and occ:
+                self.check("json occupant has name", "name" in occ[0])
+                self.check("json occupant has z", "z" in occ[0])
         else:
-            self.skip("occupants format", "no occupied tiles in test area")
+            self.skip("json occupants", "no occupied tiles near DC")
 
-        # no tile should have old singular "occupant" key
-        for t in tiles:
+        # TOON format: occupants is flat string "Name:z/Name:z"
+        toon_result = self.toon_bot.tiles(px - 1, py - 1, px + 1, py + 1)
+        toon_tiles = toon_result.get("tiles", [])
+        self.check("toon tiles returned", len(toon_tiles) > 0)
+        toon_occupied = [t for t in toon_tiles if "occupants" in t]
+        if toon_occupied:
+            occ = toon_occupied[0]["occupants"]
+            self.check("toon occupants is string", isinstance(occ, str), f"type={type(occ).__name__}")
+            if isinstance(occ, str):
+                self.check("toon occupants has name:z format", ":" in occ, f"got {occ}")
+        else:
+            self.skip("toon occupants", "no occupied tiles near DC")
+
+        # no tile should have old singular "occupant" key in either format
+        for t in json_tiles + toon_tiles:
             self.check(f"tile ({t['x']},{t['y']}) no singular occupant",
                        "occupant" not in t)
 
