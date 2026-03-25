@@ -131,7 +131,7 @@ All Dictionary, List, anonymous object, LINQ, and Newtonsoft allocs eliminated f
 | ~~1~~ | ~~Webhook rate limiting~~ | -- | **FIXED** -- 200ms batching window (configurable via `webhookBatchMs`). Events accumulate, one POST per webhook per flush |
 | ~~2~~ | ~~Webhook circuit breaker~~ | -- | **FIXED** -- 5 consecutive failures disables webhook, logged via TimberbotLog |
 | 3 | TimberbotService split | 3-4 hr | 35 constructor params, 4668 lines across 7 partial files. Extract `WebhookManager`, `EntityCache`. Move DI params to only the services that need them |
-| 4 | RefreshCachedState error isolation | 1 hr | One bad entity skips the entire refresh cycle. Wrap each entity refresh in try/catch so building #50 throwing doesn't stale buildings 51-522 |
+| ~~4~~ | ~~RefreshCachedState error isolation~~ | -- | **Already done** -- per-entity try/catch in all 3 loops (buildings, natural resources, beavers). Bad entity logs error, loop continues |
 | 5 | NeedMgr.GetNeeds() allocation | 1 hr | Marked "unknown" severity. 65 calls + 2470 List.Add per refresh. May allocate new collection per call. Profile and fix or document as acceptable |
 
 ## Optimization history
