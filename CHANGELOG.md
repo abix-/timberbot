@@ -6,6 +6,11 @@ All notable changes to Timberbot are documented here. Links point to the commit 
 
 ## [Unreleased]
 
+### Breaking
+- **Error format changed**: `error` field is now `"code: detail"` (e.g. `"not_found"`, `"invalid_type: not a floodgate"`). Previously was prose like `"building not found"`. Parse prefix before `:` for the code.
+- **`/api/natural_resources` removed**: use `/api/trees` and `/api/crops` instead
+- **List endpoints return paginated wrapper**: `{total, offset, limit, items:[...]}` instead of flat array. Use `limit=0` for old flat array behavior.
+
 ### Architecture
 - Extract 8 classes from god object ([`8e0c841`][8e0c841], [`63655ec`][63655ec], [`6caf19c`][6caf19c], [`558b156`][558b156], [`55e7501`][55e7501], [`67904d6`][67904d6])
 - TimberbotJw: fluent zero-alloc JSON writer ([`329d3ac`][329d3ac])
@@ -77,6 +82,10 @@ All notable changes to Timberbot are documented here. Links point to the commit 
 ## [v0.6.0] (2026-03-24)
 
 Performance overhaul. Double-buffered caching, background GET serving, zero main-thread cost for reads.
+
+### Breaking
+- **`buildings` and `beavers` default to compact output**: use `detail:full` to get all fields (previously returned everything by default)
+- **`watch` command renamed to `top`**
 
 ### Architecture
 - Event-driven entity indexes via EventBus ([`22e1ef4`][22e1ef4])
