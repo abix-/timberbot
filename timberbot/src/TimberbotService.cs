@@ -131,6 +131,7 @@ namespace Timberbot
         private bool _debugEnabled = false;       // enable /api/debug endpoint (default: off)
         private int _httpPort = 8085;             // HTTP server port
         private bool _webhooksEnabled = true;     // enable webhook push notifications (default: on)
+        private float _webhookBatchSeconds = 0.2f; // webhook batching window (default: 200ms, 0 = immediate)
 
         public TimberbotService(
             IGoodService goodService,
@@ -215,7 +216,7 @@ namespace Timberbot
                 System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),
                 "Timberborn", "Mods", "Timberbot");
             TimberbotLog.Init(modDir);
-            TimberbotLog.Info($"v0.6.0 port={_httpPort} refresh={_refreshInterval}s debug={_debugEnabled} webhooks={_webhooksEnabled}");
+            TimberbotLog.Info($"v0.6.0 port={_httpPort} refresh={_refreshInterval}s debug={_debugEnabled} webhooks={_webhooksEnabled} batchMs={_webhookBatchSeconds * 1000:F0}");
             _eventBus.Register(this);
             BuildAllIndexes();
             _server = new TimberbotHttpServer(_httpPort, this, _debugEnabled);
@@ -240,6 +241,11 @@ namespace Timberbot
                     if (_httpPort <= 0) _httpPort = 8085;
                     if (json["webhooksEnabled"] != null)
                         _webhooksEnabled = json.Value<bool>("webhooksEnabled");
+                    if (json["webhookBatchMs"] != null)
+                    {
+                        int batchMs = json.Value<int>("webhookBatchMs");
+                        _webhookBatchSeconds = batchMs >= 0 ? batchMs / 1000f : 0.2f;
+                    }
                 }
             }
             catch (System.Exception ex)
@@ -267,6 +273,7 @@ namespace Timberbot
                 RefreshCachedState();
             }
             _server?.DrainRequests();
+            FlushWebhooks(now);
         }
     }
 }

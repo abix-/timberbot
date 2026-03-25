@@ -103,18 +103,19 @@ Previously fixed: Priority.ToString (static lookup), nutrients dict (persistent 
 
 All Dictionary, List, anonymous object, LINQ, and Newtonsoft allocs eliminated from request paths.
 
-### Webhook allocations (per event fire)
+### Webhook allocations
 
-68 event handlers registered on EventBus. `PushEvent()` early-exits if `_webhooks.Count == 0` -- zero allocations with no subscribers.
+68 event handlers registered on EventBus. `PushEvent()` early-exits if `_webhooks.Count == 0` -- zero allocations with no subscribers. Events batch into `_pendingEvents` list, flushed every `webhookBatchMs` (default 200ms).
 
-| Source | Allocs/event | Notes |
+| Source | Allocs | Notes |
 |---|---|---|
-| `JsonConvert.SerializeObject` | 1 string (~100-200 bytes) | only if webhooks registered |
-| `new StringContent` inside lambda | 1 per webhook | actual HTTP payload |
-| Lambda closure | 1 per webhook (~30 bytes) | ThreadPool work item |
-| `ThreadPool.QueueUserWorkItem` | 1 per webhook | fire-and-forget |
+| `JsonConvert.SerializeObject` per event | 1 string (~100-200 bytes) | on main thread, only if webhooks registered |
+| `_pendingEvents.Add` tuple | 1 per event | main thread list append |
+| `StringBuilder` per flush per webhook | 1 per webhook per batch | builds JSON array payload |
+| `new StringContent` per flush per webhook | 1 per webhook per batch | HTTP payload |
+| `ThreadPool.QueueUserWorkItem` per flush | 1 per webhook per batch | fire-and-forget |
 
-**High-frequency event risk:** `block.set`, `population.changed`, `wind.changed` can fire hundreds/sec. With 0 webhooks: zero allocations. With webhooks: each matched event allocates payload + serialization + StringContent (expected, unavoidable).
+**Batching mitigates high-frequency events:** `block.set` (hundreds/sec) accumulates in `_pendingEvents` but only produces ONE ThreadPool item per webhook per 200ms flush. Circuit breaker disables dead URLs after 5 failures.
 
 ## Remaining bottlenecks
 
@@ -127,8 +128,8 @@ All Dictionary, List, anonymous object, LINQ, and Newtonsoft allocs eliminated f
 
 | # | Issue | Effort | Details |
 |---|---|---|---|
-| 1 | Webhook rate limiting | 2 hr | **Critical.** ThreadPool exhaustion if user subscribes to all 68 events. `block.set` fires hundreds/sec late-game. Batch per 200ms window, coalesce events, single POST per batch |
-| 2 | Webhook circuit breaker | 30 min | Dead URL burns 5s ThreadPool thread per event. After 5 failures, disable webhook + log |
+| ~~1~~ | ~~Webhook rate limiting~~ | -- | **FIXED** -- 200ms batching window (configurable via `webhookBatchMs`). Events accumulate, one POST per webhook per flush |
+| ~~2~~ | ~~Webhook circuit breaker~~ | -- | **FIXED** -- 5 consecutive failures disables webhook, logged via TimberbotLog |
 | 3 | TimberbotService split | 3-4 hr | 35 constructor params, 4668 lines across 7 partial files. Extract `WebhookManager`, `EntityCache`. Move DI params to only the services that need them |
 | 4 | RefreshCachedState error isolation | 1 hr | One bad entity skips the entire refresh cycle. Wrap each entity refresh in try/catch so building #50 throwing doesn't stale buildings 51-522 |
 | 5 | NeedMgr.GetNeeds() allocation | 1 hr | Marked "unknown" severity. 65 calls + 2470 List.Add per refresh. May allocate new collection per call. Profile and fix or document as acceptable |

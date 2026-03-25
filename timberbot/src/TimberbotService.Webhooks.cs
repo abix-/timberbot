@@ -1,16 +1,13 @@
-// TimberbotService.Webhooks.cs -- Push event notifications to external URLs.
+// TimberbotService.Webhooks.cs -- Batched push event notifications to external URLs.
 //
 // Register a webhook URL via POST /api/webhooks, optionally filtering by event name.
-// When a game event fires (drought, beaver death, building placed, etc.), PushEvent()
-// sends a JSON POST to all matching subscribers on a background thread.
+// Events accumulate in _pendingEvents and flush every webhookBatchMs (default 200ms)
+// from UpdateSingleton. Each flush sends ONE batched JSON array POST per webhook.
 //
-// This is NOT the same as Timberborn's vanilla HTTP Adapter system (port 8080), which
-// sends binary on/off signals from in-game sensor buildings. Our webhooks push 68
-// rich game events with data payloads, no in-game buildings required.
+// Circuit breaker: 5 consecutive failures disables the webhook (visible via GET /api/webhooks).
 //
-// All [OnEvent] handlers are one-liners that call PushEvent(name, data).
-// Fire-and-forget: no retries, no persistence, 5s timeout. Subscribers filter
-// by event name (null = all events).
+// All [OnEvent] handlers call PushEvent(name, data) which just serializes and appends.
+// Actual HTTP delivery happens in FlushWebhooks() on background ThreadPool threads.
 
 using System;
 using System.Collections.Generic;
@@ -79,11 +76,23 @@ namespace Timberbot
 {
     public partial class TimberbotService
     {
-        // webhooks: fire-and-forget push to registered URLs
-        private class WebhookRegistration { public string Id; public string Url; public System.Collections.Generic.HashSet<string> Events; }
+        // webhooks: batched push to registered URLs with circuit breaker
+        private class WebhookRegistration
+        {
+            public string Id;
+            public string Url;
+            public System.Collections.Generic.HashSet<string> Events;
+            public int ConsecutiveFailures;
+            public bool Disabled;
+        }
         private readonly List<WebhookRegistration> _webhooks = new List<WebhookRegistration>();
         private static readonly System.Net.Http.HttpClient _webhookClient = new System.Net.Http.HttpClient { Timeout = System.TimeSpan.FromSeconds(5) };
         private int _webhookIdCounter = 0;
+
+        // batching: accumulate events, flush periodically from UpdateSingleton
+        private readonly List<(string name, string payload)> _pendingEvents = new List<(string, string)>();
+        private float _lastWebhookFlush = 0f;
+        private const int CircuitBreakerThreshold = 5;
 
         public object RegisterWebhook(string url, List<string> events)
         {
@@ -104,10 +113,11 @@ namespace Timberbot
         {
             var result = new List<object>();
             foreach (var w in _webhooks)
-                result.Add(new { w.Id, w.Url, events = w.Events != null ? (object)new List<string>(w.Events) : "all" });
+                result.Add(new { w.Id, w.Url, events = w.Events != null ? (object)new List<string>(w.Events) : "all", w.Disabled, failures = w.ConsecutiveFailures });
             return result;
         }
 
+        // accumulate event into pending batch (called from main thread EventBus handlers)
         private void PushEvent(string eventName, object data)
         {
             if (_webhooks.Count == 0) return;
@@ -118,17 +128,60 @@ namespace Timberbot
                 timestamp = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 data
             });
+            _pendingEvents.Add((eventName, payload));
+        }
+
+        // flush batched events to all matching webhooks (called from UpdateSingleton on main thread)
+        private void FlushWebhooks(float now)
+        {
+            if (_pendingEvents.Count == 0) return;
+            if (_webhookBatchSeconds > 0 && now - _lastWebhookFlush < _webhookBatchSeconds) return;
+            _lastWebhookFlush = now;
+
             for (int i = 0; i < _webhooks.Count; i++)
             {
                 var wh = _webhooks[i];
-                if (wh.Events != null && !wh.Events.Contains(eventName)) continue;
+                if (wh.Disabled) continue;
+
+                // build batched payload: JSON array of matching events
+                var sb = new System.Text.StringBuilder(256);
+                sb.Append('[');
+                int count = 0;
+                for (int j = 0; j < _pendingEvents.Count; j++)
+                {
+                    var ev = _pendingEvents[j];
+                    if (wh.Events != null && !wh.Events.Contains(ev.name)) continue;
+                    if (count > 0) sb.Append(',');
+                    sb.Append(ev.payload);
+                    count++;
+                }
+                sb.Append(']');
+                if (count == 0) continue;
+
+                var batchPayload = sb.ToString();
                 var url = wh.Url;
+                var whRef = wh; // capture for lambda
                 System.Threading.ThreadPool.QueueUserWorkItem(_ =>
                 {
-                    try { _webhookClient.PostAsync(url, new System.Net.Http.StringContent(payload, System.Text.Encoding.UTF8, "application/json")).Wait(); }
-                    catch (System.Exception _ex) { TimberbotLog.Error("webhook.post", _ex); }
+                    try
+                    {
+                        _webhookClient.PostAsync(url, new System.Net.Http.StringContent(batchPayload, System.Text.Encoding.UTF8, "application/json")).Wait();
+                        whRef.ConsecutiveFailures = 0;
+                    }
+                    catch (System.Exception _ex)
+                    {
+                        whRef.ConsecutiveFailures++;
+                        if (whRef.ConsecutiveFailures >= CircuitBreakerThreshold)
+                        {
+                            whRef.Disabled = true;
+                            TimberbotLog.Error($"webhook {whRef.Id} disabled after {CircuitBreakerThreshold} failures: {url}", _ex);
+                        }
+                        else
+                            TimberbotLog.Error("webhook.post", _ex);
+                    }
                 });
             }
+            _pendingEvents.Clear();
         }
 
         // ================================================================

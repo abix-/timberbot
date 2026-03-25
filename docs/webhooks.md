@@ -4,10 +4,15 @@ Push notifications for game events. Instead of polling, the mod sends HTTP POST 
 
 ## Setup
 
-1. Enable in `settings.json` (enabled by default):
+1. Configure in `settings.json` (enabled by default):
 ```json
-{ "webhooksEnabled": true }
+{
+  "webhooksEnabled": true,
+  "webhookBatchMs": 200
+}
 ```
+
+`webhookBatchMs` controls the batching window in milliseconds. Events accumulate and flush in a single POST per webhook. Default 200ms. Set to 0 for immediate dispatch (no batching).
 
 2. Register a webhook:
 ```bash
@@ -22,15 +27,15 @@ POST /api/webhooks
 
 Omit `events` to receive all events.
 
-3. Your server receives POST requests:
+3. Your server receives batched POST requests (JSON array):
 ```json
-{
-  "event": "drought.start",
-  "day": 45,
-  "timestamp": 1711300000,
-  "data": { "duration": 8 }
-}
+[
+  {"event": "drought.start", "day": 45, "timestamp": 1711300000, "data": {"duration": 8}},
+  {"event": "beaver.died", "day": 45, "timestamp": 1711300000, "data": null}
+]
 ```
+
+Each POST contains an array of events that accumulated during the batch window. Single events arrive as a 1-element array.
 
 ## Management
 
@@ -195,10 +200,16 @@ Webhooks are stored in memory -- they reset on game restart. Re-register on star
 - Automation building UI pins (3)
 - Map editor events (4)
 
+## Circuit breaker
+
+After 5 consecutive delivery failures, a webhook is automatically disabled. Check status via `GET /api/webhooks` -- disabled webhooks show `"disabled": true` and `"failures": 5`. Re-register to reset.
+
 ## Architecture
 
 - Events fire on the Unity main thread via Timberborn's `EventBus`
-- `PushEvent()` dispatches HTTP POST on background thread (`ThreadPool.QueueUserWorkItem`)
-- Fire-and-forget -- no retries, no persistence
+- `PushEvent()` serializes and appends to a pending list (no ThreadPool dispatch)
+- `FlushWebhooks()` runs every `webhookBatchMs` from `UpdateSingleton` on main thread
+- Each flush sends ONE batched POST per webhook on background `ThreadPool`
 - Static `HttpClient` with 5s timeout
+- Circuit breaker: 5 consecutive failures disables the webhook
 - Subscribers filter by event name (null = all events)

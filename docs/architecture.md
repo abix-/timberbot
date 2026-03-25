@@ -119,9 +119,11 @@ Pre-serialized strings detected in `Respond()`: `data is string s ? s : JsonConv
 
 ## Webhooks
 
-68 event handlers registered on Timberborn's `EventBus`. `PushEvent()` early-exits if `_webhooks.Count == 0` -- zero allocations with no subscribers. With subscribers, each matched event fires JSON payload via `ThreadPool.QueueUserWorkItem` (fire-and-forget).
+68 event handlers registered on Timberborn's `EventBus`. Events accumulate in `_pendingEvents` list on the main thread. `FlushWebhooks()` runs every `webhookBatchMs` (default 200ms) from `UpdateSingleton`, sending ONE batched JSON array POST per webhook via `ThreadPool.QueueUserWorkItem`.
 
-**Known risk:** No rate limiting. High-frequency events (`block.set`, `population.changed`) can fire hundreds/sec, potentially exhausting the ThreadPool. See performance.md backlog #1.
+- **Batching:** Configurable via `webhookBatchMs` in settings.json (0 = immediate, default 200ms)
+- **Circuit breaker:** 5 consecutive failures disables the webhook, logged via `TimberbotLog`
+- **Zero allocations with no subscribers:** `PushEvent()` early-exits if `_webhooks.Count == 0`
 
 ## Settings
 
@@ -132,9 +134,12 @@ Pre-serialized strings detected in `Respond()`: `data is string s ? s : JsonConv
   "refreshIntervalSeconds": 1.0,
   "debugEndpointEnabled": false,
   "httpPort": 8085,
-  "webhooksEnabled": true
+  "webhooksEnabled": true,
+  "webhookBatchMs": 200
 }
 ```
+
+- `webhookBatchMs`: batching window in milliseconds (default 200, 0 = immediate dispatch)
 
 Loaded once on game load. Missing file or fields use defaults.
 
