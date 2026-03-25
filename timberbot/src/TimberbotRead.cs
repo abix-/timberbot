@@ -898,7 +898,7 @@ namespace Timberbot
             var raw = _speedManager.CurrentSpeed;
             int level = System.Array.IndexOf(SpeedScale, raw);
             if (level < 0) level = 0;  // unknown internal speed -> treat as paused
-            return new { speed = level };
+            return _cache.Jw.Reset().OpenObj().Prop("speed", level).CloseObj().ToString();
         }
 
         public object CollectWorkHours()
@@ -984,7 +984,7 @@ namespace Timberbot
                 jw.CloseArr().CloseObj();
                 return jw.ToString();
             }
-            catch (System.Exception ex) { TimberbotLog.Error("wellbeing", ex); return new { error = ex.Message }; }
+            catch (System.Exception ex) { TimberbotLog.Error("wellbeing", ex); return _cache.Jw.Reset().OpenObj().Prop("error", ex.Message).CloseObj().ToString(); }
         }
 
         // Game event history (droughts, deaths, etc)
@@ -1042,7 +1042,7 @@ namespace Timberbot
             var stride = _mapIndexService.VerticalStride;
 
             if (x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0)
-                return new { mapSize = new { x = size.x, y = size.y, z = size.z } };
+                return _cache.Jw.Reset().OpenObj().Obj("mapSize").Prop("x", size.x).Prop("y", size.y).Prop("z", size.z).CloseObj().CloseObj().ToString();
 
             x1 = Mathf.Clamp(x1, 0, size.x - 1);
             y1 = Mathf.Clamp(y1, 0, size.y - 1);

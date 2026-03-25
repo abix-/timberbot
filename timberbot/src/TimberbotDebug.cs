@@ -336,7 +336,7 @@ namespace Timberbot
                 trees = Service.Cache.NaturalResources.Read.Count
             });
 
-            return new { benchmarks = results };
+            return Service.Cache.Jw.Reset().OpenObj().Prop("benchmarks", results).CloseObj().ToString();
         }
 
         // ================================================================
@@ -699,7 +699,7 @@ namespace Timberbot
                     Add("wonderActive", c.WonderActive, c.Wonder.IsActive);
                 Add("name", c.Name, c.Entity != null ? TimberbotEntityCache.CleanName(c.Entity.GameObject.name) : "?");
 
-                return new { id, type = "building", name = c.Name, fields, mismatches, total };
+                return Service.Cache.Jw.Reset().OpenObj().Prop("id", id).Prop("type", "building").Prop("name", c.Name).Prop("fields", fields).Prop("mismatches", mismatches).Prop("total", total).CloseObj().ToString();
             }
 
             // check beavers
@@ -723,7 +723,7 @@ namespace Timberbot
                 var wp = c.Worker?.Workplace;
                 Add("workplace", c.Workplace ?? "", wp != null ? TimberbotEntityCache.CleanName(wp.GameObject.name) : "");
 
-                return new { id, type = "beaver", name = c.Name, fields, mismatches, total };
+                return Service.Cache.Jw.Reset().OpenObj().Prop("id", id).Prop("type", "beaver").Prop("name", c.Name).Prop("fields", fields).Prop("mismatches", mismatches).Prop("total", total).CloseObj().ToString();
             }
 
             // check natural resources
@@ -749,10 +749,10 @@ namespace Timberbot
                 }
                 Add("name", c.Name, c.Name);
 
-                return new { id, type = "naturalResource", name = c.Name, fields, mismatches, total };
+                return Service.Cache.Jw.Reset().OpenObj().Prop("id", id).Prop("type", "naturalResource").Prop("name", c.Name).Prop("fields", fields).Prop("mismatches", mismatches).Prop("total", total).CloseObj().ToString();
             }
 
-            return new { error = "entity not found in cache", id };
+            return Service.Cache.Jw.Reset().OpenObj().Prop("error", "entity not found in cache").Prop("id", id).CloseObj().ToString();
         }
 
         // Validate every entity in the cache against live game state.

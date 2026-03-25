@@ -403,7 +403,7 @@ namespace Timberbot
                         return _service.WebhookMgr.UnregisterWebhook(
                             body?.Value<string>("id") ?? "");
                     case "/api/debug":
-                        if (!_debugEnabled) return new { error = "debug endpoint disabled in settings.json" };
+                        if (!_debugEnabled) return "{\"error\":\"debug endpoint disabled in settings.json\"}";
                         var debugArgs = new System.Collections.Generic.Dictionary<string, string>();
                         if (body != null)
                             foreach (var prop in body.Properties())
@@ -411,7 +411,7 @@ namespace Timberbot
                         return _service.DebugTool.DebugInspect(
                             body?.Value<string>("target") ?? "help", debugArgs);
                     case "/api/benchmark":
-                        if (!_debugEnabled) return new { error = "benchmark endpoint disabled in settings.json" };
+                        if (!_debugEnabled) return "{\"error\":\"benchmark endpoint disabled in settings.json\"}";
                         return _service.DebugTool.RunBenchmark(
                             body?.Value<int>("iterations") ?? 100);
                     case "/api/path/place":

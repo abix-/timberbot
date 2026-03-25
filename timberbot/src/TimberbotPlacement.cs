@@ -33,6 +33,7 @@ namespace Timberbot
 {
     public class TimberbotPlacement
     {
+        private readonly TimberbotJw _jw = new TimberbotJw(1024);
         private readonly ITerrainService _terrainService;
         private readonly IThreadSafeWaterMap _waterMap;
         private readonly MapIndexService _mapIndexService;
@@ -183,11 +184,11 @@ namespace Timberbot
         {
             var ec = _cache.FindEntity(buildingId);
             if (ec == null)
-                return new { error = "entity not found", id = buildingId };
+                return _jw.Reset().OpenObj().Prop("error", "entity not found").Prop("id", buildingId).CloseObj().ToString();
 
             var name = TimberbotEntityCache.CleanName(ec.GameObject.name);
             _entityService.Delete(ec);
-            return new { id = buildingId, name, demolished = true };
+            return _jw.Reset().OpenObj().Prop("id", buildingId).Prop("name", name).Prop("demolished", true).CloseObj().ToString();
         }
 
         // Route a straight-line path from (x1,y1) to (x2,y2), auto-placing stairs at z-level changes.
@@ -201,7 +202,19 @@ namespace Timberbot
         public object RoutePath(int x1, int y1, int x2, int y2)
         {
             if (x1 != x2 && y1 != y2)
-                return new { error = "path must be a straight line (x1==x2 or y1==y2)" };
+                return _jw.Reset().OpenObj().Prop("error", "path must be a straight line (x1==x2 or y1==y2)").CloseObj().ToString();
+
+            // Check if stairs and platforms are unlocked before we start.
+            // Stairs are needed for any z-level change. Platforms are needed for
+            // multi-level jumps (2+ z-levels) where we stack platforms under stairs.
+            string stairsPrefab = "Stairs" + _factionSuffix;
+            string platformPrefab = "Platform" + _factionSuffix;
+            var stairsSpec = _buildingService.GetBuildingTemplate(stairsPrefab);
+            var platformSpec = _buildingService.GetBuildingTemplate(platformPrefab);
+            var stairsBs = stairsSpec?.GetSpec<BuildingSpec>();
+            var platformBs = platformSpec?.GetSpec<BuildingSpec>();
+            bool stairsUnlocked = stairsBs == null || stairsBs.ScienceCost <= 0 || _buildingUnlockingService.Unlocked(stairsBs);
+            bool platformUnlocked = platformBs == null || platformBs.ScienceCost <= 0 || _buildingUnlockingService.Unlocked(platformBs);
 
             // step direction: +1, -1, or 0 for each axis
             int dx = x2 > x1 ? 1 : x2 < x1 ? -1 : 0;
@@ -230,14 +243,33 @@ namespace Timberbot
 
                 if (zDiff != 0)
                 {
+                    int levels = System.Math.Abs(zDiff);
+
+                    // Check unlock requirements before attempting z-level change.
+                    // Stairs needed for any z change. Platforms needed for 2+ levels.
+                    if (!stairsUnlocked)
+                    {
+                        errors.Add($"z-change at ({cx},{cy}): stairs not unlocked (need {stairsPrefab})");
+                        prevZ = tz;
+                        if (cx == x2 && cy == y2) break;
+                        cx += dx; cy += dy;
+                        continue;
+                    }
+                    if (levels > 1 && !platformUnlocked)
+                    {
+                        errors.Add($"z-change at ({cx},{cy}): {levels}-level jump requires platforms (need {platformPrefab})");
+                        prevZ = tz;
+                        if (cx == x2 && cy == y2) break;
+                        cx += dx; cy += dy;
+                        continue;
+                    }
+
                     // Multi-level ramp building:
-                    // levels = how many z-levels to climb/descend
                     // Each ramp tile gets (step) platforms stacked underneath + 1 stair on top.
                     // Example: 3-level climb needs 3 tiles, each progressively taller:
                     //   tile 0: 0 platforms + stair (ground level)
                     //   tile 1: 1 platform + stair (z+1)
                     //   tile 2: 2 platforms + stair (z+2)
-                    int levels = System.Math.Abs(zDiff);
                     int baseZ = System.Math.Min(prevZ, tz);
                     bool goingUp = zDiff > 0;
                     // going down = reverse the stair orientation (rotate 180 degrees)
@@ -381,10 +413,10 @@ namespace Timberbot
         {
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
             if (buildingSpec == null)
-                return new { error = "unknown prefab", prefab = prefabName };
+                return _jw.Reset().OpenObj().Prop("error", "unknown prefab").Prop("prefab", prefabName).CloseObj().ToString();
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
             if (blockObjectSpec == null)
-                return new { error = "no block object spec", prefab = prefabName };
+                return _jw.Reset().OpenObj().Prop("error", "no block object spec").Prop("prefab", prefabName).CloseObj().ToString();
 
             var size = blockObjectSpec.Size;
 
@@ -677,11 +709,11 @@ namespace Timberbot
 
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
             if (buildingSpec == null)
-                return new { error = "unknown prefab", prefab = prefabName };
+                return _jw.Reset().OpenObj().Prop("error", "unknown prefab").Prop("prefab", prefabName).CloseObj().ToString();
 
             var blockObjectSpec = buildingSpec.GetSpec<BlockObjectSpec>();
             if (blockObjectSpec == null)
-                return new { error = "no block object spec", prefab = prefabName };
+                return _jw.Reset().OpenObj().Prop("error", "no block object spec").Prop("prefab", prefabName).CloseObj().ToString();
 
             // check building is unlocked
             var bs = buildingSpec.GetSpec<BuildingSpec>();
@@ -760,7 +792,7 @@ namespace Timberbot
                 };
             }
 
-            return new { id = placedId, name = placedName, x, y, z, orientation = OrientNames[orientation] };
+            return _jw.Reset().OpenObj().Prop("id", placedId).Prop("name", placedName).Prop("x", x).Prop("y", y).Prop("z", z).Prop("orientation", OrientNames[orientation]).CloseObj().ToString();
         }
 
         private bool ValidatePlacement(BuildingSpec buildingSpec, BlockObjectSpec blockObjectSpec, int x, int y, int z, int orientation)

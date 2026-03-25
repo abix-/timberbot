@@ -98,6 +98,9 @@ namespace Timberbot
         public TimberbotJw Prop(string name, bool v) => Key(name).Bool(v);
         public TimberbotJw Prop(string name, string v) => Key(name).Str(v);
         public TimberbotJw Prop(string name, float v, string fmt = "F2") => Key(name).Float(v, fmt);
+        // Fallback for complex types (List, Dict, object). Serializes via Newtonsoft.
+        // Only used for POST responses (not hot path). Keeps all returns going through JwWriter.
+        public TimberbotJw Prop(string name, object v) => RawProp(name, Newtonsoft.Json.JsonConvert.SerializeObject(v));
 
         // --- Key+Structure shortcuts ---
         // Before: jw.Key("population").OpenObj()...CloseObj()
