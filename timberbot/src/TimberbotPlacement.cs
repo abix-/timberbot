@@ -26,7 +26,6 @@ using Timberborn.EntitySystem;
 using Timberborn.GameDistricts;
 using Timberborn.ScienceSystem;
 using Timberborn.BuildingsNavigation;
-using Timberborn.FactionSystem;
 using Timberborn.GameFactionSystem;
 using UnityEngine;
 
