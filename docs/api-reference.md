@@ -621,7 +621,7 @@ Each building includes all applicable fields (absent fields mean the component d
 | currentRecipe | string | Active recipe ID (empty if none) |
 | needsNutrients | bool | Breeding pod needs food delivered |
 | nutrients | int | Breeding pod nutrient count |
-| entranceX, entranceY, entranceZ | int | Doorstep coordinates |
+| entranceX, entranceY, entranceZ | int | Entrance block on the building |
 
 ```json
 [

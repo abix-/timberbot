@@ -222,7 +222,7 @@ This "building-first" approach is critical for **water pumps** and other buildin
 
 ## Building placement
 
-`find_placement` validates terrain height, occupancy, orientation, path connectivity, and flooding. Results include `entranceX`/`entranceY` (the doorstep tile where a path must connect). Water buildings sort by `waterDepth` first (deepest water preferred). Others sort by: non-flooded > reachable > pathAccess > nearPower. Boolean fields are 0/1 integers. A result with `reachable: 1` is connected to the district center via paths.
+`find_placement` validates terrain height, occupancy, orientation, path connectivity, and flooding. Results include `entranceX`/`entranceY` (the tile in front of the entrance where a path must be placed). Water buildings sort by `waterDepth` first (deepest water preferred). Others sort by: non-flooded > reachable > pathAccess > nearPower. Boolean fields are 0/1 integers. A result with `reachable: 1` is connected to the district center via paths.
 
 ## Path and stair placement
 
