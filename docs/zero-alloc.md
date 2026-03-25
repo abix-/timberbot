@@ -130,10 +130,13 @@ Measured via `/api/benchmark` with 10,000 iterations to ensure GC0 detection sen
 |---|---|---|---|---|
 | `NeedMgr.GetNeeds.foreach` | **0** | 0.110 | 760,000 | **Zero-alloc.** Returns cached collection |
 | `NeedMgr.FullNeedLoop` (GetNeeds + GetNeed + GetNeedWellbeing) | **0** | 0.319 | 760,000 | **All three calls zero-alloc** |
-| `BreedingPod.Nutrients` foreach | **0** | 6.001 | 60,000 | Zero-alloc. IEnumerable but no boxing |
-| `Inventories.AllInventories+Stock` for-loop | **0** | 580.583 | 5,460,000 | Zero-alloc. 0.058ms per refresh cycle |
+| `BreedingPod.Nutrients` foreach | **0** | 0.006 | 60,000 | Zero-alloc. IEnumerable but no boxing |
+| `Inventories.foreach` (all buildings) | **0** | 0.056 | 522,000 | Zero-alloc |
+| `Inventories.forLoop` (all buildings) | **0** | 0.045 | 522,000 | Zero-alloc. 24% faster than foreach |
+| `Inventories.AllInventories.only` | **0** | 0.020 | 522,000 | Just accessing inventories, no stock |
+| `Inventories.FullRefreshSim` (forLoop + dict) | **0** | 0.058 | 522,000 | Full production loop with dict insert |
 
-All hot path game API calls confirmed zero-alloc across 760K+ invocations.
+All hot path game API calls confirmed zero-alloc across 760K+ invocations. Inventory processing costs 0.058ms per refresh cycle for 522 buildings.
 
 ## Remaining micro-optimization
 

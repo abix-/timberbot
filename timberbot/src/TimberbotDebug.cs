@@ -62,11 +62,9 @@ namespace Timberbot
                     test = "BreedingPod.Nutrients",
                     count = breedingPods.Count,
                     iterations,
-                    foreachMs,
-                    forLoopMs = -1.0,
-                    foreachGC0 = gcForeach,
-                    forLoopGC0 = -1L,
-                    speedup = -1.0,
+                    totalMs = foreachMs,
+                    perCallMs = foreachMs / iterations,
+                    gc0 = gcForeach,
                     note = "IEnumerable -- not indexable, foreach is the only option"
                 });
             }
@@ -113,13 +111,21 @@ namespace Timberbot
 
                 results.Add(new
                 {
-                    test = "Inventories.AllInventories+Stock",
+                    test = "Inventories.foreach",
                     count = withInv.Count,
                     iterations,
-                    foreachMs,
-                    forLoopMs = forMs,
-                    foreachGC0 = gcForeach,
-                    forLoopGC0 = gcFor,
+                    totalMs = foreachMs,
+                    perCallMs = foreachMs / iterations,
+                    gc0 = gcForeach
+                });
+                results.Add(new
+                {
+                    test = "Inventories.forLoop",
+                    count = withInv.Count,
+                    iterations,
+                    totalMs = forMs,
+                    perCallMs = forMs / iterations,
+                    gc0 = gcFor,
                     speedup = foreachMs > 0 ? foreachMs / forMs : 0
                 });
 
