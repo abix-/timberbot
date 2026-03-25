@@ -10,13 +10,18 @@
 //
 // How it works:
 //   Main thread:  for each entity, update fields in Write list -> call Swap()
-//   HTTP thread:  iterate Read list (safe, never modified during read)
+//   HTTP thread:  iterate Read list (safe, never structurally modified during read)
 //
-// Add/Remove update BOTH lists so they always have the same entity slots.
+// Structural changes (Add/Remove) are deferred via ConcurrentQueue and applied
+// during Swap(). This prevents "Collection was modified during enumeration" when
+// EventBus fires entity create/delete while the background thread is iterating.
+// Same pattern as Unity ECS Entity Command Buffers.
+//
 // The two-arg Add(writeItem, readItem) lets you put different initial values
 // in each buffer (e.g. separate Dictionary instances to avoid shared references).
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 namespace Timberbot
@@ -26,21 +31,37 @@ namespace Timberbot
         private List<T> _write = new List<T>();  // main thread writes here
         private List<T> _read = new List<T>();   // background thread reads here
 
+        // structural changes queued from EventBus, applied at Swap() time
+        private readonly ConcurrentQueue<(T write, T read)> _pendingAdds = new ConcurrentQueue<(T, T)>();
+        private readonly ConcurrentQueue<Predicate<T>> _pendingRemoves = new ConcurrentQueue<Predicate<T>>();
+
         public List<T> Read => _read;     // safe to iterate from any thread
         public List<T> Write => _write;   // only touch from main thread
         public int Count => _write.Count;
 
-        // Add to both buffers (same item or separate instances for reference types)
-        public void Add(T item) { _write.Add(item); _read.Add(item); }
-        public void Add(T writeItem, T readItem) { _write.Add(writeItem); _read.Add(readItem); }
+        // queue add -- applied at next Swap()
+        public void Add(T item) { _pendingAdds.Enqueue((item, item)); }
+        public void Add(T writeItem, T readItem) { _pendingAdds.Enqueue((writeItem, readItem)); }
 
-        // Remove matching items from both buffers
-        public void RemoveAll(Predicate<T> match) { _write.RemoveAll(match); _read.RemoveAll(match); }
+        // queue remove -- applied at next Swap()
+        public void RemoveAll(Predicate<T> match) { _pendingRemoves.Enqueue(match); }
         public void Clear() { _write.Clear(); _read.Clear(); }
 
-        // Swap: the Write list (just updated) becomes the new Read list.
-        // The old Read list (no longer being read) becomes the new Write target.
-        // This is a pointer swap -- O(1), no data copying.
-        public void Swap() { var tmp = _read; _read = _write; _write = tmp; }
+        // apply pending structural changes, then swap read/write refs.
+        // called from main thread only (RefreshCachedState).
+        public void Swap()
+        {
+            while (_pendingRemoves.TryDequeue(out var pred))
+            {
+                _write.RemoveAll(pred);
+                _read.RemoveAll(pred);
+            }
+            while (_pendingAdds.TryDequeue(out var pair))
+            {
+                _write.Add(pair.write);
+                _read.Add(pair.read);
+            }
+            var tmp = _read; _read = _write; _write = tmp;
+        }
     }
 }
