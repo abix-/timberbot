@@ -7,7 +7,19 @@ All notable changes to Timberbot are documented here. Links point to the commit 
 ## [Unreleased]
 
 ### Breaking
-- **Error format changed**: `error` field is now `"code: detail"` (e.g. `"not_found"`, `"invalid_type: not a floodgate"`). Previously was prose like `"building not found"`. Parse prefix before `:` for the code.
+- **Building endpoints moved under `/api/building/`**:
+  - `/api/floodgate` -> `/api/building/floodgate`
+  - `/api/priority` -> `/api/building/priority`
+  - `/api/workers` -> `/api/building/workers`
+  - `/api/recipe` -> `/api/building/recipe`
+  - `/api/hauling/priority` -> `/api/building/hauling`
+  - `/api/farmhouse/action` -> `/api/building/farmhouse`
+  - `/api/plantable/priority` -> `/api/building/plantable`
+- **Other endpoint renames**:
+  - `/api/path/route` -> `/api/path/place`
+  - `/api/map` (POST) -> `/api/tiles`
+  - `/api/scan` removed (use `/api/map` GET or `/api/tiles`)
+- **Error format changed**: `error` field is now `"code: detail"` (e.g. `"not_found"`, `"invalid_type: not a floodgate"`). Previously prose like `"building not found"`. Parse prefix before `:` for the code.
 - **`/api/natural_resources` removed**: use `/api/trees` and `/api/crops` instead
 - **List endpoints return paginated wrapper**: `{total, offset, limit, items:[...]}` instead of flat array. Use `limit=0` for old flat array behavior.
 
