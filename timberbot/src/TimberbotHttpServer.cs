@@ -212,13 +212,13 @@ namespace Timberbot
                     case "/api/beavers":
                         return _service.Read.CollectBeavers(format, detail);
                     case "/api/distribution":
-                        return _service.Write.CollectDistribution();
+                        return _service.Read.CollectDistribution();
                     case "/api/science":
-                        return _service.Write.CollectScience();
+                        return _service.Read.CollectScience();
                     case "/api/wellbeing":
-                        return _service.Write.CollectWellbeing();
+                        return _service.Read.CollectWellbeing();
                     case "/api/notifications":
-                        return _service.Write.CollectNotifications();
+                        return _service.Read.CollectNotifications();
                     case "/api/workhours":
                         return _service.Read.CollectWorkHours();
 
