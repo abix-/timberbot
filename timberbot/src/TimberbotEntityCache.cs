@@ -46,19 +46,35 @@ using UnityEngine;
 
 namespace Timberbot
 {
+    // The entity cache is the backbone of the mod. It holds every building, beaver, and
+    // tree in the game as cached structs with pre-resolved component references.
+    //
+    // Why cache? Timberborn entities are Unity GameObjects with components attached.
+    // Reading a component property requires GetComponent<T>() which is expensive.
+    // We resolve components ONCE when the entity is created (AddToIndexes), then
+    // read their properties every 1 second in RefreshCachedState.
+    //
+    // The double buffer (Buildings, NaturalResources, Beavers) lets the HTTP background
+    // thread read cached data without locks. See TimberbotDoubleBuffer for details.
     public class TimberbotEntityCache
     {
-        private readonly EntityRegistry _entityRegistry;
-        private readonly TreeCuttingArea _treeCuttingArea;
-        private readonly EventBus _eventBus;
+        // game services injected via constructor
+        private readonly EntityRegistry _entityRegistry;   // all entities in the game
+        private readonly TreeCuttingArea _treeCuttingArea;  // which tiles are marked for tree cutting
+        private readonly EventBus _eventBus;                // entity lifecycle events
 
         // set by TimberbotService in Load() before use
         public TimberbotWebhook WebhookMgr;
 
+        // double-buffered entity lists: main thread writes, background thread reads
         public readonly TimberbotDoubleBuffer<CachedBuilding> Buildings = new TimberbotDoubleBuffer<CachedBuilding>();
         public readonly TimberbotDoubleBuffer<CachedNaturalResource> NaturalResources = new TimberbotDoubleBuffer<CachedNaturalResource>();
         public readonly TimberbotDoubleBuffer<CachedBeaver> Beavers = new TimberbotDoubleBuffer<CachedBeaver>();
+
+        // O(1) entity lookup by Unity instance ID (for write commands that target specific entities)
         private readonly Dictionary<int, EntityComponent> _entityCache = new Dictionary<int, EntityComponent>();
+
+        // shared JSON writer instance: 300KB pre-allocated StringBuilder, reused via Reset()
         public readonly TimberbotJw Jw = new TimberbotJw(300000);
 
         public static readonly HashSet<string> TreeSpecies = new HashSet<string>
@@ -420,9 +436,9 @@ namespace Timberbot
             {
                 var ec = e.Entity;
                 if (ec.GetComponent<Building>() != null)
-                    WebhookMgr.PushEvent("building.placed", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
+                    WebhookMgr.PushEvent("building.placed", WebhookMgr.DataEntity(ec.GameObject.GetInstanceID(), CleanName(ec.GameObject.name)));
                 else if (ec.GetComponent<NeedManager>() != null)
-                    WebhookMgr.PushEvent("beaver.born", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name), isBot = ec.GetComponent<Bot>() != null });
+                    WebhookMgr.PushEvent("beaver.born", WebhookMgr.DataEntityBot(ec.GameObject.GetInstanceID(), CleanName(ec.GameObject.name), ec.GetComponent<Bot>() != null));
             }
         }
 
@@ -433,9 +449,9 @@ namespace Timberbot
             {
                 var ec = e.Entity;
                 if (ec.GetComponent<Building>() != null)
-                    WebhookMgr.PushEvent("building.demolished", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
+                    WebhookMgr.PushEvent("building.demolished", WebhookMgr.DataEntity(ec.GameObject.GetInstanceID(), CleanName(ec.GameObject.name)));
                 else if (ec.GetComponent<NeedManager>() != null)
-                    WebhookMgr.PushEvent("beaver.died", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
+                    WebhookMgr.PushEvent("beaver.died", WebhookMgr.DataEntity(ec.GameObject.GetInstanceID(), CleanName(ec.GameObject.name)));
             }
             RemoveFromIndexes(e.Entity);
         }

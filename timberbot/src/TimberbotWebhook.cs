@@ -48,6 +48,7 @@ namespace Timberbot
         // batching
         private readonly List<(string name, string payload)> _pendingEvents = new List<(string, string)>();
         private readonly System.Text.StringBuilder _webhookSb = new System.Text.StringBuilder(1024);
+        private readonly TimberbotJw _jw = new TimberbotJw(512);
         private float _lastWebhookFlush = 0f;
 
         public int Count => _webhooks.Count;
@@ -93,16 +94,29 @@ namespace Timberbot
         }
 
         // accumulate event into pending batch (called from main thread EventBus handlers)
-        public void PushEvent(string eventName, object data)
+        // no data -- most events
+        public void PushEvent(string eventName)
         {
             if (_webhooks.Count == 0) return;
-            var payload = Newtonsoft.Json.JsonConvert.SerializeObject(new
-            {
-                @event = eventName,
-                day = _dayNightCycle.DayNumber,
-                timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                data
-            });
+            var payload = _jw.Reset().OpenObj()
+                .Key("event").Str(eventName)
+                .Key("day").Int(_dayNightCycle.DayNumber)
+                .Key("timestamp").Long(DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+                .Key("data").Null()
+                .CloseObj().ToString();
+            _pendingEvents.Add((eventName, payload));
+        }
+
+        // with pre-built data JSON string
+        public void PushEvent(string eventName, string dataJson)
+        {
+            if (_webhooks.Count == 0) return;
+            var payload = _jw.Reset().OpenObj()
+                .Key("event").Str(eventName)
+                .Key("day").Int(_dayNightCycle.DayNumber)
+                .Key("timestamp").Long(DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+                .Key("data").Raw(dataJson)
+                .CloseObj().ToString();
             _pendingEvents.Add((eventName, payload));
         }
 
@@ -160,46 +174,55 @@ namespace Timberbot
             _pendingEvents.Clear();
         }
 
-        // helper used by entity lifecycle handlers
+        // helpers for building data JSON without anonymous objects
         private static string CleanName(string name) =>
             name.Replace("(Clone)", "").Replace(".IronTeeth", "").Replace(".Folktails", "").Trim();
+
+        public string DataInt(string key, int val) =>
+            _jw.Reset().OpenObj().Key(key).Int(val).CloseObj().ToString();
+
+        public string DataEntity(int id, string name) =>
+            _jw.Reset().OpenObj().Key("id").Int(id).Key("name").Str(name).CloseObj().ToString();
+
+        public string DataEntityBot(int id, string name, bool isBot) =>
+            _jw.Reset().OpenObj().Key("id").Int(id).Key("name").Str(name).Key("isBot").Bool(isBot).CloseObj().ToString();
 
         // ================================================================
         // WEBHOOK EVENT HANDLERS
         // ================================================================
 
         // weather
-        [OnEvent] public void OnDroughtStart(Timberborn.HazardousWeatherSystem.HazardousWeatherStartedEvent e) { if (_webhooks.Count > 0) PushEvent("drought.start", new { duration = _weatherService.HazardousWeatherDuration }); }
-        [OnEvent] public void OnDroughtEnd(Timberborn.HazardousWeatherSystem.HazardousWeatherEndedEvent e) => PushEvent("drought.end", null);
-        [OnEvent] public void OnDroughtApproaching(Timberborn.HazardousWeatherSystemUI.HazardousWeatherApproachingEvent e) => PushEvent("drought.approaching", null);
-        [OnEvent] public void OnCycleStart(Timberborn.GameCycleSystem.CycleStartedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.start", new { cycle = _gameCycleService.Cycle }); }
-        [OnEvent] public void OnCycleEnd(Timberborn.GameCycleSystem.CycleEndedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.end", new { cycle = _gameCycleService.Cycle }); }
-        [OnEvent] public void OnCycleDay(Timberborn.GameCycleSystem.CycleDayStartedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.day", new { cycle = _gameCycleService.Cycle, cycleDay = _gameCycleService.CycleDay }); }
+        [OnEvent] public void OnDroughtStart(Timberborn.HazardousWeatherSystem.HazardousWeatherStartedEvent e) { if (_webhooks.Count > 0) PushEvent("drought.start", DataInt("duration", _weatherService.HazardousWeatherDuration)); }
+        [OnEvent] public void OnDroughtEnd(Timberborn.HazardousWeatherSystem.HazardousWeatherEndedEvent e) => PushEvent("drought.end");
+        [OnEvent] public void OnDroughtApproaching(Timberborn.HazardousWeatherSystemUI.HazardousWeatherApproachingEvent e) => PushEvent("drought.approaching");
+        [OnEvent] public void OnCycleStart(Timberborn.GameCycleSystem.CycleStartedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.start", DataInt("cycle", _gameCycleService.Cycle)); }
+        [OnEvent] public void OnCycleEnd(Timberborn.GameCycleSystem.CycleEndedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.end", DataInt("cycle", _gameCycleService.Cycle)); }
+        [OnEvent] public void OnCycleDay(Timberborn.GameCycleSystem.CycleDayStartedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.day", _jw.Reset().OpenObj().Key("cycle").Int(_gameCycleService.Cycle).Key("cycleDay").Int(_gameCycleService.CycleDay).CloseObj().ToString()); }
 
         // time
-        [OnEvent] public void OnDayStart(Timberborn.TimeSystem.DaytimeStartEvent e) { if (_webhooks.Count > 0) PushEvent("day.start", new { day = _dayNightCycle.DayNumber }); }
-        [OnEvent] public void OnNightStart(Timberborn.TimeSystem.NighttimeStartEvent e) { if (_webhooks.Count > 0) PushEvent("night.start", new { day = _dayNightCycle.DayNumber }); }
+        [OnEvent] public void OnDayStart(Timberborn.TimeSystem.DaytimeStartEvent e) { if (_webhooks.Count > 0) PushEvent("day.start", DataInt("day", _dayNightCycle.DayNumber)); }
+        [OnEvent] public void OnNightStart(Timberborn.TimeSystem.NighttimeStartEvent e) { if (_webhooks.Count > 0) PushEvent("night.start", DataInt("day", _dayNightCycle.DayNumber)); }
 
         // buildings
-        [OnEvent] public void OnBuildingFinished(EnteredFinishedStateEvent e) { try { var go = e.BlockObject?.GetComponent<EntityComponent>()?.GameObject; PushEvent("building.finished", new { id = go?.GetInstanceID() ?? 0, name = go != null ? CleanName(go.name) : "" }); } catch (Exception _ex) { TimberbotLog.Error("webhook.building_finished", _ex); } }
-        [OnEvent] public void OnDistrictChanged(Timberborn.GameDistricts.DistrictCenterRegistryChangedEvent e) => PushEvent("district.changed", null);
+        [OnEvent] public void OnBuildingFinished(EnteredFinishedStateEvent e) { try { var go = e.BlockObject?.GetComponent<EntityComponent>()?.GameObject; PushEvent("building.finished", DataEntity(go?.GetInstanceID() ?? 0, go != null ? CleanName(go.name) : "")); } catch (Exception _ex) { TimberbotLog.Error("webhook.building_finished", _ex); } }
+        [OnEvent] public void OnDistrictChanged(Timberborn.GameDistricts.DistrictCenterRegistryChangedEvent e) => PushEvent("district.changed");
 
         // population
-        [OnEvent] public void OnPopulationChanged(Timberborn.Population.PopulationChangedEvent e) => PushEvent("population.changed", null);
-        [OnEvent] public void OnCharacterCreated(Timberborn.Characters.CharacterCreatedEvent e) => PushEvent("character.created", null);
-        [OnEvent] public void OnCharacterKilled(Timberborn.Characters.CharacterKilledEvent e) => PushEvent("character.killed", null);
-        [OnEvent] public void OnBeaverBornEvt(Timberborn.Beavers.BeaverBornEvent e) => PushEvent("beaver.born.event", null);
-        [OnEvent] public void OnBotManufactured(Timberborn.BotUpkeep.BotManufacturedEvent e) => PushEvent("bot.manufactured", null);
-        [OnEvent] public void OnMigration(Timberborn.GameDistricts.MigrationEvent e) => PushEvent("migration", null);
+        [OnEvent] public void OnPopulationChanged(Timberborn.Population.PopulationChangedEvent e) => PushEvent("population.changed");
+        [OnEvent] public void OnCharacterCreated(Timberborn.Characters.CharacterCreatedEvent e) => PushEvent("character.created");
+        [OnEvent] public void OnCharacterKilled(Timberborn.Characters.CharacterKilledEvent e) => PushEvent("character.killed");
+        [OnEvent] public void OnBeaverBornEvt(Timberborn.Beavers.BeaverBornEvent e) => PushEvent("beaver.born.event");
+        [OnEvent] public void OnBotManufactured(Timberborn.BotUpkeep.BotManufacturedEvent e) => PushEvent("bot.manufactured");
+        [OnEvent] public void OnMigration(Timberborn.GameDistricts.MigrationEvent e) => PushEvent("migration");
 
         // needs/wellbeing
-        [OnEvent] public void OnContaminationChanged(Timberborn.BeaverContaminationSystem.ContaminableContaminationChangedEvent e) => PushEvent("contamination.changed", null);
-        [OnEvent] public void OnTeethChipped(Timberborn.Healthcare.TeethChippedEvent e) => PushEvent("teeth.chipped", null);
-        [OnEvent] public void OnWellbeingHighscore(Timberborn.Wellbeing.NewWellbeingHighscoreEvent e) => PushEvent("wellbeing.highscore", null);
-        [OnEvent] public void OnStatusAlert(Timberborn.StatusSystem.StatusAlertAddedEvent e) => PushEvent("status.alert", null);
+        [OnEvent] public void OnContaminationChanged(Timberborn.BeaverContaminationSystem.ContaminableContaminationChangedEvent e) => PushEvent("contamination.changed");
+        [OnEvent] public void OnTeethChipped(Timberborn.Healthcare.TeethChippedEvent e) => PushEvent("teeth.chipped");
+        [OnEvent] public void OnWellbeingHighscore(Timberborn.Wellbeing.NewWellbeingHighscoreEvent e) => PushEvent("wellbeing.highscore");
+        [OnEvent] public void OnStatusAlert(Timberborn.StatusSystem.StatusAlertAddedEvent e) => PushEvent("status.alert");
 
         // trees/crops
-        [OnEvent] public void OnTreeCut(Timberborn.Forestry.TreeCutEvent e) => PushEvent("tree.cut", null);
+        [OnEvent] public void OnTreeCut(Timberborn.Forestry.TreeCutEvent e) => PushEvent("tree.cut");
         [OnEvent] public void OnCuttableHarvested(Timberborn.Cutting.CuttableCutEvent e) => PushEvent("cuttable.cut", null);
         [OnEvent] public void OnTreeCuttingAreaChanged(Timberborn.Forestry.TreeCuttingAreaChangedEvent e) => PushEvent("cutting.area.changed", null);
         [OnEvent] public void OnTreeAddedToCuttingArea(Timberborn.Forestry.TreeAddedToCuttingAreaEvent e) => PushEvent("tree.marked", null);
@@ -223,7 +246,7 @@ namespace Timberbot
 
         // game state
         [OnEvent] public void OnGameOver(Timberborn.GameOver.GameOverEvent e) => PushEvent("game.over", null);
-        [OnEvent] public void OnSpeedChanged(CurrentSpeedChangedEvent e) { if (_webhooks.Count > 0) PushEvent("speed.changed", new { speed = _speedManager.CurrentSpeed }); }
+        [OnEvent] public void OnSpeedChanged(CurrentSpeedChangedEvent e) { if (_webhooks.Count > 0) PushEvent("speed.changed", DataInt("speed", (int)_speedManager.CurrentSpeed)); }
         [OnEvent] public void OnWorkHoursChanged(Timberborn.WorkSystem.WorkingHoursChangedEvent e) => PushEvent("workhours.changed", null);
         [OnEvent] public void OnWorkHoursTransitioned(Timberborn.WorkSystem.WorkingHoursTransitionedEvent e) => PushEvent("workhours.transitioned", null);
         [OnEvent] public void OnAutosave(Timberborn.Autosaving.AutosaveEvent e) => PushEvent("autosave", null);
