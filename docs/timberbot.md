@@ -19,7 +19,7 @@ Beavers die if food or water hits 0.
 
 ## Factions -- building names differ
 
-Timberborn has two factions: **Folktails** and **Iron Teeth**. Each has faction-exclusive buildings with different prefab names. `timberbot.py prefabs | grep -i <keyword>` lists valid names for the current faction.
+Timberborn has two factions: **Folktails** and **Iron Teeth**. **EVERY prefab except `Path` requires a faction suffix** (`.Folktails` or `.IronTeeth`). Never use a bare name like `GathererFlag` -- it must be `GathererFlag.Folktails` or `GathererFlag.IronTeeth`. When in doubt: `timberbot.py prefabs | grep -i <keyword>`.
 
 ### Identifying the current faction
 Run `timberbot.py prefabs | grep -c Folktails` -- if >0, you're playing Folktails. Otherwise Iron Teeth.
@@ -48,7 +48,19 @@ Run `timberbot.py prefabs | grep -c Folktails` -- if >0, you're playing Folktail
 | | SmallTank.Folktails | starter water storage |
 | | SmallPile.Folktails | log pile |
 | **Science** | Inventor.Folktails | generates science |
-| **Leisure** | Campfire.Folktails | SocialLife +1, shared |
+| **Leisure** | Campfire.Folktails | SocialLife +1 |
+| **Infrastructure** | DistrictCenter.Folktails | 3x3, colony hub |
+| | HaulingPost.Folktails | 3x2, hauler workplace |
+| | Dam.Folktails | 1x1, blocks water to 0.65 height |
+| | Levee.Folktails | 1x1, fully blocks water, needs science |
+| | Stairs.Folktails | z-level transition, needs science |
+| | Platform.Folktails | multi-level jump, needs science |
+| | PowerShaft.Folktails | power transmission |
+| | GathererFlag.Folktails | gathers berries |
+| | ScavengerFlag.Folktails | collects scrap metal from ruins |
+| | RooftopTerrace.Folktails | SocialLife +1, needs roof access |
+| | TeethGrindstone.Folktails | fixes chipped teeth |
+| | MedicalBed.Folktails | heals injuries |
 
 ### Iron Teeth key buildings (prefab names)
 | Role | Prefab name | Notes |
@@ -62,8 +74,10 @@ Run `timberbot.py prefabs | grep -c Folktails` -- if >0, you're playing Folktail
 | | SteamEngine.IronTeeth | needs science |
 | **Wood** | IndustrialLumberMill.IronTeeth | logs -> planks |
 
-### Shared buildings (both factions, no faction suffix)
-Path, Stairs, Platform, Dam, Levee, DistrictCenter, HaulingPost, GathererFlag, LumberjackFlag, ScavengerFlag, Campfire, RooftopTerrace, TeethGrindstone, MedicalBed, PowerShaft, SmallWarehouse, SmallTank
+### Shared buildings (no faction suffix)
+Path, AncientAquiferDrill, ReservePile, ReserveTank, ReserveWarehouse
+
+All other buildings require a faction suffix (`.Folktails` or `.IronTeeth`). Use `timberbot.py prefabs | grep -i <keyword>` to find the exact name.
 
 `not_found` with a `prefab` field means the prefab name is wrong for this faction. `not_unlocked` means it needs science first (response includes `scienceCost` and `currentPoints`).
 
@@ -228,7 +242,7 @@ Buildings have two priority types: `construction` (while building) and `workplac
 
 Use `timberbot.py prefabs | grep -A3 <name>` for exact sizes. Common sizes:
 
-**Shared:** DC 3x3, HaulingPost 3x2, Inventor 2x2, Forester 2x2, flags 1x1, Path 1x1
+**Common (faction-suffixed):** DistrictCenter 3x3, HaulingPost 3x2, Inventor 2x2, Forester 2x2, flags 1x1, Path 1x1
 **Folktails:** Lodge 2x2, EfficientFarmHouse 2x2, WaterPump 2x3, LumberMill 2x3, Shower 1x2
 **Iron Teeth:** Rowhouse 1x2, Barrack 3x2, FarmHouse 2x2, DeepWaterPump 3x2, LargePowerWheel 3x3, IndustrialLumberMill 2x3, DoubleShower 1x2
 
