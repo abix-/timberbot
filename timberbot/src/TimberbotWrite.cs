@@ -44,14 +44,28 @@ using UnityEngine;
 
 namespace Timberbot
 {
+    // All POST endpoint handlers that modify game state.
+    //
+    // These run on the Unity main thread (queued via DrainRequests in TimberbotHttpServer).
+    // Each method takes primitive params from the HTTP body, finds the target entity
+    // via FindEntity(), calls the game service to make the change, and returns a result
+    // object that gets serialized to JSON.
+    //
+    // Pattern: every write method returns {id, name, field: newValue} on success
+    // or {error: "message"} on failure. The HTTP server serializes either to JSON.
+    //
+    // Also includes CollectTiles (the /api/tiles endpoint) because it reads live
+    // water state from _waterMap which requires main thread access.
     public class TimberbotWrite
     {
+        // game services for terrain, water, soil (used by tiles endpoint)
         private readonly ITerrainService _terrainService;
         private readonly IThreadSafeWaterMap _waterMap;
         private readonly MapIndexService _mapIndexService;
         private readonly IThreadSafeColumnTerrainMap _terrainMap;
         private readonly ISoilContaminationService _soilContaminationService;
         private readonly ISoilMoistureService _soilMoistureService;
+        // game services for write operations
         private readonly SpeedManager _speedManager;
         private readonly RecipeSpecService _recipeSpecService;
         private readonly TreeCuttingArea _treeCuttingArea;

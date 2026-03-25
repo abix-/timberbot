@@ -25,8 +25,17 @@ using Timberborn.GameDistrictsMigration;
 
 namespace Timberbot
 {
+    // All GET endpoint handlers. Each method reads from the double-buffered cache
+    // (zero main-thread cost) and writes JSON via the shared JwWriter.
+    //
+    // These run on the background HTTP listener thread. They NEVER call Unity
+    // component properties directly -- only cached primitives from TimberbotEntityCache.
+    //
+    // format: "toon" = compact tabular for AI, "json" = full nested for scripts
+    // detail: "basic" = compact, "full" = all fields, "id:N" = single entity
     public class TimberbotRead
     {
+        // game services for data that isn't cached (district resources, weather, science)
         private readonly IGoodService _goodService;
         private readonly DistrictCenterRegistry _districtCenterRegistry;
         private readonly GameCycleService _gameCycleService;
@@ -36,7 +45,7 @@ namespace Timberbot
         private readonly ScienceService _scienceService;
         private readonly WorkingHoursManager _workingHoursManager;
         private readonly PopulationDistributorRetriever _populationDistributorRetriever;
-        private readonly TimberbotEntityCache _cache;
+        private readonly TimberbotEntityCache _cache;  // the cached entity data
 
         public TimberbotRead(
             IGoodService goodService,
