@@ -485,13 +485,17 @@ class Timberbot:
                 t = tiles.get((tx, ty))
                 if not t:
                     row += f"{DIM}?{R}"
-                elif t.get("entrance") and not t.get("occupant"):
+                    continue
+                occ = t.get("occupants")
+                occupant = occ[0]["name"] if occ else None
+                entrance = t.get("entrance", False)
+                if entrance and not occupant:
                     bg = _zbg(t["terrain"])
                     z_levels.add(t["terrain"])
                     row += f"{bg}{BWHT}@{R}"
                     legend["@"] = (BWHT, "entrance")
-                elif t.get("occupant"):
-                    oname = t["occupant"]
+                elif occupant:
+                    oname = occupant
                     bg = _zbg(t["terrain"])
                     z_levels.add(t["terrain"])
                     ch, co = None, None

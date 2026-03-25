@@ -2,9 +2,9 @@
 //
 // FindPlacement: searches a region for valid building spots using the game's own
 // validation (PreviewFactory.Create + BlockObject.IsValid). Checks flooding via
-// _waterMap, path connectivity via reflection into NavMesh internals, and power
-// adjacency via cached power tile positions. Returns top 10 spots sorted by:
-// non-flooded > reachable > pathAccess > nearPower > pathCount.
+// CeiledWaterHeight > tz, path connectivity via reflection into NavMesh internals,
+// and power adjacency via cached power tile positions. Returns top 10 spots sorted
+// by: non-flooded > reachable > pathAccess > nearPower > pathCount.
 //
 // PlaceBuilding: origin-corrects coordinates (user always specifies bottom-left),
 // creates a preview, validates, then calls BlockObjectPlacerService.Place().
@@ -21,6 +21,7 @@ using Timberborn.BlockObjectTools;
 using Timberborn.Coordinates;
 using Timberborn.MapIndexSystem;
 using Timberborn.TerrainSystem;
+using Timberborn.WaterBuildings;
 using Timberborn.WaterSystem;
 using Timberborn.EntitySystem;
 using Timberborn.GameDistricts;
@@ -118,6 +119,26 @@ namespace Timberbot
             if (columnCount <= 0) return 0;
             var topIndex = index2D + (columnCount - 1) * stride;
             return _terrainMap.GetColumnCeiling(topIndex);
+        }
+
+        // Read water depth at a tile from the water column data.
+        // Iterates columns top-down, returns first with WaterDepth > 0.
+        private float GetWaterDepth(int x, int y)
+        {
+            try
+            {
+                var idx2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));
+                int colCount = _waterMap.ColumnCount(idx2D);
+                var stride = _mapIndexService.VerticalStride;
+                for (int ci = colCount - 1; ci >= 0; ci--)
+                {
+                    int idx3D = ci * stride + idx2D;
+                    var col = _waterMap.WaterColumns[idx3D];
+                    if (col.WaterDepth > 0) return col.WaterDepth;
+                }
+            }
+            catch (System.Exception _ex) { TimberbotLog.Error("water", _ex); }
+            return 0f;
         }
 
         // ================================================================
@@ -399,8 +420,8 @@ namespace Timberbot
         // 3. POWER ADJACENCY: checks if any power-conducting building is adjacent to
         //    the placement footprint. Buildings need to be adjacent to conduct power.
         //
-        // 4. FLOOD CHECK: reads water height from IThreadSafeWaterMap for every tile
-        //    in the building footprint. Any water = flooded = non-functional.
+        // 4. FLOOD CHECK: CeiledWaterHeight > tz means water surface exceeds the
+        //    building's z-level = submerged. Pumps hanging over lower-z water are fine.
         //
         // 5. PLACEMENT VALIDATION: uses the game's own PreviewFactory to create a
         //    preview entity, Reposition it, and check IsValid(). This runs the same
@@ -420,6 +441,9 @@ namespace Timberbot
                 return _jw.Error("invalid_type: no block object spec", ("prefab", prefabName));
 
             var size = blockObjectSpec.Size;
+            var waterInputSpec = buildingSpec.GetSpec<WaterInputSpec>();
+            Vector3Int? waterInputLocal = waterInputSpec != null
+                ? (Vector3Int?)waterInputSpec.WaterInputCoordinates : null;
 
             // STEP 1: REACHABILITY
             // Use reflection to access the game's NavMesh internals. These APIs are
@@ -489,7 +513,7 @@ namespace Timberbot
             }
 
             var orientNames = new[] { "south", "west", "north", "east" };
-            var results = new List<(int x, int y, int z, int orient, bool pathAccess, int pathCount, bool reachable, bool nearPower, bool flooded)>();
+            var results = new List<(int x, int y, int z, int orient, bool pathAccess, int pathCount, bool reachable, bool nearPower, bool flooded, float waterDepth)>();
 
             // PERF: create ONE preview entity, reuse it for every candidate position.
             // Preview is a Unity GameObject with validation components attached.
@@ -613,29 +637,43 @@ namespace Timberbot
                                         nearPower = true;
                                 }
 
-                            // check flooding: any water on footprint tiles means building will flood
+                            // check flooding: any footprint tile with water depth > 0 = submerged
                             int frx = size.x, fry = size.y;
                             if (bestOrient == 1 || bestOrient == 3) { frx = size.y; fry = size.x; }
                             bool flooded = false;
                             for (int fx = tx; fx < tx + frx && !flooded; fx++)
                                 for (int fy = ty; fy < ty + fry && !flooded; fy++)
-                                {
-                                    try
-                                    {
-                                        float wh = _waterMap.CeiledWaterHeight(new Vector3Int(fx, fy, tz));
-                                        if (wh > 0) flooded = true;
-                                    }
-                                    catch (System.Exception _ex) { TimberbotLog.Error("placement", _ex); }
-                                }
+                                    if (GetWaterDepth(fx, fy) > 0) flooded = true;
 
-                            results.Add((tx, ty, tz, bestOrient, bestPathCount > 0, bestPathCount, reachable, nearPower, flooded));
+                            // check water depth at intake tile for water buildings
+                            float waterDepth = 0f;
+                            if (waterInputLocal.HasValue)
+                            {
+                                var wil = waterInputLocal.Value;
+                                int wx, wy;
+                                switch (bestOrient)
+                                {
+                                    case 0: wx = tx + wil.x; wy = ty + wil.y; break;
+                                    case 1: wx = tx + wil.y; wy = ty + (size.x - 1 - wil.x); break;
+                                    case 2: wx = tx + (size.x - 1 - wil.x); wy = ty + (size.y - 1 - wil.y); break;
+                                    case 3: wx = tx + (size.y - 1 - wil.y); wy = ty + wil.x; break;
+                                    default: wx = tx + wil.x; wy = ty + wil.y; break;
+                                }
+                                waterDepth = GetWaterDepth(wx, wy);
+                            }
+
+                            results.Add((tx, ty, tz, bestOrient, bestPathCount > 0, bestPathCount, reachable, nearPower, flooded, waterDepth));
                         }
                     }
                 }
 
-                // sort: non-flooded > reachable > path access > power > path count
+                // sort: water buildings prioritize waterDepth first, others prioritize non-flooded
                 results.Sort((a, b) =>
                 {
+                    if (waterInputLocal.HasValue)
+                    {
+                        if (a.waterDepth != b.waterDepth) return b.waterDepth.CompareTo(a.waterDepth);
+                    }
                     if (a.flooded != b.flooded) return a.flooded ? 1 : -1;
                     if (a.reachable != b.reachable) return b.reachable ? 1 : -1;
                     if (a.pathAccess != b.pathAccess) return b.pathAccess ? 1 : -1;
@@ -666,8 +704,10 @@ namespace Timberbot
                     .Prop("pathCount", r.pathCount)
                     .Prop("reachable", r.reachable)
                     .Prop("nearPower", r.nearPower)
-                    .Prop("flooded", r.flooded)
-                    .CloseObj();
+                    .Prop("flooded", r.flooded);
+                if (waterInputLocal.HasValue)
+                    jw.Prop("waterDepth", r.waterDepth, "F2");
+                jw.CloseObj();
             }
             jw.CloseArr().CloseObj();
             return jw.ToString();

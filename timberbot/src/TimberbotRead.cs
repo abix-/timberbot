@@ -1083,13 +1083,9 @@ namespace Timberbot
                         var topIndex = index2D + (columnCount - 1) * stride;
                         terrainHeight = _terrainMap.GetColumnCeiling(topIndex);
                     }
-                    float waterHeight = 0f;
+                    // Water check: iterate water columns top-down for depth and contamination.
+                    float waterDepth = 0f;
                     float waterContamination = 0f;
-                    var waterCoord = new Vector3Int(x, y, terrainHeight);
-                    try { waterHeight = _waterMap.CeiledWaterHeight(waterCoord); } catch (System.Exception _ex) { TimberbotLog.Error("map.water", _ex); }
-                    // Badwater (contaminated water) check: iterate water columns top-down.
-                    // Water is stored in columns (like terrain) -- multiple water layers can exist
-                    // at different heights. We check from top down and report the first contaminated one.
                     try
                     {
                         int wIdx2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));
@@ -1098,15 +1094,19 @@ namespace Timberbot
                         {
                             int wIdx3D = ci * _mapIndexService.VerticalStride + wIdx2D;
                             var col = _waterMap.WaterColumns[wIdx3D];
-                            if (col.WaterDepth > 0 && col.Contamination > 0) { waterContamination = col.Contamination; break; }
+                            if (col.WaterDepth > 0)
+                            {
+                                if (waterDepth == 0f) waterDepth = col.WaterDepth;
+                                if (col.Contamination > 0) { waterContamination = col.Contamination; break; }
+                            }
                         }
                     }
-                    catch (System.Exception _ex) { TimberbotLog.Error("map.badwater", _ex); }
+                    catch (System.Exception _ex) { TimberbotLog.Error("map.water", _ex); }
 
                     long key = (long)x * 100000 + y;
                     occupants.TryGetValue(key, out var occList);
 
-                    jw.OpenObj().Prop("x", x).Prop("y", y).Prop("terrain", terrainHeight).Prop("water", waterHeight, "F1");
+                    jw.OpenObj().Prop("x", x).Prop("y", y).Prop("terrain", terrainHeight).Prop("water", waterDepth, "F1");
                     if (waterContamination > 0) jw.Prop("badwater", (float)System.Math.Round(waterContamination, 2));
                     if (occList != null)
                     {
