@@ -1116,15 +1116,15 @@ Place a building in the world. Validates all tiles before placing: occupancy, te
 #### Response (error)
 
 ```json
-{"error": "not_found", "x": 120, "y": 130, "z": 2}
+{"error": "not_found", "x": 120, "y": 130, "z": 2, "prefab": "BadName"}
 ```
 
 ```json
-{"error": "not_unlocked", "x": 120, "y": 130, "z": 2}
+{"error": "not_unlocked", "x": 120, "y": 130, "z": 2, "prefab": "Engine.IronTeeth", "scienceCost": 600, "currentPoints": 450}
 ```
 
 ```json
-{"error": "invalid_param: cannot place at (120, 130, 2)", "x": 120, "y": 130, "z": 2}
+{"error": "occupied at (120,130,2)", "x": 120, "y": 130, "z": 2, "prefab": "LumberjackFlag.IronTeeth"}
 ```
 
 ---
@@ -1589,13 +1589,19 @@ Route a straight-line path from point A to point B, auto-placing stairs at z-lev
 #### Response (success)
 
 ```json
-{"placed": 12, "stairs": 1, "skipped": 3, "errors": null}
+{"placed": 12, "stairs": 1, "skipped": 0}
+```
+
+#### Response (partial -- with errors)
+
+```json
+{"placed": 8, "stairs": 0, "skipped": 2, "errors": [{"prefab": "Path", "error": "occupied at (120,130,2)"}, {"error": "z-change at (120,135): stairs not unlocked (need Stairs.IronTeeth)"}]}
 ```
 
 #### Response (error -- not straight)
 
 ```json
-{"error": "path must be a straight line (x1==x2 or y1==y2)"}
+{"error": "invalid_param: path must be a straight line (x1==x2 or y1==y2)"}
 ```
 
 ---
