@@ -89,10 +89,13 @@ namespace Timberbot
         // other mods (UnifiedFactions) use. Faction never changes during a game session.
         private string _factionSuffix = "";
 
-        // Called once from TimberbotService.Load().
+        // Called once from TimberbotService.Load(), before BuildAllIndexes.
+        // Sets both the local suffix (for RoutePath prefabs) and the static suffix
+        // on TimberbotEntityCache (for CleanName to strip faction from entity names).
         public void DetectFaction()
         {
             _factionSuffix = "." + _factionService.Current.Id;
+            TimberbotEntityCache.FactionSuffix = _factionSuffix;
             TimberbotLog.Info($"faction: {_factionSuffix}");
         }
 

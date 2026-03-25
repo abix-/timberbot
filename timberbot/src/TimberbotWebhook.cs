@@ -190,8 +190,7 @@ namespace Timberbot
         }
 
         // helpers for building data JSON without anonymous objects
-        private static string CleanName(string name) =>
-            name.Replace("(Clone)", "").Replace(".IronTeeth", "").Replace(".Folktails", "").Trim();
+        private static string CleanName(string name) => TimberbotEntityCache.CleanName(name);
 
         public string DataInt(string key, int val) =>
             _jw.Reset().OpenObj().Key(key).Int(val).CloseObj().ToString();

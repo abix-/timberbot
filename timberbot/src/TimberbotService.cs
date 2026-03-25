@@ -89,8 +89,8 @@ namespace Timberbot
             _eventBus.Register(this);
             WebhookMgr.Register();            // subscribe to 68 game events
             Cache.Register();                 // subscribe to entity lifecycle events
-            Cache.BuildAllIndexes();           // populate indexes from existing entities
-            Placement.DetectFaction();          // detect faction suffix from prefab names
+            Placement.DetectFaction();          // detect faction suffix -- must run before BuildAllIndexes
+            Cache.BuildAllIndexes();           // populate indexes from existing entities (uses CleanName)
             _server = new TimberbotHttpServer(_httpPort, this, _debugEnabled);
             TimberbotLog.Info($"HTTP server started on port {_httpPort}");
         }

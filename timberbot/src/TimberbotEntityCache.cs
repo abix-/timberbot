@@ -65,7 +65,7 @@ namespace Timberbot
         private readonly EntityRegistry _entityRegistry;
         private readonly TreeCuttingArea _treeCuttingArea;
         private readonly EventBus _eventBus;
-        private readonly DistrictCenterRegistry _districtCenterRegistry;
+        public readonly DistrictCenterRegistry DistrictRegistry;
         private readonly IGoodService _goodService;
 
         // set by TimberbotService in Load() before use
@@ -92,6 +92,7 @@ namespace Timberbot
         public static readonly HashSet<string> CropSpecies = new HashSet<string>
             { "Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot" };
 
+        public static string FactionSuffix = "";  // set by TimberbotPlacement.DetectFaction()
         public static readonly string[] OrientNames = { "south", "west", "north", "east" };
         public static readonly string[] PriorityNames = { "VeryLow", "Low", "Normal", "High", "VeryHigh" };
 
@@ -105,7 +106,7 @@ namespace Timberbot
             _entityRegistry = entityRegistry;
             _treeCuttingArea = treeCuttingArea;
             _eventBus = eventBus;
-            _districtCenterRegistry = districtCenterRegistry;
+            DistrictRegistry = districtCenterRegistry;
             _goodService = goodService;
         }
 
@@ -119,10 +120,14 @@ namespace Timberbot
         }
 
         // Strip Unity/faction suffixes so API output has clean names.
-        // Unity appends "(Clone)" to instantiated objects. Faction suffixes like
-        // ".IronTeeth" are internal identifiers players never see in-game.
-        public static string CleanName(string name) =>
-            name.Replace("(Clone)", "").Replace(".IronTeeth", "").Replace(".Folktails", "").Trim();
+        // Unity appends "(Clone)" to instantiated objects. FactionSuffix (e.g. ".Folktails")
+        // is detected once at startup via FactionService -- no hardcoded faction names.
+        public static string CleanName(string name)
+        {
+            var clean = name.Replace("(Clone)", "");
+            if (FactionSuffix.Length > 0) clean = clean.Replace(FactionSuffix, "");
+            return clean.Trim();
+        }
 
         // Optimization: avoid calling CleanName() every refresh by comparing object references.
         // If the Workplace or District reference hasn't changed since last refresh,
@@ -368,7 +373,7 @@ namespace Timberbot
             try
             {
                 var goods = _goodService.Goods;
-                foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+                foreach (var dc in DistrictRegistry.FinishedDistrictCenters)
                 {
                     var pop = dc.DistrictPopulation;
                     var cd = new CachedDistrict
