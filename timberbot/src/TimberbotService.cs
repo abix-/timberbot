@@ -23,7 +23,7 @@ namespace Timberbot
     //
     // format param: "toon" (default) = flat for tabular display, "json" = full nested data
     // entity access: no typed queries in Timberborn, so we iterate _entityRegistry.Entities + GetComponent<T>()
-    // names: CleanName() strips "(Clone)", ".IronTeeth", ".Folktails" from all output
+    // names: CleanName() strips "(Clone)" and the detected faction suffix from all output
     // entity lookup: FindEntity() uses per-frame dictionary cache for O(1) writes
     public class TimberbotService : ILoadableSingleton, IUpdatableSingleton, IUnloadableSingleton
     {
