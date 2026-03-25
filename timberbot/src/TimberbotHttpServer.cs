@@ -105,7 +105,7 @@ namespace Timberbot
                 catch (Exception ex)
                 {
                     TimberbotLog.Error("route.post", ex);
-                    Respond(req.Context, 500, new { error = "internal_error: " + ex.Message });
+                    Respond(req.Context, 500, "{\"error\":\"internal_error: " + ex.Message.Replace("\"", "'") + "\"}");
                 }
             }
         }
@@ -130,7 +130,7 @@ namespace Timberbot
 
                 if (path == "/api/ping")
                 {
-                    Respond(ctx, 200, new { status = "ok", ready = true });
+                    Respond(ctx, 200, "{\"status\":\"ok\",\"ready\":true}");
                     continue;
                 }
 
@@ -162,7 +162,7 @@ namespace Timberbot
                     catch (Exception ex)
                     {
                         TimberbotLog.Error("route.get", ex);
-                        Respond(ctx, 500, new { error = "internal_error: " + ex.Message });
+                        Respond(ctx, 500, "{\"error\":\"internal_error: " + ex.Message.Replace("\"", "'") + "\"}");
                     }
                     continue;
                 }
@@ -184,7 +184,7 @@ namespace Timberbot
                     }
                     catch
                     {
-                        Respond(ctx, 400, new { error = "invalid_body" });
+                        Respond(ctx, 400, "{\"error\":\"invalid_body\"}");
                         continue;
                     }
                 }

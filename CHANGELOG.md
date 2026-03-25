@@ -40,18 +40,36 @@ All notable changes to Timberbot are documented here. Links point to the commit 
 - Flood validation in `find_placement` ([`04feca0`][04feca0])
 - Server-side pagination on list endpoints ([`dea094e`][dea094e])
 - Server-side name and proximity filtering ([`7c7fb80`][7c7fb80])
-- Structured error codes: snake_case `error` values with optional `detail` ([`05b5a0d`][05b5a0d])
+- Structured error codes: `"code: detail"` format ([`05b5a0d`][05b5a0d], [`24ba215`][24ba215])
 - RoutePath validates stairs/platform unlock before placing ([`668a44b`][668a44b])
+- Python client `TimberbotError` with `.code` and `.response` ([`1670124`][1670124])
 
 ### Fixes
 - JsonWriter double-comma bug and UTF-8 BOM ([`38597be`][38597be], [`e65f7ed`][e65f7ed])
+- Districts TOON format double-comma from `Raw(",")` + AutoSep
+- Two placement error messages not migrated to structured error format
+- `GetBuildingTemplate` throwing on unknown prefabs instead of returning structured error ([`4804450`][4804450])
+- Eliminate all remaining anonymous object error returns ([`ee773ec`][ee773ec])
 
-### Skill (timberbot.md v4.9)
+### Skill (timberbot.md v5.5)
 - Reframe as human-AI collaborative play (not autonomous)
 - Add webhook, crops, tiles, pagination, filtering to API table
 - Add early game road network bootstrapping guide
-- Point API reference to GitHub Pages URL
 - Add flood placement rules
+- Add faction-aware building tables (Folktails, Iron Teeth, shared)
+- Add per-faction wellbeing tables with all needs and bonuses
+- Add per-faction crop tables with growth times and processing chains
+- Add all 6 tree types with yields and faction-specific products
+- Add manufacturing chains (logs->planks->gears->metal, extract, biofuel, paper/books)
+- Add population growth mechanics (FT natural reproduction, IT breeding pod)
+- Add bot mechanics (build chain, fuel, lifespan)
+- Add weather cycles (temperate/drought/badtide, escalation)
+- Add beaver lifecycle (lifespan, kit maturation, sleep/shelter)
+- Add water management (dam/levee/floodgate, irrigation, aquifer drills)
+- Add storage types and capacities
+- Add district expansion mechanics
+- Add structured error codes table
+- Remove all behavioral directives, facts only
 
 ### Internal
 - TimberbotJw `Result()`/`Error()` one-call builders ([`f97f8d8`][f97f8d8])
@@ -87,6 +105,10 @@ All notable changes to Timberbot are documented here. Links point to the commit 
 [c25de95]: https://github.com/abix-/TimberbornMods/commit/c25de95
 [c24c4b5]: https://github.com/abix-/TimberbornMods/commit/c24c4b5
 [cfec1a5]: https://github.com/abix-/TimberbornMods/commit/cfec1a5
+[24ba215]: https://github.com/abix-/TimberbornMods/commit/24ba215
+[1670124]: https://github.com/abix-/TimberbornMods/commit/1670124
+[4804450]: https://github.com/abix-/TimberbornMods/commit/4804450
+[ee773ec]: https://github.com/abix-/TimberbornMods/commit/ee773ec
 [04feca0]: https://github.com/abix-/TimberbornMods/commit/04feca0
 [38597be]: https://github.com/abix-/TimberbornMods/commit/38597be
 [e65f7ed]: https://github.com/abix-/TimberbornMods/commit/e65f7ed

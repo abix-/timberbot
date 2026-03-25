@@ -466,7 +466,7 @@ namespace Timberbot
                 if (format == "toon")
                 {
                     jw.Prop("adults", dc.Adults).Prop("children", dc.Children).Prop("bots", dc.Bots);
-                    if (dc.ResourcesToon != null) jw.Raw(",").Raw(dc.ResourcesToon);
+                    if (!string.IsNullOrEmpty(dc.ResourcesToon)) jw.Raw(dc.ResourcesToon);
                 }
                 else
                 {
