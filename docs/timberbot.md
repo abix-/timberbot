@@ -109,6 +109,16 @@ Buildings placed in water become **flooded** and completely non-functional. Beav
 - Any z-level can flood. Do NOT trust terrain height as a flood indicator
 - Safe placement: ONLY trust `flooded: false` from `find_placement`
 
+### Early game -- building your first road network
+A new game starts with NOTHING: no paths, no buildings, no unlocks. The district center exists but beavers can't reach anything without roads.
+
+**Paths are free.** They cost zero materials and zero science. You can place as many as you want from the very first second. This is how you bootstrap a colony:
+
+1. **Look at the map** (`map`) to find the district center and nearby resources (water, trees, farmable land)
+2. **Build a road network** using `place_path` from the DC outward to key areas
+3. **Then place buildings** along the roads -- builders need path access to deliver materials
+4. **Paths are flat-only at game start.** Stairs and platforms require science unlocks. Stay on the same z-level until you research them
+
 ### Placement workflow -- ALWAYS follow this order
 1. **Build paths first** to the target area using `place_path`
 2. **Then** run `find_placement` -- results now show `reachable: true` with path access
@@ -121,7 +131,11 @@ Buildings placed in water become **flooded** and completely non-functional. Beav
 
 ## Path and stair placement
 
+**Paths cost nothing** -- place them freely to extend your road network. Stairs and platforms cost science and must be unlocked first.
+
 `place_path` routes a straight-line path (axis-aligned: x1==x2 or y1==y2). It handles everything: auto-detects terrain height, places stairs at z-level changes, builds platforms for multi-level jumps, and skips occupied tiles. One call replaces dozens of individual `place_building` calls. Returns `{placed, stairs, skipped, errors}`. Checks science unlocks: stairs must be unlocked for any z-change, platforms for multi-level jumps. Reports errors if required buildings aren't unlocked.
+
+**Early game limitation:** without stairs unlocked, `place_path` can only build flat paths on the same z-level. If the terrain changes height, the path stops at the z-change and reports the error. Unlock stairs first, then retry.
 
 ## Z-level rules
 
