@@ -388,7 +388,7 @@ namespace Timberbot
                     {
                         cd.Resources = new Dictionary<string, (int, int)>();
                         // pre-serialize toon: "Water":50,"Log":236
-                        var dj = _districtJw.Reset().OpenObj();
+                        var dj = _districtJw.BeginObj();
                         foreach (var goodId in goods)
                         {
                             var rc = counter.GetResourceCount(goodId);
@@ -402,7 +402,7 @@ namespace Timberbot
                         cd.ResourcesToon = dj.ToInnerString();
 
                         // pre-serialize json: "Water":{"available":50,"all":54}
-                        dj.Reset().OpenObj();
+                        dj.BeginObj();
                         foreach (var goodId in goods)
                         {
                             var rc = counter.GetResourceCount(goodId);

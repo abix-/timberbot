@@ -51,6 +51,16 @@ namespace Timberbot
         public TimberbotJw OpenObj() { AutoSep(); _sb.Append('{'); _hasValue[++_depth] = false; return this; }
         public TimberbotJw CloseObj() { _sb.Append('}'); _depth--; _hasValue[_depth] = true; return this; }
 
+        // Begin: Reset + Open in one call. Use for multi-line builders.
+        //   var jw = _jw.BeginArr();  // instead of _jw.Reset().OpenArr()
+        //   ... loop ...
+        //   return jw.End();          // instead of jw.CloseArr().ToString()
+        public TimberbotJw BeginArr() => Reset().OpenArr();
+        public TimberbotJw BeginObj() => Reset().OpenObj();
+
+        // End: Close + ToString in one call. Auto-detects array vs object from depth state.
+        public string End() { if (_sb.Length > 0 && _sb[0] == '[') CloseArr(); else CloseObj(); return ToString(); }
+
         // Key writes "name": and resets hasValue so the next value doesn't get a leading comma
         public TimberbotJw Key(string name) { AutoSep(); _sb.Append('"'); _sb.Append(name); _sb.Append("\":"); _hasValue[_depth] = false; return this; }
 

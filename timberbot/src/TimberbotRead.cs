@@ -226,7 +226,7 @@ namespace Timberbot
             {
                 // capture districts BEFORE using _cache.Jw -- CollectDistricts uses the same JwWriter
                 var districtsJson = CollectDistricts("json") as string;
-                var jj = _cache.Jw.Reset().OpenObj();
+                var jj = _cache.Jw.BeginObj();
                 jj.Obj("time")
                     .Prop("dayNumber", _dayNightCycle.DayNumber)
                     .Prop("dayProgress", (float)_dayNightCycle.DayProgress)
@@ -271,12 +271,11 @@ namespace Timberbot
                     .Prop("unpowered", alertUnpowered)
                     .Prop("unreachable", alertUnreachable)
                     .CloseObj();
-                jj.CloseObj();
-                return jj.ToString();
+                return jj.End();
             }
 
             // build flat summary matching TOON output format
-            var jw = _cache.Jw.Reset().OpenObj();
+            var jw = _cache.Jw.BeginObj();
 
             // time
             jw.Prop("day", _dayNightCycle.DayNumber);
@@ -363,8 +362,7 @@ namespace Timberbot
             }
             jw.Prop("alerts", alertStr);
 
-            jw.CloseObj();
-            return jw.ToString();
+            return jw.End();
         }
 
         // PERF: iterates _cache.Buildings.Read instead of all entities.
@@ -372,7 +370,7 @@ namespace Timberbot
         {
             bool paginated = limit > 0;
             int skipped = 0, emitted = 0;
-            var jw = _cache.Jw.Reset().OpenArr();
+            var jw = _cache.Jw.BeginArr();
             foreach (var c in _cache.Buildings.Read)
             {
                 if (c.Workplace != null && c.DesiredWorkers > 0 && c.AssignedWorkers < c.DesiredWorkers)
@@ -403,8 +401,7 @@ namespace Timberbot
                     }
                 }
             }
-            jw.CloseArr();
-            return jw.ToString();
+            return jw.End();
         }
 
         // Find the densest tree clusters on the map.
@@ -441,14 +438,13 @@ namespace Timberbot
             // sort by grown count descending -- densest harvestable clusters first
             var sorted = new List<int[]>(cells.Values);
             sorted.Sort((a, b) => b[0].CompareTo(a[0]));
-            var jw = _cache.Jw.Reset().OpenArr();
+            var jw = _cache.Jw.BeginArr();
             for (int i = 0; i < System.Math.Min(top, sorted.Count); i++)
             {
                 var s = sorted[i];
                 jw.OpenObj().Prop("x", s[2]).Prop("y", s[3]).Prop("z", s[4]).Prop("grown", s[0]).Prop("total", s[1]).CloseObj();
             }
-            jw.CloseArr();
-            return jw.ToString();
+            return jw.End();
         }
 
         public object CollectTime()
@@ -476,7 +472,7 @@ namespace Timberbot
 
         public object CollectDistricts(string format = "toon")
         {
-            var jw = _cache.Jw.Reset().OpenArr();
+            var jw = _cache.Jw.BeginArr();
             foreach (var dc in _cache.Districts)
             {
                 jw.OpenObj().Prop("name", dc.Name);
@@ -496,8 +492,7 @@ namespace Timberbot
                 }
                 jw.CloseObj();
             }
-            jw.CloseArr();
-            return jw.ToString();
+            return jw.End();
         }
 
         public object CollectResources(string format = "toon")
@@ -534,7 +529,7 @@ namespace Timberbot
 
         public object CollectPopulation()
         {
-            var jw = _cache.Jw.Reset().OpenArr();
+            var jw = _cache.Jw.BeginArr();
             foreach (var dc in _cache.Districts)
             {
                 jw.OpenObj()
@@ -544,8 +539,7 @@ namespace Timberbot
                     .Prop("bots", dc.Bots)
                     .CloseObj();
             }
-            jw.CloseArr();
-            return jw.ToString();
+            return jw.End();
         }
 
         // List all buildings. Three modes:
@@ -873,7 +867,7 @@ namespace Timberbot
                     networks[netId] = new PowerNetwork { Id = netId, Supply = c.PowerSupply, Demand = c.PowerDemand, BuildingIndices = new List<int>() };
                 networks[netId].BuildingIndices.Add(i);
             }
-            var jw = _cache.Jw.Reset().OpenArr();
+            var jw = _cache.Jw.BeginArr();
             foreach (var net in networks.Values)
             {
                 jw.OpenObj().Prop("id", net.Id).Prop("supply", net.Supply).Prop("demand", net.Demand);
@@ -885,8 +879,7 @@ namespace Timberbot
                 }
                 jw.CloseArr().CloseObj();
             }
-            jw.CloseArr();
-            return jw.ToString();
+            return jw.End();
         }
 
         // Timberborn's internal speed values are 0, 1, 3, 7 (not 0-3).
@@ -913,7 +906,7 @@ namespace Timberbot
         // Science points and unlockable buildings with costs and status
         public object CollectScience()
         {
-            var jw = _cache.Jw.Reset().OpenObj().Prop("points", _scienceService.SciencePoints);
+            var jw = _cache.Jw.BeginObj().Prop("points", _scienceService.SciencePoints);
             jw.Arr("unlockables");
             foreach (var building in _buildingService.Buildings)
             {
@@ -969,7 +962,7 @@ namespace Timberbot
                         groupMaxTotals[groupId] += groupMax;
                     }
                 }
-                var jw = _cache.Jw.Reset().OpenObj().Prop("beavers", beaverCount).Arr("categories");
+                var jw = _cache.Jw.BeginObj().Prop("beavers", beaverCount).Arr("categories");
                 foreach (var kvp in groupNeeds)
                 {
                     var groupId = kvp.Key;
@@ -984,7 +977,7 @@ namespace Timberbot
                 jw.CloseArr().CloseObj();
                 return jw.ToString();
             }
-            catch (System.Exception ex) { TimberbotLog.Error("wellbeing", ex); return _cache.Jw.Reset().OpenObj().Prop("error", ex.Message).CloseObj().ToString(); }
+            catch (System.Exception ex) { TimberbotLog.Error("wellbeing", ex); return _cache.Jw.BeginObj().Prop("error", ex.Message).CloseObj().ToString(); }
         }
 
         // Game event history (droughts, deaths, etc)
@@ -992,7 +985,7 @@ namespace Timberbot
         {
             bool paginated = limit > 0;
             int skipped = 0, emitted = 0;
-            var jw = _cache.Jw.Reset().OpenArr();
+            var jw = _cache.Jw.BeginArr();
             try
             {
                 foreach (var n in _notificationSaver.Notifications)
@@ -1004,14 +997,13 @@ namespace Timberbot
                 }
             }
             catch (System.Exception _ex) { TimberbotLog.Error("notifications", _ex); }
-            jw.CloseArr();
-            return jw.ToString();
+            return jw.End();
         }
 
         // Import/export settings per good per district
         public object CollectDistribution()
         {
-            var jw = _cache.Jw.Reset().OpenArr();
+            var jw = _cache.Jw.BeginArr();
             foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
             {
                 var distSetting = dc.GetComponent<Timberborn.DistributionSystem.DistrictDistributionSetting>();
@@ -1025,8 +1017,7 @@ namespace Timberbot
                 catch (System.Exception _ex) { TimberbotLog.Error("distribution", _ex); }
                 jw.CloseArr().CloseObj();
             }
-            jw.CloseArr();
-            return jw.ToString();
+            return jw.End();
         }
 
         // Tile data for a rectangular region. Returns terrain height, water depth,
@@ -1042,7 +1033,7 @@ namespace Timberbot
             var stride = _mapIndexService.VerticalStride;
 
             if (x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0)
-                return _cache.Jw.Reset().OpenObj().Obj("mapSize").Prop("x", size.x).Prop("y", size.y).Prop("z", size.z).CloseObj().CloseObj().ToString();
+                return _cache.Jw.BeginObj().Obj("mapSize").Prop("x", size.x).Prop("y", size.y).Prop("z", size.z).CloseObj().CloseObj().ToString();
 
             x1 = Mathf.Clamp(x1, 0, size.x - 1);
             y1 = Mathf.Clamp(y1, 0, size.y - 1);
@@ -1093,7 +1084,7 @@ namespace Timberbot
                 }
             }
 
-            var jw = _cache.Jw.Reset().OpenObj();
+            var jw = _cache.Jw.BeginObj();
             jw.Obj("mapSize").Prop("x", size.x).Prop("y", size.y).Prop("z", size.z).CloseObj();
             jw.Obj("region").Prop("x1", x1).Prop("y1", y1).Prop("x2", x2).Prop("y2", y2).CloseObj();
             jw.Arr("tiles");

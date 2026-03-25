@@ -72,11 +72,11 @@ namespace Timberbot
 
         public object RegisterWebhook(string url, List<string> events)
         {
-            if (!Enabled) return _jw.Reset().OpenObj().Prop("error", "webhooks disabled in settings.json").CloseObj().ToString();
+            if (!Enabled) return _jw.BeginObj().Prop("error", "webhooks disabled in settings.json").CloseObj().ToString();
             var id = $"wh_{System.Threading.Interlocked.Increment(ref _webhookIdCounter)}";
             var reg = new WebhookRegistration { Id = id, Url = url, Events = events != null && events.Count > 0 ? new HashSet<string>(events) : null };
             _webhooks.Add(reg);
-            return _jw.Reset().OpenObj().Prop("id", id).Prop("url", url).Prop("events", reg.Events != null ? (object)events : "all").CloseObj().ToString();
+            return _jw.BeginObj().Prop("id", id).Prop("url", url).Prop("events", reg.Events != null ? (object)events : "all").CloseObj().ToString();
         }
 
         public object UnregisterWebhook(string id)
@@ -98,7 +98,7 @@ namespace Timberbot
         public void PushEvent(string eventName)
         {
             if (_webhooks.Count == 0) return;
-            var payload = _jw.Reset().OpenObj()
+            var payload = _jw.BeginObj()
                 .Prop("event", eventName)
                 .Prop("day", _dayNightCycle.DayNumber)
                 .Prop("timestamp", DateTimeOffset.UtcNow.ToUnixTimeSeconds())
@@ -111,7 +111,7 @@ namespace Timberbot
         public void PushEvent(string eventName, string dataJson)
         {
             if (_webhooks.Count == 0) return;
-            var payload = _jw.Reset().OpenObj()
+            var payload = _jw.BeginObj()
                 .Prop("event", eventName)
                 .Prop("day", _dayNightCycle.DayNumber)
                 .Prop("timestamp", DateTimeOffset.UtcNow.ToUnixTimeSeconds())
@@ -193,13 +193,13 @@ namespace Timberbot
         private static string CleanName(string name) => TimberbotEntityCache.CleanName(name);
 
         public string DataInt(string key, int val) =>
-            _jw.Reset().OpenObj().Key(key).Int(val).CloseObj().ToString();
+            _jw.BeginObj().Key(key).Int(val).CloseObj().ToString();
 
         public string DataEntity(int id, string name) =>
-            _jw.Reset().OpenObj().Prop("id", id).Prop("name", name).CloseObj().ToString();
+            _jw.BeginObj().Prop("id", id).Prop("name", name).CloseObj().ToString();
 
         public string DataEntityBot(int id, string name, bool isBot) =>
-            _jw.Reset().OpenObj().Prop("id", id).Prop("name", name).Prop("isBot", isBot).CloseObj().ToString();
+            _jw.BeginObj().Prop("id", id).Prop("name", name).Prop("isBot", isBot).CloseObj().ToString();
 
         // ================================================================
         // WEBHOOK EVENT HANDLERS
@@ -211,7 +211,7 @@ namespace Timberbot
         [OnEvent] public void OnDroughtApproaching(Timberborn.HazardousWeatherSystemUI.HazardousWeatherApproachingEvent e) => PushEvent("drought.approaching");
         [OnEvent] public void OnCycleStart(Timberborn.GameCycleSystem.CycleStartedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.start", DataInt("cycle", _gameCycleService.Cycle)); }
         [OnEvent] public void OnCycleEnd(Timberborn.GameCycleSystem.CycleEndedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.end", DataInt("cycle", _gameCycleService.Cycle)); }
-        [OnEvent] public void OnCycleDay(Timberborn.GameCycleSystem.CycleDayStartedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.day", _jw.Reset().OpenObj().Prop("cycle", _gameCycleService.Cycle).Prop("cycleDay", _gameCycleService.CycleDay).CloseObj().ToString()); }
+        [OnEvent] public void OnCycleDay(Timberborn.GameCycleSystem.CycleDayStartedEvent e) { if (_webhooks.Count > 0) PushEvent("cycle.day", _jw.BeginObj().Prop("cycle", _gameCycleService.Cycle).Prop("cycleDay", _gameCycleService.CycleDay).CloseObj().ToString()); }
 
         // time
         [OnEvent] public void OnDayStart(Timberborn.TimeSystem.DaytimeStartEvent e) { if (_webhooks.Count > 0) PushEvent("day.start", DataInt("day", _dayNightCycle.DayNumber)); }

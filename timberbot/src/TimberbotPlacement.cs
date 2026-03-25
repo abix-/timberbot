@@ -134,7 +134,7 @@ namespace Timberbot
         // prevents partial JSON if reflection throws mid-iteration.
         public object CollectPrefabs()
         {
-            var jw = _cache.Jw.Reset().OpenArr();
+            var jw = _cache.Jw.BeginArr();
             foreach (var building in _buildingService.Buildings)
             {
                 var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
@@ -175,8 +175,7 @@ namespace Timberbot
                 }
                 jw.CloseObj();
             }
-            jw.CloseArr();
-            return jw.ToString();
+            return jw.End();
         }
 
         // remove a building from the world
@@ -202,7 +201,7 @@ namespace Timberbot
         public object RoutePath(int x1, int y1, int x2, int y2)
         {
             if (x1 != x2 && y1 != y2)
-                return _jw.Reset().OpenObj().Prop("error", "path must be a straight line (x1==x2 or y1==y2)").CloseObj().ToString();
+                return _jw.BeginObj().Prop("error", "path must be a straight line (x1==x2 or y1==y2)").CloseObj().ToString();
 
             // Check if stairs and platforms are unlocked before we start.
             // Stairs are needed for any z-level change. Platforms are needed for
@@ -651,7 +650,7 @@ namespace Timberbot
 
             int count = results.Count > 10 ? 10 : results.Count;
 
-            var jw = _cache.Jw.Reset().OpenObj()
+            var jw = _cache.Jw.BeginObj()
                 .Prop("prefab", prefabName)
                 .Prop("sizeX", size.x).Prop("sizeY", size.y)
                 .Arr("placements");
