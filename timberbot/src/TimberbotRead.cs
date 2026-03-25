@@ -366,7 +366,7 @@ namespace Timberbot
         }
 
         // PERF: iterates _cache.Buildings.Read instead of all entities.
-        public object CollectAlerts(int limit = 100, int offset = 0)
+        public object CollectAlerts(string format = "toon", int limit = 100, int offset = 0)
         {
             bool paginated = limit > 0;
             int skipped = 0, emitted = 0;
@@ -411,7 +411,7 @@ namespace Timberbot
         //
         // Used by the AI to decide where to send lumberjacks. A cluster with many grown
         // trees is the best place to mark for cutting (high yield per lumberjack trip).
-        public object CollectTreeClusters(int cellSize = 10, int top = 5)
+        public object CollectTreeClusters(string format = "toon", int cellSize = 10, int top = 5)
         {
             // key = cell center encoded as long, value = [grownCount, totalCount, centerX, centerY, z]
             var cells = new Dictionary<long, int[]>();
@@ -694,12 +694,12 @@ namespace Timberbot
             return jw.ToString();
         }
 
-        public object CollectTrees(int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
+        public object CollectTrees(string format = "toon", int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
             => CollectNaturalResourcesJw(_cache.Jw, TimberbotEntityCache.TreeSpecies, limit, offset, filterName, filterX, filterY, filterRadius);
-        public object CollectCrops(int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
+        public object CollectCrops(string format = "toon", int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
             => CollectNaturalResourcesJw(_cache.Jw, TimberbotEntityCache.CropSpecies, limit, offset, filterName, filterX, filterY, filterRadius);
 
-        public object CollectGatherables(int limit = 100, int offset = 0,
+        public object CollectGatherables(string format = "toon", int limit = 100, int offset = 0,
             string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
         {
             bool paginated = limit > 0;
@@ -840,7 +840,7 @@ namespace Timberbot
         //
         // Supply = total generator output, Demand = total consumer input.
         // If demand > supply, buildings brownout (cycle power between consumers).
-        public object CollectPowerNetworks()
+        public object CollectPowerNetworks(string format = "toon")
         {
             // pass 1: group buildings by their power network ID
             var networks = new Dictionary<int, PowerNetwork>();
@@ -887,7 +887,7 @@ namespace Timberbot
         }
 
         // Science points and unlockable buildings with costs and status
-        public object CollectScience()
+        public object CollectScience(string format = "toon")
         {
             var jw = _cache.Jw.BeginObj().Prop("points", _scienceService.SciencePoints);
             jw.Arr("unlockables");
@@ -905,7 +905,7 @@ namespace Timberbot
 
         // Population wellbeing breakdown by need group (SocialLife, Fun, Nutrition, etc).
         // Aggregates across all beavers from cached need data.
-        public object CollectWellbeing()
+        public object CollectWellbeing(string format = "toon")
         {
             try
             {
@@ -964,7 +964,7 @@ namespace Timberbot
         }
 
         // Game event history (droughts, deaths, etc)
-        public object CollectNotifications(int limit = 100, int offset = 0)
+        public object CollectNotifications(string format = "toon", int limit = 100, int offset = 0)
         {
             bool paginated = limit > 0;
             int skipped = 0, emitted = 0;
@@ -984,7 +984,7 @@ namespace Timberbot
         }
 
         // Import/export settings per good per district
-        public object CollectDistribution()
+        public object CollectDistribution(string format = "toon")
         {
             var jw = _cache.Jw.BeginArr();
             foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
@@ -1010,7 +1010,7 @@ namespace Timberbot
         // Uses IThreadSafeWaterMap and IThreadSafeColumnTerrainMap which are designed
         // for background thread access. Occupancy built from cached entity indexes.
         // Soil services wrapped in try/catch as a safety net.
-        public object CollectTiles(int x1, int y1, int x2, int y2)
+        public object CollectTiles(string format = "toon", int x1 = 0, int y1 = 0, int x2 = 0, int y2 = 0)
         {
             var size = _terrainService.Size;
             var stride = _mapIndexService.VerticalStride;
@@ -1106,13 +1106,27 @@ namespace Timberbot
                     long key = (long)x * 100000 + y;
                     occupants.TryGetValue(key, out var occList);
 
-                    jw.OpenObj().Prop("x", x).Prop("y", y).Prop("terrain", terrainHeight).Prop("water", waterDepth, "F1");
+                    jw.OpenObj().Prop("x", x).Prop("y", y).Prop("terrain", terrainHeight);
+                    if (format == "json" || waterDepth > 0) jw.Prop("water", waterDepth, "F1");
                     if (waterContamination > 0) jw.Prop("badwater", (float)System.Math.Round(waterContamination, 2));
                     if (occList != null)
                     {
-                        jw.Arr("occupants");
-                        foreach (var o in occList) jw.OpenObj().Prop("name", o.name).Prop("z", o.z).CloseObj();
-                        jw.CloseArr();
+                        if (format == "json")
+                        {
+                            jw.Arr("occupants");
+                            foreach (var o in occList) jw.OpenObj().Prop("name", o.name).Prop("z", o.z).CloseObj();
+                            jw.CloseArr();
+                        }
+                        else
+                        {
+                            var sb = new System.Text.StringBuilder();
+                            for (int oi = 0; oi < occList.Count; oi++)
+                            {
+                                if (oi > 0) sb.Append('/');
+                                sb.Append(occList[oi].name).Append(':').Append(occList[oi].z);
+                            }
+                            jw.Prop("occupants", sb.ToString());
+                        }
                     }
                     if (entrances.Contains(key)) jw.Prop("entrance", true);
                     if (seedlings.Contains(key)) jw.Prop("seedling", true);

@@ -239,9 +239,9 @@ namespace Timberbot
                     case "/api/summary":
                         return _service.Read.CollectSummary(format);
                     case "/api/alerts":
-                        return _service.Read.CollectAlerts(limit, offset);
+                        return _service.Read.CollectAlerts(format, limit, offset);
                     case "/api/tree_clusters":
-                        return _service.Read.CollectTreeClusters();
+                        return _service.Read.CollectTreeClusters(format);
                     case "/api/resources":
                         return _service.Read.CollectResources(format);
                     case "/api/population":
@@ -255,26 +255,26 @@ namespace Timberbot
                     case "/api/buildings":
                         return _service.Read.CollectBuildings(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/trees":
-                        return _service.Read.CollectTrees(limit, offset, filterName, filterX, filterY, filterRadius);
+                        return _service.Read.CollectTrees(format, limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/crops":
-                        return _service.Read.CollectCrops(limit, offset, filterName, filterX, filterY, filterRadius);
+                        return _service.Read.CollectCrops(format, limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/gatherables":
-                        return _service.Read.CollectGatherables(limit, offset, filterName, filterX, filterY, filterRadius);
+                        return _service.Read.CollectGatherables(format, limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/beavers":
                         return _service.Read.CollectBeavers(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/distribution":
-                        return _service.Read.CollectDistribution();
+                        return _service.Read.CollectDistribution(format);
                     case "/api/science":
-                        return _service.Read.CollectScience();
+                        return _service.Read.CollectScience(format);
                     case "/api/wellbeing":
-                        return _service.Read.CollectWellbeing();
+                        return _service.Read.CollectWellbeing(format);
                     case "/api/notifications":
-                        return _service.Read.CollectNotifications(limit, offset);
+                        return _service.Read.CollectNotifications(format, limit, offset);
                     case "/api/workhours":
                         return _service.Read.CollectWorkHours();
 
                     case "/api/power":
-                        return _service.Read.CollectPowerNetworks();
+                        return _service.Read.CollectPowerNetworks(format);
                     case "/api/speed":
                         return _service.Read.CollectSpeed();
                     case "/api/prefabs":
@@ -390,6 +390,7 @@ namespace Timberbot
                             body?.Value<int>("exportThreshold") ?? -1);
                     case "/api/tiles":
                         return _service.Read.CollectTiles(
+                            format,
                             body?.Value<int>("x1") ?? 0,
                             body?.Value<int>("y1") ?? 0,
                             body?.Value<int>("x2") ?? 0,

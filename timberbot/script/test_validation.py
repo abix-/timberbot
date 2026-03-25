@@ -196,6 +196,15 @@ class TestRunner:
                 return p
         return placements[0] if placements else None
 
+    def tile_has(self, tile, name):
+        """check if a tile has an occupant matching name (handles toon string or json array)"""
+        occ = tile.get("occupants")
+        if isinstance(occ, str):
+            return name in occ
+        if isinstance(occ, list):
+            return any(name in o.get("name", "") for o in occ)
+        return False
+
     def find_building(self, name):
         """find first building matching name, return id"""
         raw = self.bot._get("/api/buildings", params={"limit": 0})
@@ -364,7 +373,7 @@ class TestRunner:
             # verify via map
             tile = self.bot.tiles(sx, sy, sx, sy)
             tiles = tile.get("tiles", [])
-            has_path = any(any("Path" in o.get("name", "") for o in t.get("occupants", [])) for t in tiles)
+            has_path = any(self.tile_has(t, "Path") for t in tiles)
             self.check("verify placement via map", has_path)
 
             # demolish
@@ -374,7 +383,7 @@ class TestRunner:
             # verify gone
             tile2 = self.bot.tiles(sx, sy, sx, sy)
             tiles2 = tile2.get("tiles", [])
-            no_path = not any(any("Path" in o.get("name", "") for o in t.get("occupants", [])) for t in tiles2)
+            no_path = not any(self.tile_has(t, "Path") for t in tiles2)
             self.check("verify demolish via map", no_path)
 
         # multi-tile z mismatch: find a spot where terrain changes within a footprint
@@ -615,8 +624,7 @@ class TestRunner:
                 pname = prefab.split(".")[0]
                 occupied = []
                 for t in region.get("tiles", []):
-                    occs = t.get("occupants", [])
-                    if any(pname in o.get("name", "") for o in occs):
+                    if self.tile_has(t, pname):
                         occupied.append((t["x"], t["y"]))
                 min_x = min(t[0] for t in occupied) if occupied else -1
                 min_y = min(t[1] for t in occupied) if occupied else -1
@@ -1681,14 +1689,15 @@ class TestRunner:
         tiles = result.get("tiles", [])
         self.check("map returns tiles", len(tiles) > 0)
 
-        # check occupants array format (always array, never singular "occupant")
+        # check occupants format (toon = string "Name:z/Name:z", json = array)
         occupied = [t for t in tiles if "occupants" in t]
         if occupied:
             t = occupied[0]
-            self.check("occupants is array", isinstance(t["occupants"], list))
-            occ = t["occupants"][0]
-            self.check("occupant has name", "name" in occ)
-            self.check("occupant has z", "z" in occ)
+            occ = t["occupants"]
+            self.check("occupants is string (toon)", isinstance(occ, str),
+                       f"type={type(occ).__name__}")
+            if isinstance(occ, str):
+                self.check("occupants has name:z format", ":" in occ, f"got {occ}")
         else:
             self.skip("occupants format", "no occupied tiles in test area")
 

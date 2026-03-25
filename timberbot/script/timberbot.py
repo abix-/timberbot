@@ -487,7 +487,12 @@ class Timberbot:
                     row += f"{DIM}?{R}"
                     continue
                 occ = t.get("occupants")
-                occupant = occ[0]["name"] if occ else None
+                if isinstance(occ, str):
+                    occupant = occ.split("/")[0].split(":")[0] if occ else None
+                elif isinstance(occ, list):
+                    occupant = occ[0]["name"] if occ else None
+                else:
+                    occupant = None
                 entrance = t.get("entrance", False)
                 if entrance and not occupant:
                     bg = _zbg(t["terrain"])

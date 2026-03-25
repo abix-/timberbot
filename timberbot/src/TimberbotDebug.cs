@@ -318,7 +318,7 @@ namespace Timberbot
             results.Add(BenchCall("CollectNotifications", n, () => Service.Read.CollectNotifications()));
             results.Add(BenchCall("CollectTreeClusters", nHeavy, () => Service.Read.CollectTreeClusters()));
             results.Add(BenchCall("CollectPrefabs", nHeavy, () => Service.Placement.CollectPrefabs()));
-            results.Add(BenchCall("CollectTiles.20x20", nHeavy, () => Service.Read.CollectTiles(120, 130, 140, 150), 400));
+            results.Add(BenchCall("CollectTiles.20x20", nHeavy, () => Service.Read.CollectTiles("toon", 120, 130, 140, 150), 400));
             results.Add(BenchCall("FindPlacement", nHeavy, () => Service.Placement.FindPlacement("Path", 120, 135, 130, 145)));
 
             // metadata
