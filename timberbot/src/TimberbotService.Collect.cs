@@ -1,3 +1,17 @@
+// TimberbotService.Collect.cs -- All read-only API endpoints.
+//
+// Every GET endpoint is a CollectX() method that reads from the double-buffered
+// cache (background thread safe) and returns either a plain object (serialized to
+// JSON by TimberbotHttpServer) or a StringBuilder of pre-built TOON output.
+//
+// These methods never touch game services directly -- they only read from
+// _buildings.Read, _beavers.Read, _naturalResources.Read, and the thread-safe
+// water/terrain maps.
+//
+// format param: "toon" = compact tabular (default, token-efficient for AI)
+//               "json" = full nested objects (for programmatic access)
+// detail param: "basic" = compact fields, "full" = all fields, "id:N" = single entity
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -600,18 +614,26 @@ namespace Timberbot
 
         public object CollectGatherables()
         {
-            var results = new List<object>();
+            var sb = _sbGatherables;
+            sb.Clear();
+            Jw.OpenArr(sb);
+            bool first = true;
             foreach (var c in _naturalResources.Read)
             {
                 if (c.Gatherable == null) continue;
-                results.Add(new Dictionary<string, object>
-                {
-                    ["id"] = c.Id, ["name"] = c.Name,
-                    ["x"] = c.X, ["y"] = c.Y, ["z"] = c.Z,
-                    ["alive"] = c.Alive
-                });
+                if (!first) Jw.Sep(sb);
+                first = false;
+                Jw.Open(sb);
+                Jw.KeyFirst(sb, "id"); Jw.Int(sb, c.Id);
+                Jw.Key(sb, "name"); Jw.Str(sb, c.Name);
+                Jw.Key(sb, "x"); Jw.Int(sb, c.X);
+                Jw.Key(sb, "y"); Jw.Int(sb, c.Y);
+                Jw.Key(sb, "z"); Jw.Int(sb, c.Z);
+                Jw.Key(sb, "alive"); Jw.Bool(sb, c.Alive);
+                Jw.Close(sb);
             }
-            return results;
+            Jw.CloseArr(sb);
+            return sb.ToString();
         }
 
         // PERF: reads cached beaver data only. Zero GetComponent from background thread.
