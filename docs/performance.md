@@ -36,11 +36,11 @@ All endpoints use cached class indexes, double-buffered reads on background thre
 |---|---|---|---|---|
 | `ping` | 1 | **0.7** | 0 | Listener thread |
 | `summary` | 3500+ | **0.9** | 0 | JwWriter, cached primitives |
-| `buildings` | 522 | **2.1** | **0** | StringBuilder + Jw helper |
-| `buildings detail:full` | 522 | **3.4** | **0** | StringBuilder + Jw, all fields |
-| `trees` | 2983 | **8.6** | **0** | StringBuilder + Jw |
-| `gatherables` | 1504 | **6.7** | **0** | StringBuilder + Jw helper |
-| `beavers` | 65 | **1.1** | **0** | StringBuilder + Jw, position/district/carrying |
+| `buildings` | 522 | **2.1** | **0** | JwWriter |
+| `buildings detail:full` | 522 | **3.4** | **0** | JwWriter, all fields |
+| `trees` | 2983 | **8.6** | **0** | JwWriter |
+| `gatherables` | 1504 | **6.7** | **0** | JwWriter |
+| `beavers` | 65 | **1.1** | **0** | JwWriter, position/district/carrying |
 | `beavers detail:full` | 65 | ~1.5 | **0** | all 38 needs, NeedGroupId, deterioration |
 | `alerts` | 19 | **0.8** | **0** | JwWriter, cached primitives |
 | `resources` | 13 | **0.8** | 0 | JwWriter, district registries |
@@ -62,7 +62,7 @@ All endpoints use cached class indexes, double-buffered reads on background thre
 
 ## Serialization
 
-All endpoints use `JwWriter` -- fluent zero-alloc JSON writer with auto-separator handling. High-volume endpoints (buildings, trees, crops, gatherables, beavers) have dedicated `JwWriter` instances for isolation. Low-volume endpoints share a single `_jw` instance.
+All endpoints use a single shared `JwWriter` instance -- fluent zero-alloc JSON writer with auto-separator handling. One 300KB pre-allocated instance, `Reset()` per request. Serial on listener thread, never concurrent.
 
 **A/B test results (trees, 2985 items):** Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), StringBuilder **2.0ms** (winner). Main-thread cost for reads is **zero**.
 
@@ -99,7 +99,7 @@ Previously fixed: Priority.ToString (static lookup), nutrients dict (persistent 
 | Source | Count | Severity |
 |---|---|---|
 | `$"string interpolation"` in alerts/summary | ~20 per call | negligible |
-| `sb.ToString()` for trees/buildings | 1 per request | unavoidable, reusable `_sb` field, pre-allocated 500KB |
+| `jw.ToString()` | 1 per request | unavoidable, single shared `_jw` instance, pre-allocated 300KB |
 
 All Dictionary, List, anonymous object, LINQ, and Newtonsoft allocs eliminated from request paths.
 
@@ -127,9 +127,11 @@ All Dictionary, List, anonymous object, LINQ, and Newtonsoft allocs eliminated f
 
 | # | Issue | Effort | Details |
 |---|---|---|---|
-| 2 | Webhook rate limiting | 2 hr | ThreadPool exhaustion if user subscribes to all events. Batch per 200ms or per-type throttle |
-| 3 | Webhook circuit breaker | 30 min | Dead URL burns 5s ThreadPool thread per event. After 5 failures, disable webhook + log |
-| 4 | TimberbotService.cs split | 3 hr | God object. Extract WebhookService, CacheService, DebugService |
+| 1 | Webhook rate limiting | 2 hr | **Critical.** ThreadPool exhaustion if user subscribes to all 68 events. `block.set` fires hundreds/sec late-game. Batch per 200ms window, coalesce events, single POST per batch |
+| 2 | Webhook circuit breaker | 30 min | Dead URL burns 5s ThreadPool thread per event. After 5 failures, disable webhook + log |
+| 3 | TimberbotService split | 3-4 hr | 35 constructor params, 4668 lines across 7 partial files. Extract `WebhookManager`, `EntityCache`. Move DI params to only the services that need them |
+| 4 | RefreshCachedState error isolation | 1 hr | One bad entity skips the entire refresh cycle. Wrap each entity refresh in try/catch so building #50 throwing doesn't stale buildings 51-522 |
+| 5 | NeedMgr.GetNeeds() allocation | 1 hr | Marked "unknown" severity. 65 calls + 2470 List.Add per refresh. May allocate new collection per call. Profile and fix or document as acceptable |
 
 ## Optimization history
 
