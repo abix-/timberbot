@@ -435,11 +435,12 @@ namespace Timberbot
         private readonly DoubleBuffer<CachedNaturalResource> _naturalResources = new DoubleBuffer<CachedNaturalResource>();
         private readonly DoubleBuffer<CachedBeaver> _beavers = new DoubleBuffer<CachedBeaver>();
         private readonly Dictionary<int, EntityComponent> _entityCache = new Dictionary<int, EntityComponent>();
-        // separate StringBuilders per endpoint to avoid contention on background thread
-        private readonly System.Text.StringBuilder _sbBuildings = new System.Text.StringBuilder(200000);
-        private readonly System.Text.StringBuilder _sbTrees = new System.Text.StringBuilder(300000);
-        private readonly System.Text.StringBuilder _sbCrops = new System.Text.StringBuilder(100000);
-        private readonly System.Text.StringBuilder _sbGatherables = new System.Text.StringBuilder(100000);
+        // separate JwWriters per high-volume endpoint to avoid contention on background thread
+        private readonly JwWriter _jwBuildings = new JwWriter(200000);
+        private readonly JwWriter _jwTrees = new JwWriter(300000);
+        private readonly JwWriter _jwCrops = new JwWriter(100000);
+        private readonly JwWriter _jwGatherables = new JwWriter(100000);
+        private readonly JwWriter _jwBeavers = new JwWriter(50000);
         // shared JwWriter for low-volume endpoints (serial on listener thread, never concurrent)
         private readonly JwWriter _jw = new JwWriter(200000);
         private static readonly System.Collections.Generic.HashSet<string> _treeSpecies = new System.Collections.Generic.HashSet<string>

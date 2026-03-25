@@ -62,7 +62,7 @@ All endpoints use cached class indexes, double-buffered reads on background thre
 
 ## Serialization
 
-All 14 low/medium-volume endpoints use shared `JwWriter` (zero Dictionary/List/Newtonsoft allocs). 5 high-volume endpoints (buildings, trees, crops, gatherables, beavers) use dedicated `StringBuilder` + `Jw` static helper for isolation.
+All endpoints use `JwWriter` -- fluent zero-alloc JSON writer with auto-separator handling. High-volume endpoints (buildings, trees, crops, gatherables, beavers) have dedicated `JwWriter` instances for isolation. Low-volume endpoints share a single `_jw` instance.
 
 **A/B test results (trees, 2985 items):** Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), StringBuilder **2.0ms** (winner). Main-thread cost for reads is **zero**.
 
@@ -124,14 +124,6 @@ All Dictionary, List, anonymous object, LINQ, and Newtonsoft allocs eliminated f
 | 2 | **sb.ToString() alloc** | 1 string per request (~100-500KB) | StringBuilder must create final string. Unavoidable, once per request |
 
 ## Backlog
-
-### Soon
-
-| # | Issue | Effort | Details |
-|---|---|---|---|
-| 1 | Migrate high-volume endpoints to JwWriter | 2 hr | buildings, trees, crops, gatherables, beavers still use old `Jw` static helper. Convert to `JwWriter` then delete `Jw` class |
-
-### Later
 
 | # | Issue | Effort | Details |
 |---|---|---|---|

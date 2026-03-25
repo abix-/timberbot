@@ -462,171 +462,133 @@ namespace Timberbot
             }
             bool fullDetail = detail == "full" || singleId.HasValue;
 
-            var sb = _sbBuildings;
-            sb.Clear();
-            Jw.OpenArr(sb);
-            bool first = true;
+            var jw = _jwBuildings.Reset().OpenArr();
             foreach (var c in _buildings.Read)
             {
                 if (singleId.HasValue && c.Id != singleId.Value)
                     continue;
-                if (!first) Jw.Sep(sb);
-                first = false;
 
-                Jw.Open(sb);
-                Jw.KeyFirst(sb, "id"); Jw.Int(sb, c.Id);
-                Jw.Key(sb, "name"); Jw.Str(sb, c.Name);
-                Jw.Key(sb, "x"); Jw.Int(sb, c.X);
-                Jw.Key(sb, "y"); Jw.Int(sb, c.Y);
-                Jw.Key(sb, "z"); Jw.Int(sb, c.Z);
-                Jw.Key(sb, "orientation"); Jw.Str(sb, c.Orientation ?? "");
-                Jw.Key(sb, "finished"); Jw.Bool(sb, c.Finished);
-                Jw.Key(sb, "paused"); Jw.Bool(sb, c.Paused);
+                jw.OpenObj()
+                    .Key("id").Int(c.Id)
+                    .Key("name").Str(c.Name)
+                    .Key("x").Int(c.X).Key("y").Int(c.Y).Key("z").Int(c.Z)
+                    .Key("orientation").Str(c.Orientation ?? "")
+                    .Key("finished").Bool(c.Finished)
+                    .Key("paused").Bool(c.Paused);
 
                 if (!fullDetail)
                 {
-                    Jw.Key(sb, "priority"); Jw.Str(sb, c.ConstructionPriority ?? "");
-                    Jw.Key(sb, "workers"); Jw.Str(sb, c.Workplace != null ? $"{c.AssignedWorkers}/{c.DesiredWorkers}" : "");
-                    Jw.Close(sb);
+                    jw.Key("priority").Str(c.ConstructionPriority ?? "")
+                        .Key("workers").Str(c.Workplace != null ? $"{c.AssignedWorkers}/{c.DesiredWorkers}" : "")
+                        .CloseObj();
                     continue;
                 }
 
                 // full detail
-                if (c.Pausable != null) { Jw.Key(sb, "pausable"); Jw.Bool(sb, true); }
-                if (c.HasFloodgate) { Jw.Key(sb, "floodgate"); Jw.Bool(sb, true); Jw.Key(sb, "height"); Jw.Float(sb, c.FloodgateHeight, "F1"); Jw.Key(sb, "maxHeight"); Jw.Float(sb, c.FloodgateMaxHeight, "F1"); }
-                if (c.ConstructionPriority != null) { Jw.Key(sb, "constructionPriority"); Jw.Str(sb, c.ConstructionPriority); }
-                if (c.WorkplacePriorityStr != null) { Jw.Key(sb, "workplacePriority"); Jw.Str(sb, c.WorkplacePriorityStr); }
-                if (c.Workplace != null) { Jw.Key(sb, "maxWorkers"); Jw.Int(sb, c.MaxWorkers); Jw.Key(sb, "desiredWorkers"); Jw.Int(sb, c.DesiredWorkers); Jw.Key(sb, "assignedWorkers"); Jw.Int(sb, c.AssignedWorkers); }
-                if (c.Reachability != null) { Jw.Key(sb, "reachable"); Jw.Bool(sb, !c.Unreachable); }
-                if (c.Mechanical != null) { Jw.Key(sb, "powered"); Jw.Bool(sb, c.Powered); }
+                if (c.Pausable != null) jw.Key("pausable").Bool(true);
+                if (c.HasFloodgate) jw.Key("floodgate").Bool(true).Key("height").Float(c.FloodgateHeight, "F1").Key("maxHeight").Float(c.FloodgateMaxHeight, "F1");
+                if (c.ConstructionPriority != null) jw.Key("constructionPriority").Str(c.ConstructionPriority);
+                if (c.WorkplacePriorityStr != null) jw.Key("workplacePriority").Str(c.WorkplacePriorityStr);
+                if (c.Workplace != null) jw.Key("maxWorkers").Int(c.MaxWorkers).Key("desiredWorkers").Int(c.DesiredWorkers).Key("assignedWorkers").Int(c.AssignedWorkers);
+                if (c.Reachability != null) jw.Key("reachable").Bool(!c.Unreachable);
+                if (c.Mechanical != null) jw.Key("powered").Bool(c.Powered);
                 if (c.PowerNode != null)
                 {
-                    Jw.Key(sb, "isGenerator"); Jw.Bool(sb, c.IsGenerator);
-                    Jw.Key(sb, "isConsumer"); Jw.Bool(sb, c.IsConsumer);
-                    Jw.Key(sb, "nominalPowerInput"); Jw.Int(sb, c.NominalPowerInput);
-                    Jw.Key(sb, "nominalPowerOutput"); Jw.Int(sb, c.NominalPowerOutput);
-                    if (c.PowerDemand > 0 || c.PowerSupply > 0) { Jw.Key(sb, "powerDemand"); Jw.Int(sb, c.PowerDemand); Jw.Key(sb, "powerSupply"); Jw.Int(sb, c.PowerSupply); }
+                    jw.Key("isGenerator").Bool(c.IsGenerator).Key("isConsumer").Bool(c.IsConsumer)
+                        .Key("nominalPowerInput").Int(c.NominalPowerInput).Key("nominalPowerOutput").Int(c.NominalPowerOutput);
+                    if (c.PowerDemand > 0 || c.PowerSupply > 0) jw.Key("powerDemand").Int(c.PowerDemand).Key("powerSupply").Int(c.PowerSupply);
                 }
-                if (c.Site != null) { Jw.Key(sb, "buildProgress"); Jw.Float(sb, c.BuildProgress); Jw.Key(sb, "materialProgress"); Jw.Float(sb, c.MaterialProgress); Jw.Key(sb, "hasMaterials"); Jw.Bool(sb, c.HasMaterials); }
+                if (c.Site != null) jw.Key("buildProgress").Float(c.BuildProgress).Key("materialProgress").Float(c.MaterialProgress).Key("hasMaterials").Bool(c.HasMaterials);
                 if (c.Capacity > 0)
                 {
-                    Jw.Key(sb, "stock"); Jw.Int(sb, c.Stock);
-                    Jw.Key(sb, "capacity"); Jw.Int(sb, c.Capacity);
+                    jw.Key("stock").Int(c.Stock).Key("capacity").Int(c.Capacity);
                     if (c.Inventory != null && c.Inventory.Count > 0)
                     {
-                        Jw.Key(sb, "inventory"); Jw.Open(sb);
-                        bool ifirst = true;
+                        jw.Key("inventory").OpenObj();
                         foreach (var kvp in c.Inventory)
-                        {
-                            if (!ifirst) Jw.Sep(sb);
-                            else { Jw.KeyFirst(sb, kvp.Key); ifirst = false; Jw.Int(sb, kvp.Value); continue; }
-                            Jw.KeyFirst(sb, kvp.Key); Jw.Int(sb, kvp.Value);
-                        }
-                        Jw.Close(sb);
+                            jw.Key(kvp.Key).Int(kvp.Value);
+                        jw.CloseObj();
                     }
                 }
-                if (c.HasWonder) { Jw.Key(sb, "isWonder"); Jw.Bool(sb, true); Jw.Key(sb, "wonderActive"); Jw.Bool(sb, c.WonderActive); }
-                if (c.Dwelling != null) { Jw.Key(sb, "dwellers"); Jw.Int(sb, c.Dwellers); Jw.Key(sb, "maxDwellers"); Jw.Int(sb, c.MaxDwellers); }
-                if (c.HasClutch) { Jw.Key(sb, "isClutch"); Jw.Bool(sb, true); Jw.Key(sb, "clutchEngaged"); Jw.Bool(sb, c.ClutchEngaged); }
+                if (c.HasWonder) jw.Key("isWonder").Bool(true).Key("wonderActive").Bool(c.WonderActive);
+                if (c.Dwelling != null) jw.Key("dwellers").Int(c.Dwellers).Key("maxDwellers").Int(c.MaxDwellers);
+                if (c.HasClutch) jw.Key("isClutch").Bool(true).Key("clutchEngaged").Bool(c.ClutchEngaged);
                 if (c.Manufactory != null)
                 {
                     if (c.Recipes != null && c.Recipes.Count > 0)
                     {
-                        Jw.Key(sb, "recipes"); Jw.OpenArr(sb);
+                        jw.Key("recipes").OpenArr();
                         for (int ri = 0; ri < c.Recipes.Count; ri++)
-                        {
-                            if (ri > 0) Jw.Sep(sb);
-                            Jw.Str(sb, c.Recipes[ri]);
-                        }
-                        Jw.CloseArr(sb);
+                            jw.Str(c.Recipes[ri]);
+                        jw.CloseArr();
                     }
-                    Jw.Key(sb, "currentRecipe"); Jw.Str(sb, c.CurrentRecipe ?? "");
-                    Jw.Key(sb, "productionProgress"); Jw.Float(sb, c.ProductionProgress);
-                    Jw.Key(sb, "readyToProduce"); Jw.Bool(sb, c.ReadyToProduce);
+                    jw.Key("currentRecipe").Str(c.CurrentRecipe ?? "")
+                        .Key("productionProgress").Float(c.ProductionProgress)
+                        .Key("readyToProduce").Bool(c.ReadyToProduce);
                 }
                 if (c.BreedingPod != null)
                 {
-                    Jw.Key(sb, "needsNutrients"); Jw.Bool(sb, c.NeedsNutrients);
+                    jw.Key("needsNutrients").Bool(c.NeedsNutrients);
                     if (c.NutrientStock != null && c.NutrientStock.Count > 0)
                     {
-                        Jw.Key(sb, "nutrients"); Jw.Open(sb);
-                        bool nfirst = true;
+                        jw.Key("nutrients").OpenObj();
                         foreach (var kvp in c.NutrientStock)
-                        {
-                            if (!nfirst) Jw.Sep(sb);
-                            else { Jw.KeyFirst(sb, kvp.Key); nfirst = false; Jw.Int(sb, kvp.Value); continue; }
-                            Jw.KeyFirst(sb, kvp.Key); Jw.Int(sb, kvp.Value);
-                        }
-                        Jw.Close(sb);
+                            jw.Key(kvp.Key).Int(kvp.Value);
+                        jw.CloseObj();
                     }
                 }
-                if (c.EffectRadius > 0) { Jw.Key(sb, "effectRadius"); Jw.Int(sb, c.EffectRadius); }
-                Jw.Close(sb);
+                if (c.EffectRadius > 0) jw.Key("effectRadius").Int(c.EffectRadius);
+                jw.CloseObj();
             }
-            Jw.CloseArr(sb);
-            return sb.ToString();
+            jw.CloseArr();
+            return jw.ToString();
         }
 
         // PERF: cached component refs -- zero GetComponent per item.
         // serial param: dict (default), anon, sb -- for A/B testing serialization methods
         // PERF: StringBuilder serialization -- 2ms for 3000 trees. No Dictionary, no Newtonsoft.
-        private object CollectNaturalResourcesSb(System.Text.StringBuilder sb, System.Collections.Generic.HashSet<string> species)
+        private object CollectNaturalResourcesJw(JwWriter jw, System.Collections.Generic.HashSet<string> species)
         {
-            sb.Clear();
-            Jw.OpenArr(sb);
-            bool first = true;
+            jw.Reset().OpenArr();
             foreach (var c in _naturalResources.Read)
             {
                 if (c.Cuttable == null) continue;
                 if (!species.Contains(c.Name)) continue;
-                if (!first) Jw.Sep(sb);
-                first = false;
-                Jw.Open(sb);
-                Jw.KeyFirst(sb, "id"); Jw.Int(sb, c.Id);
-                Jw.Key(sb, "name"); Jw.Str(sb, c.Name);
-                Jw.Key(sb, "x"); Jw.Int(sb, c.X);
-                Jw.Key(sb, "y"); Jw.Int(sb, c.Y);
-                Jw.Key(sb, "z"); Jw.Int(sb, c.Z);
-                Jw.Key(sb, "marked"); Jw.Bool(sb, c.Marked);
-                Jw.Key(sb, "alive"); Jw.Bool(sb, c.Alive);
-                Jw.Key(sb, "grown"); Jw.Bool(sb, c.Grown);
-                Jw.Key(sb, "growth"); Jw.Float(sb, c.Growth);
-                Jw.Close(sb);
+                jw.OpenObj()
+                    .Key("id").Int(c.Id)
+                    .Key("name").Str(c.Name)
+                    .Key("x").Int(c.X).Key("y").Int(c.Y).Key("z").Int(c.Z)
+                    .Key("marked").Bool(c.Marked)
+                    .Key("alive").Bool(c.Alive)
+                    .Key("grown").Bool(c.Grown)
+                    .Key("growth").Float(c.Growth)
+                    .CloseObj();
             }
-            Jw.CloseArr(sb);
-            return sb.ToString();
+            jw.CloseArr();
+            return jw.ToString();
         }
 
-        public object CollectTrees() => CollectNaturalResourcesSb(_sbTrees, _treeSpecies);
-        public object CollectCrops() => CollectNaturalResourcesSb(_sbCrops, _cropSpecies);
+        public object CollectTrees() => CollectNaturalResourcesJw(_jwTrees, _treeSpecies);
+        public object CollectCrops() => CollectNaturalResourcesJw(_jwCrops, _cropSpecies);
 
         public object CollectGatherables()
         {
-            var sb = _sbGatherables;
-            sb.Clear();
-            Jw.OpenArr(sb);
-            bool first = true;
+            var jw = _jwGatherables.Reset().OpenArr();
             foreach (var c in _naturalResources.Read)
             {
                 if (c.Gatherable == null) continue;
-                if (!first) Jw.Sep(sb);
-                first = false;
-                Jw.Open(sb);
-                Jw.KeyFirst(sb, "id"); Jw.Int(sb, c.Id);
-                Jw.Key(sb, "name"); Jw.Str(sb, c.Name);
-                Jw.Key(sb, "x"); Jw.Int(sb, c.X);
-                Jw.Key(sb, "y"); Jw.Int(sb, c.Y);
-                Jw.Key(sb, "z"); Jw.Int(sb, c.Z);
-                Jw.Key(sb, "alive"); Jw.Bool(sb, c.Alive);
-                Jw.Close(sb);
+                jw.OpenObj()
+                    .Key("id").Int(c.Id)
+                    .Key("name").Str(c.Name)
+                    .Key("x").Int(c.X).Key("y").Int(c.Y).Key("z").Int(c.Z)
+                    .Key("alive").Bool(c.Alive)
+                    .CloseObj();
             }
-            Jw.CloseArr(sb);
-            return sb.ToString();
+            jw.CloseArr();
+            return jw.ToString();
         }
 
         // PERF: reads cached beaver data only. Zero GetComponent from background thread.
-        private readonly System.Text.StringBuilder _sbBeavers = new System.Text.StringBuilder(50000);
-
         public object CollectBeavers(string format = "toon", string detail = "basic")
         {
             int? singleId = null;
@@ -637,84 +599,70 @@ namespace Timberbot
             }
             bool fullDetail = detail == "full" || singleId.HasValue;
 
-            var sb = _sbBeavers;
-            sb.Clear();
-            Jw.OpenArr(sb);
-            bool first = true;
+            var jw = _jwBeavers.Reset().OpenArr();
             foreach (var c in _beavers.Read)
             {
                 if (singleId.HasValue && c.Id != singleId.Value)
                     continue;
-                if (!first) Jw.Sep(sb);
-                first = false;
 
-                Jw.Open(sb);
-                Jw.KeyFirst(sb, "id"); Jw.Int(sb, c.Id);
-                Jw.Key(sb, "name"); Jw.Str(sb, c.Name);
-                Jw.Key(sb, "x"); Jw.Int(sb, c.X);
-                Jw.Key(sb, "y"); Jw.Int(sb, c.Y);
-                Jw.Key(sb, "z"); Jw.Int(sb, c.Z);
-                Jw.Key(sb, "wellbeing"); Jw.Float(sb, c.Wellbeing, "F1");
-                Jw.Key(sb, "isBot"); Jw.Bool(sb, c.IsBot);
+                jw.OpenObj()
+                    .Key("id").Int(c.Id)
+                    .Key("name").Str(c.Name)
+                    .Key("x").Int(c.X).Key("y").Int(c.Y).Key("z").Int(c.Z)
+                    .Key("wellbeing").Float(c.Wellbeing, "F1")
+                    .Key("isBot").Bool(c.IsBot);
 
                 if (!fullDetail)
                 {
                     float wb = c.Wellbeing;
                     string tier = wb >= 16 ? "ecstatic" : wb >= 12 ? "happy" : wb >= 8 ? "okay" : wb >= 4 ? "unhappy" : "miserable";
-                    Jw.Key(sb, "tier"); Jw.Str(sb, tier);
-                    Jw.Key(sb, "workplace"); Jw.Str(sb, c.Workplace ?? "");
+                    jw.Key("tier").Str(tier).Key("workplace").Str(c.Workplace ?? "");
 
                     // critical + unmet need summaries
-                    sb.Append(",\"critical\":\"");
-                    bool cfirst = true;
+                    string critical = "", unmet = "";
                     if (c.Needs != null)
+                    {
                         foreach (var n in c.Needs)
-                            if (n.Critical) { if (!cfirst) sb.Append('+'); cfirst = false; sb.Append(n.Id); }
-                    sb.Append("\",\"unmet\":\"");
-                    bool ufirst = true;
-                    if (c.Needs != null)
-                        foreach (var n in c.Needs)
-                            if (!n.Favorable && !n.Critical && n.Active) { if (!ufirst) sb.Append('+'); ufirst = false; sb.Append(n.Id); }
-                    sb.Append("\"}");
+                        {
+                            if (n.Critical) critical = critical.Length > 0 ? critical + "+" + n.Id : n.Id;
+                            else if (!n.Favorable && n.Active) unmet = unmet.Length > 0 ? unmet + "+" + n.Id : n.Id;
+                        }
+                    }
+                    jw.Key("critical").Str(critical).Key("unmet").Str(unmet).CloseObj();
                     continue;
                 }
 
                 // full detail
-                Jw.Key(sb, "anyCritical"); Jw.Bool(sb, c.AnyCritical);
-                if (c.Workplace != null) { Jw.Key(sb, "workplace"); Jw.Str(sb, c.Workplace); }
-                if (c.District != null) { Jw.Key(sb, "district"); Jw.Str(sb, c.District); }
-                Jw.Key(sb, "hasHome"); Jw.Bool(sb, c.HasHome);
-                Jw.Key(sb, "contaminated"); Jw.Bool(sb, c.Contaminated);
-                if (c.Life != null) { Jw.Key(sb, "lifeProgress"); Jw.Float(sb, c.LifeProgress); }
-                if (c.Deteriorable != null) { Jw.Key(sb, "deterioration"); Jw.Float(sb, c.DeteriorationProgress, "F3"); }
-                if (c.Carrier != null) { Jw.Key(sb, "liftingCapacity"); Jw.Int(sb, c.LiftingCapacity); if (c.Overburdened) { Jw.Key(sb, "overburdened"); Jw.Bool(sb, true); } }
-                if (c.IsCarrying) { Jw.Key(sb, "carrying"); Jw.Str(sb, c.CarryingGood); Jw.Key(sb, "carryAmount"); Jw.Int(sb, c.CarryAmount); }
+                jw.Key("anyCritical").Bool(c.AnyCritical);
+                if (c.Workplace != null) jw.Key("workplace").Str(c.Workplace);
+                if (c.District != null) jw.Key("district").Str(c.District);
+                jw.Key("hasHome").Bool(c.HasHome).Key("contaminated").Bool(c.Contaminated);
+                if (c.Life != null) jw.Key("lifeProgress").Float(c.LifeProgress);
+                if (c.Deteriorable != null) jw.Key("deterioration").Float(c.DeteriorationProgress, "F3");
+                if (c.Carrier != null) { jw.Key("liftingCapacity").Int(c.LiftingCapacity); if (c.Overburdened) jw.Key("overburdened").Bool(true); }
+                if (c.IsCarrying) jw.Key("carrying").Str(c.CarryingGood).Key("carryAmount").Int(c.CarryAmount);
 
                 // needs array
-                Jw.Key(sb, "needs"); Jw.OpenArr(sb);
+                jw.Key("needs").OpenArr();
                 if (c.Needs != null)
                 {
-                    bool nfirst = true;
                     foreach (var n in c.Needs)
                     {
                         if (!fullDetail && !c.IsBot && !n.Active) continue;
-                        if (!nfirst) Jw.Sep(sb);
-                        nfirst = false;
-                        Jw.Open(sb);
-                        Jw.KeyFirst(sb, "id"); Jw.Str(sb, n.Id);
-                        Jw.Key(sb, "points"); Jw.Float(sb, n.Points);
-                        Jw.Key(sb, "wellbeing"); Jw.Int(sb, n.Wellbeing);
-                        Jw.Key(sb, "favorable"); Jw.Bool(sb, n.Favorable);
-                        Jw.Key(sb, "critical"); Jw.Bool(sb, n.Critical);
-                        Jw.Key(sb, "group"); Jw.Str(sb, n.Group);
-                        Jw.Close(sb);
+                        jw.OpenObj()
+                            .Key("id").Str(n.Id)
+                            .Key("points").Float(n.Points)
+                            .Key("wellbeing").Int(n.Wellbeing)
+                            .Key("favorable").Bool(n.Favorable)
+                            .Key("critical").Bool(n.Critical)
+                            .Key("group").Str(n.Group)
+                            .CloseObj();
                     }
                 }
-                Jw.CloseArr(sb);
-                Jw.Close(sb);
+                jw.CloseArr().CloseObj();
             }
-            Jw.CloseArr(sb);
-            return sb.ToString();
+            jw.CloseArr();
+            return jw.ToString();
         }
 
         private struct PowerNetwork { public int Id, Supply, Demand; public List<int> BuildingIndices; }
