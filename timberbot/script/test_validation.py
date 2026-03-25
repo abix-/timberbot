@@ -2085,14 +2085,32 @@ class TestRunner:
         webhooks = jbot.list_webhooks()
         self.check("schema: webhooks (json)", isinstance(webhooks, list), f"got {type(webhooks).__name__}")
 
-        # --- verify toon format returns valid JSON (not double-serialized) ---
+        # --- toon format schema validation ---
         tbot = Timberbot(json_mode=False)
-        for name, fn in [("summary", tbot.summary), ("buildings", tbot.buildings), ("trees", tbot.trees),
-                         ("beavers", tbot.beavers), ("districts", tbot.districts)]:
-            result = fn()
-            is_valid = isinstance(result, (dict, list))
-            self.check(f"toon valid: {name}", is_valid,
-                       f"got {type(result).__name__}: {str(result)[:80]}" if not is_valid else "")
+
+        ts = tbot.summary()
+        errs = validate(ts, {"day": int, "dayProgress": float, "cycle": int, "cycleDay": int,
+                             "isHazardous": bool, "adults": int, "beds": str, "workers": str,
+                             "wellbeing": float, "science": int, "alerts": str})
+        self.check("schema: summary (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        tb = tbot.buildings()
+        errs = validate(tb, [{"id": int, "name": str, "x": int, "y": int, "z": int,
+                              "finished": bool, "paused": bool, "priority": str, "workers": str}])
+        self.check("schema: buildings (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        tt = tbot.trees()
+        errs = validate(tt, [{"id": int, "name": str, "x": int, "alive": bool, "grown": bool, "growth": float}])
+        self.check("schema: trees (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        tbv = tbot.beavers()
+        errs = validate(tbv, [{"id": int, "name": str, "x": int, "wellbeing": float, "isBot": bool,
+                               "tier": str, "workplace": str}])
+        self.check("schema: beavers (toon)", len(errs) == 0, "; ".join(errs[:5]))
+
+        td = tbot.districts()
+        errs = validate(td, [{"name": str, "adults": int, "children": int, "bots": int}])
+        self.check("schema: districts (toon)", len(errs) == 0, "; ".join(errs[:5]))
 
         # --- cross-validate cached data vs live game state via debug endpoint ---
         self.wait_for_refresh()
