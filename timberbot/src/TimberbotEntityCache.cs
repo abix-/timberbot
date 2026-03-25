@@ -164,25 +164,8 @@ namespace Timberbot
                 var c = Buildings.Write[i];
                 try
                 {
-                    // position + footprint: refresh every cycle so moved buildings update
                     if (c.BlockObject != null)
-                    {
                         c.Finished = c.BlockObject.IsFinished;
-                        var coords = c.BlockObject.Coordinates;
-                        c.X = coords.x; c.Y = coords.y; c.Z = coords.z;
-                        c.Orientation = OrientNames[(int)c.BlockObject.Orientation];
-                        c.OccupiedTiles.Clear();
-                        foreach (var block in c.BlockObject.PositionedBlocks.GetAllBlocks())
-                        {
-                            var tc = block.Coordinates;
-                            c.OccupiedTiles.Add((tc.x, tc.y, tc.z));
-                        }
-                        if (c.BlockObject.HasEntrance)
-                        {
-                            var ec = c.BlockObject.PositionedEntrance.Coordinates;
-                            c.EntranceX = ec.x; c.EntranceY = ec.y;
-                        }
-                    }
                     c.Paused = c.Pausable != null && c.Pausable.Paused;
                     c.Unreachable = c.Reachability != null && c.Reachability.IsAnyUnreachable();
                     c.Powered = c.Mechanical != null && c.Mechanical.ActiveAndPowered;
