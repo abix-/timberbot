@@ -37,6 +37,8 @@ namespace Timberbot
         // volatile: read by main thread, written by Stop(). No lock needed for bool.
         private volatile bool _running;
         private readonly bool _debugEnabled;
+        // separate JW for HTTP-layer errors (thread-safe: not shared with read/write paths)
+        private readonly TimberbotJw _jw = new TimberbotJw(512);
 
         // Captures everything needed to process a POST request on the main thread.
         // The JSON body is parsed on the listener thread (cheap) so the main thread
@@ -105,7 +107,7 @@ namespace Timberbot
                 catch (Exception ex)
                 {
                     TimberbotLog.Error("route.post", ex);
-                    Respond(req.Context, 500, "{\"error\":\"internal_error: " + ex.Message.Replace("\"", "'") + "\"}");
+                    Respond(req.Context, 500, _jw.Error("internal_error: " + ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " | ")));
                 }
             }
         }
@@ -162,7 +164,7 @@ namespace Timberbot
                     catch (Exception ex)
                     {
                         TimberbotLog.Error("route.get", ex);
-                        Respond(ctx, 500, "{\"error\":\"internal_error: " + ex.Message.Replace("\"", "'") + "\"}");
+                        Respond(ctx, 500, _jw.Error("internal_error: " + ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " | ")));
                     }
                     continue;
                 }
@@ -184,7 +186,7 @@ namespace Timberbot
                     }
                     catch
                     {
-                        Respond(ctx, 400, "{\"error\":\"invalid_body\"}");
+                        Respond(ctx, 400, _jw.Error("invalid_body"));
                         continue;
                     }
                 }
@@ -403,7 +405,7 @@ namespace Timberbot
                         return _service.WebhookMgr.UnregisterWebhook(
                             body?.Value<string>("id") ?? "");
                     case "/api/debug":
-                        if (!_debugEnabled) return "{\"error\":\"disabled: debug endpoint\"}";
+                        if (!_debugEnabled) return _jw.Error("disabled: debug endpoint");
                         var debugArgs = new System.Collections.Generic.Dictionary<string, string>();
                         if (body != null)
                             foreach (var prop in body.Properties())
@@ -411,7 +413,7 @@ namespace Timberbot
                         return _service.DebugTool.DebugInspect(
                             body?.Value<string>("target") ?? "help", debugArgs);
                     case "/api/benchmark":
-                        if (!_debugEnabled) return "{\"error\":\"disabled: benchmark endpoint\"}";
+                        if (!_debugEnabled) return _jw.Error("disabled: benchmark endpoint");
                         return _service.DebugTool.RunBenchmark(
                             body?.Value<int>("iterations") ?? 100);
                     case "/api/path/place":
@@ -437,12 +439,12 @@ namespace Timberbot
                 }
             }
 
-            return "{\"error\":\"unknown_endpoint\",\"endpoints\":[" +
-                "\"GET /api/ping\",\"GET /api/summary\",\"GET /api/buildings\",\"GET /api/trees\"," +
-                "\"GET /api/beavers\",\"GET /api/resources\",\"GET /api/districts\",\"GET /api/weather\"," +
-                "\"GET /api/time\",\"GET /api/speed\",\"GET /api/prefabs\",\"GET /api/power\"," +
-                "\"POST /api/speed\",\"POST /api/building/place\",\"POST /api/building/demolish\"" +
-                "]}";
+            return _jw.Error("unknown_endpoint", ("endpoints", new[] {
+                "GET /api/ping", "GET /api/summary", "GET /api/buildings", "GET /api/trees",
+                "GET /api/beavers", "GET /api/resources", "GET /api/districts", "GET /api/weather",
+                "GET /api/time", "GET /api/speed", "GET /api/prefabs", "GET /api/power",
+                "POST /api/speed", "POST /api/building/place", "POST /api/building/demolish"
+            }));
         }
 
         // Send a JSON response. If data is already a string (from JW serialization),

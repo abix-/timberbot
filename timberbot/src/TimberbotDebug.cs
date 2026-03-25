@@ -22,6 +22,7 @@ namespace Timberbot
     public class TimberbotDebug
     {
         private readonly PreviewFactory PreviewFactory;
+        private readonly TimberbotJw _jw = new TimberbotJw(512);
         public TimberbotService Service; // set by TimberbotService.Load()
 
         public TimberbotDebug(PreviewFactory previewFactory)
@@ -527,7 +528,7 @@ namespace Timberbot
                     case "get":
                         {
                             var path = Arg("path", "");
-                            if (string.IsNullOrEmpty(path)) { info["error"] = "invalid_param: pass path:_fieldName.nested.field"; break; }
+                            if (string.IsNullOrEmpty(path)) return _jw.Error("invalid_param: pass path:_fieldName.nested.field");
                             var obj = Resolve(path);
                             _debugLastResult = obj;
                             info["path"] = path;
@@ -539,7 +540,7 @@ namespace Timberbot
                         {
                             var path = Arg("path", "");
                             object obj = string.IsNullOrEmpty(path) ? (object)Service : Resolve(path);
-                            if (obj == null) { info["error"] = $"not_found: could not resolve '{path}'"; break; }
+                            if (obj == null) return _jw.Error($"not_found: could not resolve '{path}'");
                             info["type"] = obj.GetType().FullName;
                             var filter = Arg("filter", "");
                             var members = new List<string>();
@@ -564,15 +565,15 @@ namespace Timberbot
                         {
                             var path = Arg("path", "");
                             var methodName = Arg("method", "");
-                            if (string.IsNullOrEmpty(methodName)) { info["error"] = "invalid_param: pass method:MethodName"; break; }
+                            if (string.IsNullOrEmpty(methodName)) return _jw.Error("invalid_param: pass method:MethodName");
                             object obj = string.IsNullOrEmpty(path) ? (object)Service : Resolve(path);
-                            if (obj == null) { info["error"] = $"not_found: could not resolve '{path}'"; break; }
+                            if (obj == null) return _jw.Error($"not_found: could not resolve '{path}'");
                             // find all overloads
                             var methods = obj.GetType().GetMethods(flags);
                             System.Reflection.MethodInfo bestMethod = null;
                             foreach (var m in methods)
                                 if (m.Name == methodName) { bestMethod = m; break; }
-                            if (bestMethod == null) { info["error"] = $"not_found: method {methodName} not found on {obj.GetType().Name}"; break; }
+                            if (bestMethod == null) return _jw.Error($"not_found: method {methodName} not found on {obj.GetType().Name}");
                             // build args from arg0, arg1, etc
                             var methodParams = bestMethod.GetParameters();
                             var callArgs = new object[methodParams.Length];
@@ -600,13 +601,12 @@ namespace Timberbot
                         }
 
                     default:
-                        info["error"] = $"invalid_param: unknown target '{target}'. use: help, get, fields, call, validate, validate_all";
-                        break;
+                        return _jw.Error($"invalid_param: unknown target '{target}'. use: help, get, fields, call, validate, validate_all");
                 }
             }
             catch (System.Exception ex)
             {
-                info["error"] = "internal_error: " + ex.ToString();
+                return _jw.Error("internal_error: " + ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " | "));
             }
             // serialize the info dict via JW (Prop(string, object) handles complex values)
             var jw = Service.Cache.Jw.BeginObj();
