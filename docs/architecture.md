@@ -167,16 +167,16 @@ Mutable values (paused, workers, wellbeing) are up to `refreshIntervalSeconds` s
 ## File structure
 
 ```
-TimberbotService.cs           -- DI constructor (35 game services), lifecycle, settings
-TimberbotService.Cache.cs     -- Double-buffered entity caching, cached classes, indexes, RefreshCachedState
-TimberbotService.Collect.cs   -- All GET read methods (buildings, trees, beavers, summary, etc.)
-TimberbotService.Write.cs     -- All POST write methods (speed, place, demolish, floodgate, etc.)
-TimberbotService.Placement.cs -- Building placement validation, path routing, terrain queries
-TimberbotService.Webhooks.cs  -- Push event notifications to registered URLs
-TimberbotService.Debug.cs     -- Reflection inspector and benchmark endpoint
+TimberbotService.cs           -- Lifecycle, settings, orchestration (7 DI params)
+TimberbotEntityCache.cs       -- Double-buffered entity caching, cached classes, indexes (3 DI params)
+TimberbotRead.cs              -- All GET read endpoints (10 DI params)
+TimberbotWrite.cs             -- All POST write endpoints (20 DI params)
+TimberbotPlacement.cs         -- Building placement, path routing, terrain (13 DI params)
+TimberbotWebhook.cs           -- Batched push event notifications, circuit breaker (5 DI params)
+TimberbotDebug.cs             -- Reflection inspector and benchmark (1 DI param)
 TimberbotHttpServer.cs        -- HttpListener, routing, request/response handling
-JsonWriter.cs                 -- JwWriter fluent zero-alloc JSON writer
-DoubleBuffer.cs               -- Generic double-buffer with Add/RemoveAll/Swap
+TimberbotJw.cs                -- Fluent zero-alloc JSON writer
+TimberbotDoubleBuffer.cs      -- Generic double-buffer with Add/RemoveAll/Swap
 TimberbotLog.cs               -- File-based error logging, timestamped, thread-safe
 TimberbotConfigurator.cs      -- Bindito DI module registration
 ```
