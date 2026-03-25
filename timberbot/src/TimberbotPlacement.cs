@@ -80,6 +80,28 @@ namespace Timberbot
         private static readonly string[] PriorityNames = TimberbotEntityCache.PriorityNames;
         private static string GetPriorityName(Timberborn.PrioritySystem.Priority p) => TimberbotEntityCache.GetPriorityName(p);
 
+        // Faction suffix detected once at startup from building prefab names.
+        // Every prefab has the suffix (e.g. "FarmHouse.IronTeeth", "Stairs.Folktails").
+        // Faction never changes during a game session.
+        private string _factionSuffix = "";
+
+        // Called once from TimberbotService.Load(). Scans any building template name
+        // for a dot-separated suffix to determine the active faction.
+        public void DetectFaction()
+        {
+            foreach (var building in _buildingService.Buildings)
+            {
+                var name = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>()?.TemplateName ?? "";
+                int dot = name.LastIndexOf('.');
+                if (dot > 0)
+                {
+                    _factionSuffix = name.Substring(dot); // e.g. ".IronTeeth" or ".Folktails"
+                    break;
+                }
+            }
+            TimberbotLog.Info($"faction: {_factionSuffix}");
+        }
+
         // ================================================================
 
         // Read the terrain height at a single tile.
@@ -266,7 +288,7 @@ namespace Timberbot
                         // stack platforms: step count of them
                         for (int p = 0; p < step; p++)
                         {
-                            var platResult = PlaceBuilding("Platform.IronTeeth", rampTileX, rampTileY, baseZ + p, "south");
+                            var platResult = PlaceBuilding("Platform" + _factionSuffix, rampTileX, rampTileY, baseZ + p, "south");
                             if (platResult.GetType().GetProperty("id") == null)
                             {
                                 var err = platResult.GetType().GetProperty("error")?.GetValue(platResult);
@@ -277,7 +299,7 @@ namespace Timberbot
 
                         // place stair on top
                         int stairZ = baseZ + step;
-                        var stairResult = PlaceBuilding("Stairs.IronTeeth", rampTileX, rampTileY, stairZ, OrientNames[rampOrient]);
+                        var stairResult = PlaceBuilding("Stairs" + _factionSuffix, rampTileX, rampTileY, stairZ, OrientNames[rampOrient]);
                         if (stairResult.GetType().GetProperty("id") != null)
                             stairs++;
                         else
