@@ -801,10 +801,10 @@ def _top_render(summary, wellbeing_data, trees_data=None, crops_data=None, inter
             pop = d.get("population", {})
             dpop = pop.get("adults", 0) + pop.get("children", 0) + pop.get("bots", 0)
             dres = d.get("resources", {})
-            dwater = dres.get("Water", {})
-            dw = dwater.get("available", dwater) if isinstance(dwater, dict) else dwater
-            dlog = dres.get("Log", {})
-            dl = dlog.get("available", dlog) if isinstance(dlog, dict) else dlog
+            dwater = dres.get("Water", 0)
+            dw = dwater.get("available", 0) if isinstance(dwater, dict) else dwater
+            dlog = dres.get("Log", 0)
+            dl = dlog.get("available", 0) if isinstance(dlog, dict) else dlog
             print(_row(f"  {name:16s} {_BOLD}{dpop:>3}{_RST} pop   Water {_BBLU}{_BOLD}{dw:>4}{_RST}   Log {_BOLD}{dl:>4}{_RST}"))
 
     print(f" {_DIM}{'─' * W}{_RST}")
