@@ -1142,7 +1142,7 @@ Place a building in the world. Validates all tiles before placing: occupancy, te
 
 Find valid placements for a building within a rectangular area. Returns at most 10 results. Water buildings sort by waterDepth first (deepest water preferred). Others sort by: non-flooded > reachable > pathAccess > nearPower.
 
-**CLI:** `timberbot.py find_placement prefab:LumberjackFlag x1:110 y1:125 x2:130 y2:145`
+**CLI:** `timberbot.py find_placement prefab:LumberjackFlag.IronTeeth x1:110 y1:125 x2:130 y2:145`
 
 #### Request Body
 
@@ -1716,6 +1716,27 @@ Reflection-based inspector for game internals. Navigates object graphs, lists fi
 
 !!! warning "Debug only"
     This endpoint uses reflection on game internals. It may break on Timberborn updates. Not intended for production automation.
+
+---
+
+### POST /api/benchmark
+
+Profile all endpoints and hot paths. Requires `debugEndpointEnabled: true` in settings.json.
+
+**CLI:** `timberbot.py benchmark iterations:100`
+
+#### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| iterations | int | no | Number of iterations per endpoint (default 100) |
+
+#### Response
+
+Returns per-endpoint timing and GC allocation counts. Confirmed zero-alloc on hot paths (0 GC0 across 760K calls).
+
+!!! warning "Debug only"
+    Requires `debugEndpointEnabled: true`. Returns `{"error": "disabled: benchmark endpoint"}` when disabled.
 
 ---
 

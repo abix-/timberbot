@@ -11,7 +11,7 @@ Or use it as a scripting API for your own tools, dashboards, and external automa
 [h1]What can the AI see and do?[/h1]
 [b]Every beaver and bot:[/b] position on the map, which district they belong to, all 38 wellbeing needs by category, what they're carrying, workplace, contamination status. Bot energy, grease, and deterioration.
 
-[b]Every building:[/b] workers, power state, production progress, inventory, recipes, construction status, effect radius. Place and demolish buildings with full game-native validation.
+[b]Every building:[/b] workers, power state, production progress, inventory, recipes, construction status, effect radius. Place and demolish buildings with full game-native validation. Smart placement finder returns entrance coordinates, path connectivity, power adjacency, flooding status, and water depth for pumps.
 
 [b]The whole map:[/b] terrain height, water depth, badwater contamination, soil moisture, every occupant on every tile (including vertical stacking). ASCII map with height shading.
 
