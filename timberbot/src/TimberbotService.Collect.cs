@@ -277,19 +277,20 @@ namespace Timberbot
         // PERF: iterates _buildings.Read instead of all entities.
         public object CollectAlerts()
         {
-            var alerts = new List<object>();
+            var jw = _jw.Reset().OpenArr();
             foreach (var c in _buildings.Read)
             {
                 if (c.Workplace != null && c.DesiredWorkers > 0 && c.AssignedWorkers < c.DesiredWorkers)
-                    alerts.Add(new { type = "unstaffed", id = c.Id, name = c.Name, workers = $"{c.AssignedWorkers}/{c.DesiredWorkers}" });
+                    jw.OpenObj().Key("type").Str("unstaffed").Key("id").Int(c.Id).Key("name").Str(c.Name).Key("workers").Str($"{c.AssignedWorkers}/{c.DesiredWorkers}").CloseObj();
 
                 if (c.IsConsumer && !c.Powered)
-                    alerts.Add(new { type = "unpowered", id = c.Id, name = c.Name });
+                    jw.OpenObj().Key("type").Str("unpowered").Key("id").Int(c.Id).Key("name").Str(c.Name).CloseObj();
 
                 if (c.Unreachable)
-                    alerts.Add(new { type = "unreachable", id = c.Id, name = c.Name });
+                    jw.OpenObj().Key("type").Str("unreachable").Key("id").Int(c.Id).Key("name").Str(c.Name).CloseObj();
             }
-            return alerts;
+            jw.CloseArr();
+            return jw.ToString();
         }
 
         // PERF: O(n) entity scan + grid bucketing. Called occasionally for tree management.
@@ -317,13 +318,14 @@ namespace Timberbot
 
             var sorted = new List<int[]>(cells.Values);
             sorted.Sort((a, b) => b[0].CompareTo(a[0]));
-            var results = new List<object>();
+            var jw = _jw.Reset().OpenArr();
             for (int i = 0; i < System.Math.Min(top, sorted.Count); i++)
             {
                 var s = sorted[i];
-                results.Add(new { x = s[2], y = s[3], z = s[4], grown = s[0], total = s[1] });
+                jw.OpenObj().Key("x").Int(s[2]).Key("y").Int(s[3]).Key("z").Int(s[4]).Key("grown").Int(s[0]).Key("total").Int(s[1]).CloseObj();
             }
-            return results;
+            jw.CloseArr();
+            return jw.ToString();
         }
 
         public object CollectTime()
@@ -448,19 +450,19 @@ namespace Timberbot
 
         public object CollectPopulation()
         {
-            var results = new List<object>();
+            var jw = _jw.Reset().OpenArr();
             foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
             {
                 var pop = dc.DistrictPopulation;
-                results.Add(new
-                {
-                    district = dc.DistrictName,
-                    adults = pop != null ? pop.NumberOfAdults : 0,
-                    children = pop != null ? pop.NumberOfChildren : 0,
-                    bots = pop != null ? pop.NumberOfBots : 0
-                });
+                jw.OpenObj()
+                    .Key("district").Str(dc.DistrictName)
+                    .Key("adults").Int(pop != null ? pop.NumberOfAdults : 0)
+                    .Key("children").Int(pop != null ? pop.NumberOfChildren : 0)
+                    .Key("bots").Int(pop != null ? pop.NumberOfBots : 0)
+                    .CloseObj();
             }
-            return results;
+            jw.CloseArr();
+            return jw.ToString();
         }
 
         // PERF: StringBuilder serialization for buildings. Zero Dictionary alloc.

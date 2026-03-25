@@ -440,6 +440,8 @@ namespace Timberbot
         private readonly System.Text.StringBuilder _sbTrees = new System.Text.StringBuilder(300000);
         private readonly System.Text.StringBuilder _sbCrops = new System.Text.StringBuilder(100000);
         private readonly System.Text.StringBuilder _sbGatherables = new System.Text.StringBuilder(100000);
+        // shared JwWriter for low-volume endpoints (serial on listener thread, never concurrent)
+        private readonly JwWriter _jw = new JwWriter(200000);
         private static readonly System.Collections.Generic.HashSet<string> _treeSpecies = new System.Collections.Generic.HashSet<string>
             { "Pine", "Birch", "Oak", "Maple", "Chestnut", "Mangrove" };
         private static readonly System.Collections.Generic.HashSet<string> _cropSpecies = new System.Collections.Generic.HashSet<string>
