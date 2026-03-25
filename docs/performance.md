@@ -39,7 +39,7 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 | `buildings` | 522 | **2.1** | **0** | StringBuilder + Jw helper |
 | `buildings detail:full` | 522 | **3.4** | **0** | StringBuilder + Jw, all fields |
 | `trees` | 2983 | **8.6** | **0** | StringBuilder + Jw |
-| `gatherables` | 1504 | **6.7** | **0** | Dictionary (low priority to convert) |
+| `gatherables` | 1504 | **6.7** | **0** | StringBuilder + Jw helper |
 | `beavers` | 65 | **1.1** | **0** | CachedBeaver + StringBuilder + Jw |
 | `alerts` | 19 | **0.8** | **0** | Cached primitives |
 | `resources` | 13 | **0.8** | 0 | District registries |
@@ -107,11 +107,15 @@ All reads served on the listener thread from double-buffered read lists. Zero ma
 |---|---|---|
 | ~~`new Dictionary` per building~~ | ~~522 per call~~ | **FIXED** -- StringBuilder like trees |
 | ~~`new List<object>` per endpoint~~ | ~~1 per call~~ | **FIXED** -- StringBuilder returns string |
+| ~~`new Dictionary` per beaver~~ | ~~65 per call~~ | **FIXED** -- CachedBeaver + StringBuilder |
+| ~~`new Dictionary` per power network~~ | ~~~17 per call~~ | **FIXED** -- JwWriter, zero Dictionary allocs |
+| ~~`new Dictionary` in summary flat~~ | ~~1 per call + goods~~ | **FIXED** -- JwWriter, inline totals |
+| ~~`List<object>` in find_placement~~ | ~~1 list + N anonymous objects~~ | **FIXED** -- value tuples + JwWriter |
+| ~~LINQ `.Select().ToList()` in map stacking~~ | ~~per stacked tile~~ | **FIXED** -- simple loop + Dictionary |
 | `$"string interpolation"` in alerts/summary | ~20 per call | negligible |
 | `sb.ToString()` for trees/buildings | 1 per request | reusable `_sb` field, pre-allocated 500KB |
-| ~~LINQ `.Select().ToList()` in map stacking~~ | ~~per stacked tile~~ | **FIXED** | replaced with simple loop + Dictionary |
-| ~~`new Dictionary` per beaver~~ | ~~65 per call~~ | **FIXED** -- CachedBeaver + StringBuilder |
-| `new Dictionary` per power network | ~17 per call | expected | response-building, per-request only |
+
+All 14 low/medium-volume endpoints now use shared `JwWriter` (zero Dictionary/List/Newtonsoft allocs). High-volume endpoints (buildings, trees, crops, gatherables, beavers) use dedicated `StringBuilder` + `Jw` static helper.
 
 ### Static values (resolved)
 
@@ -123,21 +127,15 @@ All static values moved to add-time only: EffectRadius, IsGenerator, IsConsumer,
 
 | Source | Allocs/event | Severity | Notes |
 |---|---|---|---|
-| `new { id, name }` data payload in event handler | 1 anonymous object (~30 bytes) | **medium** | allocated BEFORE PushEvent count check -- wasted if 0 webhooks |
-| `JsonConvert.SerializeObject` | 1 string (~100-200 bytes) | medium | only if webhooks registered |
-| `_webhooks.ToArray()` | 1 array (N * 8 bytes) | **medium** | per event fire, should use index loop instead |
-| `new StringContent` on line 159 | 1 object (~200 bytes) | **waste** | created then never used (dead code) |
+| ~~`new { id, name }` data payload before count check~~ | ~~1 anonymous object~~ | **FIXED** | guarded with `if (_webhooks.Count > 0)` |
+| ~~`_webhooks.ToArray()` per event~~ | ~~1 array~~ | **FIXED** | replaced with index loop |
+| ~~Dead `new StringContent` on line 159~~ | ~~1 object~~ | **FIXED** | deleted |
+| `JsonConvert.SerializeObject` | 1 string (~100-200 bytes) | expected | only if webhooks registered |
 | `new StringContent` inside lambda | 1 per webhook | expected | actual HTTP payload |
 | Lambda closure | 1 per webhook (~30 bytes) | expected | ThreadPool work item |
 | `ThreadPool.QueueUserWorkItem` | 1 per webhook | expected | fire-and-forget |
 
-**High-frequency event risk:** `block.set`, `population.changed`, `wind.changed` can fire hundreds/sec during normal gameplay. Each fire allocates data payload + serialization + ToArray even if filtered out by subscriber. With 0 webhooks registered, only the data payload allocation leaks (PushEvent early-exits).
-
-**Fixes to consider:**
-- Move data payload creation inside PushEvent after count check (or use lazy allocation)
-- Remove dead StringContent on line 159
-- Replace `_webhooks.ToArray()` with index loop (main thread only, safe)
-- Document high-frequency events so users filter subscriptions
+**High-frequency event risk:** `block.set`, `population.changed`, `wind.changed` can fire hundreds/sec during normal gameplay. With 0 webhooks registered, PushEvent early-exits with zero allocations. With webhooks registered, each matched event allocates data payload + serialization + StringContent (expected, unavoidable).
 
 ## Remaining bottlenecks (ordered by impact)
 
