@@ -110,8 +110,12 @@ timberbot.py summary                                # colony snapshot: populatio
 timberbot.py buildings                              # all buildings with workers, priority, power
 timberbot.py beavers                                # wellbeing and critical needs per beaver
 timberbot.py set_speed speed:3                      # fast forward (0=pause, 1/2/3)
-timberbot.py map x:120 y:140 radius:10          # ASCII map with terrain height shading
+timberbot.py map x:120 y:140 radius:10              # ASCII map with terrain height shading
+timberbot.py place_path x1:120 y1:140 x2:120 y2:150  # route a path with auto-stairs
 ```
+
+!!! note "Pagination"
+    List endpoints (buildings, beavers, trees, crops) return 100 items by default. Use `limit:0` for all items, or `limit:N offset:M` for pages. Filter server-side with `name:X` or `x:N y:N radius:R`.
 
 ### Visual map
 

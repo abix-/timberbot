@@ -15,7 +15,7 @@ Or use it as a scripting API for your own tools, dashboards, and external automa
 
 [b]The whole map:[/b] terrain height, water depth, badwater contamination, soil moisture, every occupant on every tile (including vertical stacking). ASCII map with height shading.
 
-[b]Colony management:[/b] worker assignment, priorities, crops, tree marking, science unlocks, floodgates, stockpiles, distribution, breeding, clutch control, work schedule, game speed.
+[b]Colony management:[/b] worker assignment, priorities, crops, tree marking, science unlocks, floodgates, stockpiles, distribution, breeding, clutch control, work schedule, game speed. Auto-route paths with stairs across z-levels.
 
 [b]Power networks:[/b] which buildings share a power grid, supply vs demand per network, generator output.
 
@@ -24,6 +24,8 @@ Or use it as a scripting API for your own tools, dashboards, and external automa
 [b]Webhooks:[/b] 68 push notification events -- drought start/end, beaver death, construction complete, game over, and more. Your scripts react instantly instead of polling.
 
 [b]Server-side pagination & filtering:[/b] list endpoints default to 100 items per page. Filter by name or proximity without downloading everything. Works with any faction automatically.
+
+[b]Structured error codes:[/b] machine-readable "code: detail" format. Separate crops and trees endpoints for targeted queries.
 
 [h1]Live dashboard[/h1]
 [code]

@@ -42,6 +42,13 @@
 | [Bot durability](api-reference.md#get-apibeavers) | Deterioration progress (0-1) on mechanical beavers | Yes |
 | [Resource projection](api-reference.md#get-apisummary) | Projected days of logs, planks, gears (logDays, plankDays, gearDays) | Yes |
 | [Webhooks](webhooks.md) | 68 push notification events for game automation (drought, death, construction, weather, power, wonders) | Yes |
+| [Pagination](api-reference.md#pagination) | Server-side limit/offset on all list endpoints (default 100 items) | Yes |
+| [Filtering](api-reference.md#filtering) | Server-side name and proximity filtering on list endpoints | Yes |
+| [Error codes](api-reference.md#error-format) | Structured `"code: detail"` error format with machine-readable prefixes | Yes |
+| [Faction detection](api-reference.md#get-apisummary) | Auto-detects Folktails vs Iron Teeth, uses correct prefab names | Yes |
+| [Path routing](api-reference.md#post-apipathroute) | Auto-stairs and platforms across z-levels, checks science unlocks | Yes |
+| [Crops endpoint](api-reference.md#get-apicrops) | Separate crops listing with growth status, independent from trees | Yes |
+| [Benchmark](api-reference.md#post-apibenchmark) | Per-endpoint performance profiling | Yes |
 
 ## By design
 
