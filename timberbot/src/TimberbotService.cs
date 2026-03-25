@@ -1,17 +1,17 @@
 // TimberbotService.cs -- Core service: DI constructor, fields, lifecycle, settings.
 //
 // This is the main entry point for the Timberbot API mod. Timberborn's Bindito DI
-// system injects ~35 game services into the constructor. The service runs as a game
+// system injects game services into the constructor. The service runs as a game
 // singleton: Load() starts the HTTP server, UpdateSingleton() refreshes cached state
 // every N seconds and drains queued POST requests on the Unity main thread.
 //
-// The actual API logic is split across partial class files:
-//   TimberbotService.Cache.cs      -- Double-buffered entity caching, structs, indexes
-//   TimberbotService.Collect.cs    -- All GET read methods (CollectBuildings, CollectBeavers, etc.)
-//   TimberbotService.Write.cs      -- All POST write methods (SetSpeed, PlaceBuilding, etc.)
-//   TimberbotService.Placement.cs  -- Building placement validation, path routing, terrain queries
-//   TimberbotService.Webhooks.cs   -- Push event notifications to registered URLs
-//   TimberbotService.Debug.cs      -- Reflection inspector and benchmark endpoint
+// API logic lives in separate classes, each with their own DI:
+//   TimberbotEntityCache   -- Double-buffered entity caching, indexes, RefreshCachedState
+//   TimberbotRead          -- All GET read endpoints
+//   TimberbotWrite         -- All POST write endpoints
+//   TimberbotPlacement     -- Building placement, path routing, terrain
+//   TimberbotWebhook       -- Batched push event notifications
+//   TimberbotDebug         -- Reflection inspector and benchmark
 
 using Timberborn.SingletonSystem;
 using UnityEngine;
@@ -25,7 +25,7 @@ namespace Timberbot
     // entity access: no typed queries in Timberborn, so we iterate _entityRegistry.Entities + GetComponent<T>()
     // names: CleanName() strips "(Clone)", ".IronTeeth", ".Folktails" from all output
     // entity lookup: FindEntity() uses per-frame dictionary cache for O(1) writes
-    public partial class TimberbotService : ILoadableSingleton, IUpdatableSingleton, IUnloadableSingleton
+    public class TimberbotService : ILoadableSingleton, IUpdatableSingleton, IUnloadableSingleton
     {
         private readonly EventBus _eventBus;
         public readonly TimberbotEntityCache Cache;
@@ -127,7 +127,7 @@ namespace Timberbot
             _eventBus.Unregister(this);
             _server?.Stop();
             _server = null;
-            Debug.Log("[Timberbot] HTTP server stopped");
+            TimberbotLog.Info("HTTP server stopped");
         }
 
         private float _lastRefreshTime = 0f;
