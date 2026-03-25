@@ -1107,7 +1107,7 @@ namespace Timberbot
                     occupants.TryGetValue(key, out var occList);
 
                     jw.OpenObj().Prop("x", x).Prop("y", y).Prop("terrain", terrainHeight);
-                    if (format == "json" || waterDepth > 0) jw.Prop("water", waterDepth, "F1");
+                    jw.Prop("water", waterDepth, "F1");
                     if (waterContamination > 0) jw.Prop("badwater", (float)System.Math.Round(waterContamination, 2));
                     if (occList != null)
                     {
