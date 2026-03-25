@@ -14,6 +14,7 @@ Usage:
     python test_validation.py --list       # show all test names
 """
 import json
+import subprocess
 import sys
 import time
 
@@ -255,6 +256,7 @@ class TestRunner:
         self.test_clear_planting()
         self.test_clear_trees()
         self.test_migrate()
+        self.test_cli_commands()
         self.test_error_codes()
         self.test_data_accuracy()
         self.test_json_schema()
@@ -1906,6 +1908,55 @@ class TestRunner:
         result = self.bot.migrate(d1, d2, 0)
         self.check("migrate call returns dict", isinstance(result, dict),
                    f"got: {type(result).__name__}")
+
+    def test_cli_commands(self):
+        """Test every CLI command runs without crashing via subprocess."""
+        print("\n=== cli commands ===\n")
+
+        import os
+        script = os.path.join(os.path.dirname(__file__), "timberbot.py")
+        py = sys.executable
+
+        def cli(*args, timeout=10):
+            return subprocess.run(
+                [py, script] + list(args),
+                capture_output=True, text=True, timeout=timeout,
+            )
+
+        # all read commands that take no args
+        read_cmds = [
+            "ping", "summary", "speed", "time", "weather", "population",
+            "resources", "districts", "distribution", "science",
+            "notifications", "workhours", "alerts", "buildings", "trees",
+            "crops", "gatherables", "beavers", "prefabs", "power",
+            "wellbeing", "tree_clusters", "list_webhooks",
+        ]
+        for cmd in read_cmds:
+            r = cli(cmd, "--json")
+            self.check(f"cli {cmd}", r.returncode == 0,
+                       (r.stderr or r.stdout)[:120] if r.returncode != 0 else "")
+
+        # parameterized read commands
+        param_cmds = [
+            ("buildings detail:full", ["buildings", "detail:full", "--json"]),
+            ("beavers detail:full", ["beavers", "detail:full", "--json"]),
+            ("tiles", ["tiles", "--json"]),
+            ("map", ["map", f"x:{self.center_x}", f"y:{self.center_y}", "radius:5"]),
+            ("find buildings", ["find", "source:buildings", "limit:5", "--json"]),
+        ]
+        for name, argv in param_cmds:
+            r = cli(*argv)
+            self.check(f"cli {name}", r.returncode == 0,
+                       (r.stderr or r.stdout)[:120] if r.returncode != 0 else "")
+
+        # top dashboard: run briefly, should not crash
+        try:
+            r = cli("top", "interval:1", timeout=3)
+            has_traceback = "Traceback" in r.stderr
+        except subprocess.TimeoutExpired:
+            has_traceback = False  # timeout is expected (top runs forever)
+        self.check("cli top (no crash)", not has_traceback,
+                   r.stderr[-200:] if has_traceback else "")
 
     def test_error_codes(self):
         """Test structured error codes and TimberbotError exception on every write endpoint."""
