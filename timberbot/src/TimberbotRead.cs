@@ -16,11 +16,17 @@ using System.Collections.Generic;
 using Timberborn.GameCycleSystem;
 using Timberborn.GameDistricts;
 using Timberborn.Goods;
+using Timberborn.MapIndexSystem;
 using Timberborn.ResourceCountingSystem;
+using Timberborn.SoilContaminationSystem;
+using Timberborn.SoilMoistureSystem;
+using Timberborn.TerrainSystem;
 using Timberborn.TimeSystem;
+using Timberborn.WaterSystem;
 using Timberborn.WeatherSystem;
 using Timberborn.WorkSystem;
 using Timberborn.ScienceSystem;
+using UnityEngine;
 using Timberborn.GameDistrictsMigration;
 
 namespace Timberbot
@@ -46,6 +52,13 @@ namespace Timberbot
         private readonly WorkingHoursManager _workingHoursManager;
         private readonly PopulationDistributorRetriever _populationDistributorRetriever;
         private readonly TimberbotEntityCache _cache;  // the cached entity data
+        // terrain/water services for CollectTiles (thread-safe by design)
+        private readonly ITerrainService _terrainService;
+        private readonly IThreadSafeWaterMap _waterMap;
+        private readonly MapIndexService _mapIndexService;
+        private readonly IThreadSafeColumnTerrainMap _terrainMap;
+        private readonly ISoilContaminationService _soilContaminationService;
+        private readonly ISoilMoistureService _soilMoistureService;
 
         public TimberbotRead(
             IGoodService goodService,
@@ -57,7 +70,13 @@ namespace Timberbot
             ScienceService scienceService,
             WorkingHoursManager workingHoursManager,
             PopulationDistributorRetriever populationDistributorRetriever,
-            TimberbotEntityCache cache)
+            TimberbotEntityCache cache,
+            ITerrainService terrainService,
+            IThreadSafeWaterMap waterMap,
+            MapIndexService mapIndexService,
+            IThreadSafeColumnTerrainMap terrainMap,
+            ISoilContaminationService soilContaminationService,
+            ISoilMoistureService soilMoistureService)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -69,6 +88,12 @@ namespace Timberbot
             _workingHoursManager = workingHoursManager;
             _populationDistributorRetriever = populationDistributorRetriever;
             _cache = cache;
+            _terrainService = terrainService;
+            _waterMap = waterMap;
+            _mapIndexService = mapIndexService;
+            _terrainMap = terrainMap;
+            _soilContaminationService = soilContaminationService;
+            _soilMoistureService = soilMoistureService;
         }
 
         // ================================================================
@@ -771,7 +796,125 @@ namespace Timberbot
             }
         }
 
-        // PERF: O(n) entity scan to build occupant lookup, then O(region) tile iteration.
-        // Region-bounded so cost depends on area size, not map size. Called occasionally.
+        // Tile data for a rectangular region. Returns terrain height, water depth,
+        // badwater contamination, occupants (with vertical stacking), soil moisture,
+        // and soil contamination per tile.
+        //
+        // Uses IThreadSafeWaterMap and IThreadSafeColumnTerrainMap which are designed
+        // for background thread access. Occupancy built from cached entity indexes.
+        // Soil services wrapped in try/catch as a safety net.
+        public object CollectTiles(int x1, int y1, int x2, int y2)
+        {
+            var size = _terrainService.Size;
+            var stride = _mapIndexService.VerticalStride;
+
+            if (x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0)
+                return new { mapSize = new { x = size.x, y = size.y, z = size.z } };
+
+            x1 = Mathf.Clamp(x1, 0, size.x - 1);
+            y1 = Mathf.Clamp(y1, 0, size.y - 1);
+            x2 = Mathf.Clamp(x2, 0, size.x - 1);
+            y2 = Mathf.Clamp(y2, 0, size.y - 1);
+
+            // build occupancy from cached indexes (zero GetComponent, thread-safe)
+            var occupants = new Dictionary<long, List<(string name, int z)>>();
+            var entrances = new HashSet<long>();
+            var seedlings = new HashSet<long>();
+            var deadTiles = new HashSet<long>();
+
+            var buildings = _cache.Buildings.Read;
+            for (int i = 0; i < buildings.Count; i++)
+            {
+                var c = buildings[i];
+                if (c.OccupiedTiles == null) continue;
+                foreach (var tile in c.OccupiedTiles)
+                {
+                    if (tile.x >= x1 && tile.x <= x2 && tile.y >= y1 && tile.y <= y2)
+                    {
+                        long key = (long)tile.x * 100000 + tile.y;
+                        if (!occupants.ContainsKey(key))
+                            occupants[key] = new List<(string, int)>();
+                        occupants[key].Add((c.Name, tile.z));
+                    }
+                }
+                if (c.HasEntrance)
+                    entrances.Add((long)c.EntranceX * 100000 + c.EntranceY);
+            }
+
+            var resources = _cache.NaturalResources.Read;
+            for (int i = 0; i < resources.Count; i++)
+            {
+                var r = resources[i];
+                if (r.X >= x1 && r.X <= x2 && r.Y >= y1 && r.Y <= y2)
+                {
+                    long key = (long)r.X * 100000 + r.Y;
+                    if (!occupants.ContainsKey(key))
+                        occupants[key] = new List<(string, int)>();
+                    occupants[key].Add((r.Name, r.Z));
+                    if (!r.Grown) seedlings.Add(key);
+                    if (!r.Alive) deadTiles.Add(key);
+                }
+            }
+
+            var jw = _cache.Jw.Reset().OpenObj();
+            jw.Key("mapSize").OpenObj().Key("x").Int(size.x).Key("y").Int(size.y).Key("z").Int(size.z).CloseObj();
+            jw.Key("region").OpenObj().Key("x1").Int(x1).Key("y1").Int(y1).Key("x2").Int(x2).Key("y2").Int(y2).CloseObj();
+            jw.Key("tiles").OpenArr();
+            for (int x = x1; x <= x2; x++)
+            {
+                for (int y = y1; y <= y2; y++)
+                {
+                    var index2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));
+                    var columnCount = _terrainMap.ColumnCounts[index2D];
+                    int terrainHeight = 0;
+                    if (columnCount > 0)
+                    {
+                        var topIndex = index2D + (columnCount - 1) * stride;
+                        terrainHeight = _terrainMap.GetColumnCeiling(topIndex);
+                    }
+                    float waterHeight = 0f;
+                    float waterContamination = 0f;
+                    var waterCoord = new Vector3Int(x, y, terrainHeight);
+                    try { waterHeight = _waterMap.CeiledWaterHeight(waterCoord); } catch (System.Exception _ex) { TimberbotLog.Error("map.water", _ex); }
+                    try
+                    {
+                        int wIdx2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));
+                        int wColCount = _waterMap.ColumnCount(wIdx2D);
+                        for (int ci = wColCount - 1; ci >= 0; ci--)
+                        {
+                            int wIdx3D = ci * _mapIndexService.VerticalStride + wIdx2D;
+                            var col = _waterMap.WaterColumns[wIdx3D];
+                            if (col.WaterDepth > 0 && col.Contamination > 0) { waterContamination = col.Contamination; break; }
+                        }
+                    }
+                    catch (System.Exception _ex) { TimberbotLog.Error("map.badwater", _ex); }
+
+                    long key = (long)x * 100000 + y;
+                    occupants.TryGetValue(key, out var occList);
+
+                    jw.OpenObj().Key("x").Int(x).Key("y").Int(y).Key("terrain").Int(terrainHeight).Key("water").Float(waterHeight, "F1");
+                    if (waterContamination > 0) jw.Key("badwater").Float((float)System.Math.Round(waterContamination, 2));
+                    if (occList != null)
+                    {
+                        if (occList.Count == 1)
+                            jw.Key("occupant").Str(occList[0].name);
+                        else
+                        {
+                            jw.Key("occupants").OpenArr();
+                            foreach (var o in occList) jw.OpenObj().Key("name").Str(o.name).Key("z").Int(o.z).CloseObj();
+                            jw.CloseArr();
+                        }
+                    }
+                    if (entrances.Contains(key)) jw.Key("entrance").Bool(true);
+                    if (seedlings.Contains(key)) jw.Key("seedling").Bool(true);
+                    if (deadTiles.Contains(key)) jw.Key("dead").Bool(true);
+                    try { if (_soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight))) jw.Key("contaminated").Bool(true); } catch (System.Exception _ex) { TimberbotLog.Error("map.soil", _ex); }
+                    try { if (_soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight))) jw.Key("moist").Bool(true); } catch (System.Exception _ex) { TimberbotLog.Error("map.moisture", _ex); }
+                    jw.CloseObj();
+                }
+            }
+            jw.CloseArr().CloseObj();
+            return jw.ToString();
+        }
     }
 }

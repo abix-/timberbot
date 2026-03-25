@@ -340,7 +340,7 @@ namespace Timberbot
                             body?.Value<string>("import") ?? "",
                             body?.Value<int>("exportThreshold") ?? -1);
                     case "/api/tiles":
-                        return _service.Write.CollectTiles(
+                        return _service.Read.CollectTiles(
                             body?.Value<int>("x1") ?? 0,
                             body?.Value<int>("y1") ?? 0,
                             body?.Value<int>("x2") ?? 0,
