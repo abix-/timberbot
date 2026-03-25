@@ -1,154 +1,199 @@
 # Changelog
 
-## Unreleased
+All notable changes to Timberbot are documented here. Links point to the commit where each feature was added.
+
+[Unreleased]: https://github.com/abix-/TimberbornMods/compare/v0.6.0...HEAD
+
+## [Unreleased]
 
 ### Features
-- Server-side pagination on list endpoints (default 100, `limit=0` for all, `offset` for paging)
-- Server-side name and proximity filtering (`?name=Farm`, `?x=120&y=140&radius=20`)
-- Structured error codes: all errors return machine-readable snake_case codes (`not_found`, `invalid_type`, `invalid_param`, etc.) with optional `detail` field
-- RoutePath validates stairs/platform unlock before placing z-level changes
+- Server-side pagination on list endpoints ([`dea094e`][dea094e])
+- Server-side name and proximity filtering ([`7c7fb80`][7c7fb80])
+- Structured error codes: snake_case `error` values with optional `detail` ([`05b5a0d`][05b5a0d])
+- RoutePath validates stairs/platform unlock before placing ([`668a44b`][668a44b])
 
 ### Internal
-- Automatic faction detection via `FactionService.Current.Id` (replaces hardcoded names)
-- District population and resources cached in RefreshCachedState (zero live calls in summary)
-- TimberbotJw `Result()`/`Error()` one-call response builders, `BeginArr`/`BeginObj`/`End` shortcuts
-- Migrated 200+ Key().Value() calls to Prop/Obj/Arr/RawProp
-- Migrated all 45 multi-line builders to BeginArr/BeginObj/End
-- Cache cross-validation: `validate_all` covers buildings, beavers, natural resources, districts (3876 fields, 0 mismatches)
-- 100% endpoint schema coverage: 57 checks across both TOON and JSON formats
-- Comprehensive inline source comments
+- Faction detection via `FactionService.Current.Id` ([`9d29f3e`][9d29f3e])
+- District population/resources cached in RefreshCachedState ([`e50c432`][e50c432])
+- TimberbotJw `Result()`/`Error()` one-call builders ([`f97f8d8`][f97f8d8])
+- `BeginArr`/`BeginObj`/`End` shortcuts, migrate 45 builders ([`0938b0c`][0938b0c])
+- Migrate 200+ calls to Prop/Obj/Arr/RawProp ([`1fa9cd1`][1fa9cd1])
+- Cache cross-validation: 3876 fields, 0 mismatches ([`f7990b9`][f7990b9])
+- 100% endpoint schema coverage: 57 checks ([`b81e951`][b81e951])
 
-## v0.6.0 (2026-03-24)
+[dea094e]: https://github.com/abix-/TimberbornMods/commit/dea094e
+[7c7fb80]: https://github.com/abix-/TimberbornMods/commit/7c7fb80
+[05b5a0d]: https://github.com/abix-/TimberbornMods/commit/05b5a0d
+[668a44b]: https://github.com/abix-/TimberbornMods/commit/668a44b
+[9d29f3e]: https://github.com/abix-/TimberbornMods/commit/9d29f3e
+[e50c432]: https://github.com/abix-/TimberbornMods/commit/e50c432
+[f97f8d8]: https://github.com/abix-/TimberbornMods/commit/f97f8d8
+[0938b0c]: https://github.com/abix-/TimberbornMods/commit/0938b0c
+[1fa9cd1]: https://github.com/abix-/TimberbornMods/commit/1fa9cd1
+[f7990b9]: https://github.com/abix-/TimberbornMods/commit/f7990b9
+[b81e951]: https://github.com/abix-/TimberbornMods/commit/b81e951
+
+## [v0.6.0] (2026-03-24)
 
 Major performance overhaul. All GET requests now served on a background thread with zero main-thread cost.
 
 ### Architecture
-- Event-driven entity indexes via Timberborn's EventBus -- zero per-frame entity scanning
-- Double-buffered cached classes (`CachedBuilding`, `CachedBeaver`, `CachedNaturalResource`) for thread-safe background reads
-- All GET requests served on background HTTP listener thread -- zero main-thread cost for reads
-- Extracted 8 independent classes from god object: TimberbotService (7 DI), TimberbotRead (10 DI), TimberbotWrite (20 DI), TimberbotPlacement (13 DI), TimberbotEntityCache (5 DI), TimberbotWebhook (5 DI), TimberbotDebug (1 DI), TimberbotHttpServer
-- TimberbotJw: fluent zero-alloc JSON writer replacing Dictionary + Newtonsoft serialization
-- Cadenced cache refresh (default 1s, configurable via settings.json)
-- TimberbotLog: file-based error logging with timestamps and stack traces
-- Zero-alloc hot path confirmed via 10K-iteration benchmark (0 GC0 across 760K API calls)
+- Event-driven entity indexes via EventBus ([`63655ec`][63655ec])
+- Double-buffered cached classes for thread-safe reads ([`13da06a`][13da06a])
+- All GETs on background listener thread ([`6caf19c`][6caf19c])
+- Extract 8 classes from god object ([`8e0c841`][8e0c841], [`67904d6`][67904d6], [`6caf19c`][6caf19c], [`558b156`][558b156], [`55e7501`][55e7501])
+- TimberbotJw: fluent zero-alloc JSON writer ([`329d3ac`][329d3ac])
+- TimberbotLog: file-based error logging ([`a73cf1a`][a73cf1a])
+- Zero-alloc hot path confirmed ([`8b191b2`][8b191b2])
 
 ### Features
-- 68 webhook push notification events (drought, death, construction, weather, power, wonders) with 200ms batching and circuit breaker
-- Separate `/api/trees` and `/api/crops` endpoints (replaces combined natural_resources)
-- `detail` param on buildings and beavers (`basic`/`full`/`id:<id>`)
-- `effectRadius` on ranged effect buildings (monuments)
-- `productionProgress` and `readyToProduce` on manufactories
-- Per-good inventory breakdown on buildings
-- `liftingCapacity` on beavers
-- `/api/benchmark` endpoint for profiling all read endpoints
-- Live `top` dashboard with colony overview
+- 68 webhook push events with 200ms batching and circuit breaker ([`ff4fb12`][ff4fb12], [`a9d5fcb`][a9d5fcb], [`f47484e`][f47484e])
+- Separate `/api/trees` and `/api/crops` endpoints ([`c25de95`][c25de95])
+- `detail` param on buildings and beavers ([`79ccde1`][79ccde1])
+- `effectRadius` on ranged effect buildings ([`79ccde1`][79ccde1])
+- Per-good inventory breakdown on buildings ([`c55ed30`][c55ed30])
+- `liftingCapacity` on beavers ([`c55ed30`][c55ed30])
+- `/api/benchmark` endpoint ([`c24c4b5`][c24c4b5])
+- Live `top` dashboard ([`cfec1a5`][cfec1a5])
+- Flood validation in `find_placement` ([`04feca0`][04feca0])
+- Resource projection: logDays, plankDays, gearDays ([`f0a3ccf`][f0a3ccf])
+- Power networks, beaver position, district, map stacking ([`79ccde1`][79ccde1])
 
 ### Fixes
-- Pause/unpause uses game Pause()/Resume() methods for proper UI icon update
+- Pause/unpause uses game methods for proper UI icon ([`57e7323`][57e7323])
+- Double-buffer race condition on entity add/remove ([`f9a3ffe`][f9a3ffe])
+- JsonWriter double-comma bug and UTF-8 BOM ([`38597be`][38597be], [`e65f7ed`][e65f7ed])
+- Shared reference-type fields between buffers ([`e781c3e`][e781c3e])
 
 ### Tests
-- 247 integration tests, 2000/2000 reliability across 20 endpoints
-- Save-agnostic tests using find_placement for dynamic coords
+- 247 integration tests, 2000/2000 reliability
 
-## v0.5.5 (2026-03-24)
+[v0.6.0]: https://github.com/abix-/TimberbornMods/releases/tag/v0.6.0
+[63655ec]: https://github.com/abix-/TimberbornMods/commit/63655ec
+[13da06a]: https://github.com/abix-/TimberbornMods/commit/13da06a
+[6caf19c]: https://github.com/abix-/TimberbornMods/commit/6caf19c
+[8e0c841]: https://github.com/abix-/TimberbornMods/commit/8e0c841
+[67904d6]: https://github.com/abix-/TimberbornMods/commit/67904d6
+[558b156]: https://github.com/abix-/TimberbornMods/commit/558b156
+[55e7501]: https://github.com/abix-/TimberbornMods/commit/55e7501
+[329d3ac]: https://github.com/abix-/TimberbornMods/commit/329d3ac
+[a73cf1a]: https://github.com/abix-/TimberbornMods/commit/a73cf1a
+[8b191b2]: https://github.com/abix-/TimberbornMods/commit/8b191b2
+[ff4fb12]: https://github.com/abix-/TimberbornMods/commit/ff4fb12
+[a9d5fcb]: https://github.com/abix-/TimberbornMods/commit/a9d5fcb
+[f47484e]: https://github.com/abix-/TimberbornMods/commit/f47484e
+[c25de95]: https://github.com/abix-/TimberbornMods/commit/c25de95
+[79ccde1]: https://github.com/abix-/TimberbornMods/commit/79ccde1
+[c55ed30]: https://github.com/abix-/TimberbornMods/commit/c55ed30
+[c24c4b5]: https://github.com/abix-/TimberbornMods/commit/c24c4b5
+[cfec1a5]: https://github.com/abix-/TimberbornMods/commit/cfec1a5
+[04feca0]: https://github.com/abix-/TimberbornMods/commit/04feca0
+[f0a3ccf]: https://github.com/abix-/TimberbornMods/commit/f0a3ccf
+[57e7323]: https://github.com/abix-/TimberbornMods/commit/57e7323
+[f9a3ffe]: https://github.com/abix-/TimberbornMods/commit/f9a3ffe
+[38597be]: https://github.com/abix-/TimberbornMods/commit/38597be
+[e65f7ed]: https://github.com/abix-/TimberbornMods/commit/e65f7ed
+[e781c3e]: https://github.com/abix-/TimberbornMods/commit/e781c3e
 
-### Features
+## [v0.5.5] (2026-03-24)
+
 - Building material costs and unlock status on prefabs endpoint
 - Per-building stock and capacity for tanks, warehouses, stockpiles
 - Available recipes and current recipe on manufactories
 - Breeding pod nutrient status
 - Beaver activity from game status system
 - Clutch engage/disengage endpoint
-- Per-beaver need breakdown (every unmet need by name with points and wellbeing)
-- `find_planting`: valid irrigated spots within farmhouse range or area
+- Per-beaver need breakdown (every unmet need by name)
+- `find_planting`: irrigated spots within farmhouse range or area
 - `building_range`: work radius for farmhouse, lumberjack, forester, gatherer, scavenger, DC
-
-### Tests
 - 118 integration tests
 
-## v0.5.3 (2026-03-24)
+[v0.5.5]: https://github.com/abix-/TimberbornMods/releases/tag/v0.5.5
+
+## [v0.5.3] (2026-03-24)
 
 - Compass names for orientation everywhere (south, west, north, east)
 - Remove number and single-letter orientation fallbacks
 - PATH setup for timberbot.py CLI
 
-## v0.5.2 (2026-03-24)
+[v0.5.3]: https://github.com/abix-/TimberbornMods/releases/tag/v0.5.3
 
-### Features
+## [v0.5.2] (2026-03-24)
+
 - Wellbeing breakdown endpoint (per-category: Social, Fun, Nutrition, Aesthetics, Awe)
-
-### Fixes
-- Building placement for water buildings (SwimmingPool, DoubleShower)
-- Crop planting validation matches player UI behavior
-- Placement on dead standing trees no longer incorrectly allowed
-
-### Tests
+- Fix building placement for water buildings (SwimmingPool, DoubleShower)
+- Fix crop planting validation to match player UI behavior
+- Fix placement on dead standing trees
 - 91 integration tests
 
-## v0.5.1 (2026-03-23)
+[v0.5.2]: https://github.com/abix-/TimberbornMods/releases/tag/v0.5.2
 
-### Fixes
+## [v0.5.1] (2026-03-23)
+
 - Fix unlock_building deducting science twice
 
-## v0.5.0 (2026-03-23)
+[v0.5.1]: https://github.com/abix-/TimberbornMods/releases/tag/v0.5.1
 
-### Features
-- `find_placement`: scans area for valid building spots with reachability, path access, power adjacency
-- `place_path`: auto-builds stairs and platforms for multi-level z-changes
+## [v0.5.0] (2026-03-23)
+
+- `find_placement`: valid building spots with reachability, path access, power adjacency
+- `place_path`: auto-builds stairs and platforms for z-level changes
 - `summary` includes `foodDays` and `waterDays` resource projections
 - `map` returns `moist` field for irrigated tiles
 - Generic `debug` endpoint for inspecting game internals via reflection
-
-### Fixes
 - Fix crash when reloading a save (HTTP server port conflict)
-- `unlock_building` deducts science and updates UI matching the player's unlock flow
-- `PlaceBuilding` validates stackable blocks (platforms) as valid build surfaces
-
-### Tests
+- `PlaceBuilding` validates stackable blocks as valid build surfaces
 - 81 integration tests
 
-## v0.4.8 (2026-03-23)
+[v0.5.0]: https://github.com/abix-/TimberbornMods/releases/tag/v0.5.0
+
+## [v0.4.8] (2026-03-23)
 
 - Terrain height shading on map tiles (darker = lower, lighter = higher)
 - Empty ground displays z-level digit instead of dots
 - Height legend when multiple z-levels are in view
 
-## v0.4.7 (2026-03-23)
+[v0.4.8]: https://github.com/abix-/TimberbornMods/releases/tag/v0.4.8
 
-### Features
+## [v0.4.7] (2026-03-23)
+
 - `--json` flag for full JSON output alongside default TOON format
-- Summary includes housing, employment, wellbeing, science, and alerts in one call
+- Summary includes housing, employment, wellbeing, science, alerts in one call
 - New endpoints: hauler priority, manufactory recipes, farmhouse planting priority, forester tree priority
 - Alerts, tree clusters, and scan now run server-side
 - Clean names in all output (no more Clone/IronTeeth suffixes)
-
-### Fixes
-- Building unlock works reliably in game UI for all buildings
-- Critical needs count only truly low needs (was counting all survival needs)
-
-### Tests
+- Fix building unlock for all buildings
+- Fix critical needs count (only truly low needs)
 - 88 integration tests
 
-## v0.4.6 (2026-03-22)
+[v0.4.7]: https://github.com/abix-/TimberbornMods/releases/tag/v0.4.7
 
-- Badwater detection: `badwater` field on water tiles (0-1 contamination scale)
+## [v0.4.6] (2026-03-22)
+
+- Badwater detection: `badwater` field on water tiles (0-1 contamination)
 - Soil contamination: `contaminated` field on land tiles near badwater
-- Reject placement when building would clip underground (z must match terrain height)
+- Reject placement when z doesn't match terrain height
 - Dead trees (stumps) no longer block placement
 
-## v0.4.5 (2026-03-22)
+[v0.4.6]: https://github.com/abix-/TimberbornMods/releases/tag/v0.4.6
+
+## [v0.4.5] (2026-03-22)
 
 - Science endpoint returns all 126 unlockable buildings with name, cost, unlock status
 - `unlock_building` updates the game UI toolbar immediately
-- Placing locked buildings blocked with error showing science cost needed
+- Placing locked buildings blocked with error showing science cost
 - 72 integration tests
 
-## v0.4.4 (2026-03-22)
+[v0.4.5]: https://github.com/abix-/TimberbornMods/releases/tag/v0.4.5
+
+## [v0.4.4] (2026-03-22)
 
 - Separate `constructionPriority` and `workplacePriority` on buildings
 - `set_priority` accepts `type:workplace` or `type:construction`
 
-## v0.4.3 (2026-03-22)
+[v0.4.4]: https://github.com/abix-/TimberbornMods/releases/tag/v0.4.4
+
+## [v0.4.3] (2026-03-22)
 
 - Soil contamination on map tiles
 - Per-building nominal power input/output
@@ -159,7 +204,9 @@ Major performance overhaul. All GET requests now served on a background thread w
 - Wellbeing tiers in TOON output
 - 67 integration tests
 
-## v0.4.2 (2026-03-22)
+[v0.4.3]: https://github.com/abix-/TimberbornMods/releases/tag/v0.4.3
+
+## [v0.4.2] (2026-03-22)
 
 - Pagination on list endpoints (limit/offset)
 - Beavers: isBot, contaminated fields
@@ -167,7 +214,9 @@ Major performance overhaul. All GET requests now served on a background thread w
 - Work schedule read/write
 - 60 integration tests
 
-## v0.4.1 (2026-03-22)
+[v0.4.2]: https://github.com/abix-/TimberbornMods/releases/tag/v0.4.2
+
+## [v0.4.1] (2026-03-22)
 
 - Construction progress on buildings (buildProgress, materialProgress, hasMaterials)
 - Building inventory contents
@@ -175,53 +224,66 @@ Major performance overhaul. All GET requests now served on a background thread w
 - Notifications endpoint
 - Alerts helper (unstaffed, unpowered, unreachable)
 
-## v0.4.0 (2026-03-22)
+[v0.4.1]: https://github.com/abix-/TimberbornMods/releases/tag/v0.4.1
 
-### Features
+## [v0.4.0] (2026-03-22)
+
 - Science points endpoint, unlock buildings via API
 - Distribution read/write (import/export per good per district)
 - Buildings: reachable, powered, power network fields
 - Tree cluster finder for optimal lumberjack placement
 - AI playbook (docs/timberbot.md) works as Claude Code skill
+- Fix beaver needs filter (only active needs)
+- Fix speed scale to match game UI
 
-### Fixes
-- Beaver needs filter shows only active needs
-- Speed scale matches game UI (0=pause, 1=normal, 2=fast, 3=fastest)
+[v0.4.0]: https://github.com/abix-/TimberbornMods/releases/tag/v0.4.0
 
-## v0.3.8 (2026-03-22)
+## [v0.3.8] (2026-03-22)
 
 - TOON format CLI output (compact, token-efficient for AI)
 - `beavers` command with wellbeing and critical needs
 - Requires `pip install toons` (falls back to JSON)
 
-## v0.3.7 (2026-03-22)
+[v0.3.8]: https://github.com/abix-/TimberbornMods/releases/tag/v0.3.8
+
+## [v0.3.7] (2026-03-22)
 
 - Named orientations (south/west/north/east instead of numbers)
 - Orientation origin correction for multi-tile buildings
 - 39 integration tests
 
-## v0.3.6 (2026-03-22)
+[v0.3.7]: https://github.com/abix-/TimberbornMods/releases/tag/v0.3.7
+
+## [v0.3.6] (2026-03-22)
 
 - Crop planting validation (skips buildings, water, invalid terrain)
 - Initial regression test suite (test_validation.py)
 
-## v0.3.5 (2026-03-22)
+[v0.3.6]: https://github.com/abix-/TimberbornMods/releases/tag/v0.3.6
+
+## [v0.3.5] (2026-03-22)
 
 - C#-side placement validation (occupancy, water, terrain, off-map checks)
 - Orientation-aware footprint computation
 - Demolition debris no longer blocks placement
 
-## v0.3.4 (2026-03-22)
+[v0.3.5]: https://github.com/abix-/TimberbornMods/releases/tag/v0.3.5
+
+## [v0.3.4] (2026-03-22)
 
 - TOON format map output
 - Colored roguelike map visualization
 - Unique crop type letters
 
-## v0.3.3 (2026-03-22)
+[v0.3.4]: https://github.com/abix-/TimberbornMods/releases/tag/v0.3.4
+
+## [v0.3.3] (2026-03-22)
 
 - Summary includes tree stats (marked grown, marked seedlings, unmarked grown)
 
-## v0.3.2 (2026-03-22)
+[v0.3.3]: https://github.com/abix-/TimberbornMods/releases/tag/v0.3.3
+
+## [v0.3.2] (2026-03-22)
 
 - Full building footprints on map
 - Seedling vs grown tree distinction
@@ -229,6 +291,10 @@ Major performance overhaul. All GET requests now served on a background thread w
 - Planting fix: crops now appear in-game
 - Water building placement validation
 
-## v0.3.1 (2026-03-22)
+[v0.3.2]: https://github.com/abix-/TimberbornMods/releases/tag/v0.3.2
+
+## [v0.3.1] (2026-03-22)
 
 - Initial release with timberbot.py client included
+
+[v0.3.1]: https://github.com/abix-/TimberbornMods/releases/tag/v0.3.1
