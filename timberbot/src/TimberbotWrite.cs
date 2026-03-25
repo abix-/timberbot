@@ -240,6 +240,11 @@ namespace Timberbot
         }
 
         // set construction or workplace priority (VeryLow/Normal/VeryHigh)
+        // Buildings have TWO separate priority systems:
+        //   "construction" -- how urgently builders deliver materials and construct it
+        //   "workplace" -- how urgently workers are assigned to it vs other buildings
+        // Both use the same VeryLow/Low/Normal/High/VeryHigh enum but are set independently.
+        // If type is empty, tries construction first, then workplace.
         public object SetBuildingPriority(int buildingId, string priorityStr, string type)
         {
             var ec = _cache.FindEntity(buildingId);
@@ -249,6 +254,7 @@ namespace Timberbot
             if (!Enum.TryParse<Priority>(priorityStr, true, out var parsed))
                 return new { error = "invalid priority, use: VeryLow, Normal, VeryHigh", value = priorityStr };
 
+            // construction priority: affects how fast builders deliver materials
             if (type == "construction" || string.IsNullOrEmpty(type))
             {
                 var prio = ec.GetComponent<BuilderPrioritizable>();
@@ -287,7 +293,11 @@ namespace Timberbot
             return new { id = buildingId, name = TimberbotEntityCache.CleanName(ec.GameObject.name), haulPrioritized = hp.Prioritized };
         }
 
-        // set which recipe a manufactory produces
+        // DANGEROUS: changing a recipe DESTROYS in-progress items and all consumed materials.
+        // A BotPartFactory mid-way through a BotChassis will lose the planks, gears, and metal
+        // blocks already consumed. Only call this on buildings with no recipe set (new buildings)
+        // or when you're certain the current batch is complete.
+        // Pass an invalid recipe name to get a list of available recipes in the error response.
         public object SetRecipe(int buildingId, string recipeId)
         {
             var ec = _cache.FindEntity(buildingId);
@@ -407,7 +417,9 @@ namespace Timberbot
             };
         }
 
-        // mark/clear rectangular area for tree cutting
+        // Mark or unmark a rectangular area for tree cutting. Lumberjacks will chop
+        // any marked trees within their work range. Uses TreeCuttingArea singleton
+        // which is coordinate-based (not per-entity) -- same system as the player's UI.
         public object MarkCuttingArea(int x1, int y1, int x2, int y2, int z, bool marked)
         {
             var minX = Mathf.Min(x1, x2);

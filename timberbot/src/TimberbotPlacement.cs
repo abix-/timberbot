@@ -82,6 +82,12 @@ namespace Timberbot
 
         // ================================================================
 
+        // Read the terrain height at a single tile.
+        // Timberborn stores terrain as columns: each (x,y) cell has N stacked terrain
+        // segments (for caves, overhangs, etc). We want the ceiling of the topmost
+        // segment, which is the surface height where buildings can sit.
+        // ColumnCounts[index2D] = how many segments at this cell.
+        // topIndex = base + (count-1) * stride = the last (topmost) segment.
         private int GetTerrainHeight(int x, int y)
         {
             var size = _terrainService.Size;
@@ -98,6 +104,14 @@ namespace Timberbot
         // WRITE ENDPOINTS -- Tier 3
         // ================================================================
 
+        // List all building templates (prefabs) the faction can build.
+        // BuildingService.Buildings iterates the registered template definitions, not
+        // placed buildings. Each template has a TemplateSpec (name), BlockObjectSpec
+        // (footprint size), and BuildingSpec (science cost, material cost).
+        //
+        // BuildingCost uses reflection because the property names changed between
+        // Timberborn versions (GoodId vs Id). Collect-then-emit pattern on costs
+        // prevents partial JSON if reflection throws mid-iteration.
         public object CollectPrefabs()
         {
             var jw = _cache.Jw.Reset().OpenArr();
@@ -116,12 +130,14 @@ namespace Timberbot
                 {
                     if (bs.ScienceCost > 0)
                         jw.Key("scienceCost").Int(bs.ScienceCost).Key("unlocked").Bool(_buildingUnlockingService.Unlocked(bs));
-                    // collect costs first, then write -- avoids partial JSON if iteration throws
+                    // collect costs into a temp list, then write to JSON.
+                    // if reflection fails mid-iteration, the JW state is still clean
                     try
                     {
                         var costs = new List<(string good, int amount)>();
                         foreach (var ga in bs.BuildingCost)
                         {
+                            // reflection: try GoodId first (newer API), fall back to Id (older)
                             var goodProp = ga.GetType().GetProperty("GoodId") ?? ga.GetType().GetProperty("Id");
                             var amtProp = ga.GetType().GetProperty("Amount");
                             if (goodProp != null && amtProp != null)
@@ -155,16 +171,24 @@ namespace Timberbot
             return new { id = buildingId, name, demolished = true };
         }
 
-        // route a straight-line path from (x1,y1) to (x2,y2), auto-placing stairs at z-level changes
+        // Route a straight-line path from (x1,y1) to (x2,y2), auto-placing stairs at z-level changes.
+        // Only axis-aligned lines (x1==x2 or y1==y2). This replaces dozens of individual
+        // PlaceBuilding calls with a single intelligent route that handles:
+        //   - flat path tiles on level ground
+        //   - stairs at single z-level changes
+        //   - stacked platforms + stairs for multi-level jumps (e.g. z=2 to z=5 = 3 platforms + stairs)
+        //   - demolishing existing paths that overlap with ramp positions
+        //   - skipping occupied tiles (existing paths, buildings)
         public object RoutePath(int x1, int y1, int x2, int y2)
         {
             if (x1 != x2 && y1 != y2)
                 return new { error = "path must be a straight line (x1==x2 or y1==y2)" };
 
+            // step direction: +1, -1, or 0 for each axis
             int dx = x2 > x1 ? 1 : x2 < x1 ? -1 : 0;
             int dy = y2 > y1 ? 1 : y2 < y1 ? -1 : 0;
-            // stairs orientation: direction of travel when going uphill
-            // south=0, west=1, north=2, east=3
+            // stairs face the direction of uphill travel
+            // enum: south=0, west=1, north=2, east=3
             int stairsOrient = dx > 0 ? 3 : dx < 0 ? 1 : dy > 0 ? 2 : 0;
 
             int placed = 0, skipped = 0, stairs = 0;
@@ -187,9 +211,17 @@ namespace Timberbot
 
                 if (zDiff != 0)
                 {
+                    // Multi-level ramp building:
+                    // levels = how many z-levels to climb/descend
+                    // Each ramp tile gets (step) platforms stacked underneath + 1 stair on top.
+                    // Example: 3-level climb needs 3 tiles, each progressively taller:
+                    //   tile 0: 0 platforms + stair (ground level)
+                    //   tile 1: 1 platform + stair (z+1)
+                    //   tile 2: 2 platforms + stair (z+2)
                     int levels = System.Math.Abs(zDiff);
                     int baseZ = System.Math.Min(prevZ, tz);
                     bool goingUp = zDiff > 0;
+                    // going down = reverse the stair orientation (rotate 180 degrees)
                     int rampOrient = goingUp ? stairsOrient : (stairsOrient + 2) % 4;
 
                     // helper: demolish any path at a tile position
@@ -304,6 +336,28 @@ namespace Timberbot
         // ================================================================
 
 
+        // Find valid building placement spots in a rectangular search area.
+        // This is the most complex method in the mod. It does 5 things:
+        //
+        // 1. REACHABILITY: uses reflection to access the game's internal NavMesh
+        //    and determine which tiles are connected to the district center via paths.
+        //    This is the same data the game uses to draw green/red path indicators.
+        //
+        // 2. PATH SCORING: counts how many path tiles are adjacent to each candidate's
+        //    entrance side. More paths = better connectivity.
+        //
+        // 3. POWER ADJACENCY: checks if any power-conducting building is adjacent to
+        //    the placement footprint. Buildings need to be adjacent to conduct power.
+        //
+        // 4. FLOOD CHECK: reads water height from IThreadSafeWaterMap for every tile
+        //    in the building footprint. Any water = flooded = non-functional.
+        //
+        // 5. PLACEMENT VALIDATION: uses the game's own PreviewFactory to create a
+        //    preview entity, Reposition it, and check IsValid(). This runs the same
+        //    9 validators the player UI uses (terrain, occupancy, water buildings, etc).
+        //
+        // Results sorted by: non-flooded > reachable > pathAccess > nearPower > pathCount.
+        // Returns top 10 candidates.
         public object FindPlacement(string prefabName, int x1, int y1, int x2, int y2)
         {
             var buildingSpec = _buildingService.GetBuildingTemplate(prefabName);
@@ -315,8 +369,10 @@ namespace Timberbot
 
             var size = blockObjectSpec.Size;
 
-            // get all road nodes reachable from DC using the game's own range service
-            // same method the game uses to draw the green-to-red path line
+            // STEP 1: REACHABILITY
+            // Use reflection to access the game's NavMesh internals. These APIs are
+            // private because they're not meant for mods, but we need them to determine
+            // if a building site is connected to the district center via paths.
             var reachableRoadCoords = new HashSet<Vector3Int>();
             try
             {
@@ -352,12 +408,15 @@ namespace Timberbot
             }
             catch (System.Exception _ex) { TimberbotLog.Error("placement", _ex); }
 
-            // collect path and power tile positions for placement scoring
+            // Build HashSets of path and power tile positions for O(1) adjacency checks.
+            // Tiles are encoded as a single long: x*1000000 + y*1000 + z
+            // This avoids allocating Vector3Int keys and works for maps up to 999x999x999.
             var pathTiles = new HashSet<long>();
             var powerTiles = new HashSet<long>();
             foreach (var cb in _cache.Buildings.Read)
             {
                 if (cb.BlockObject == null) continue;
+                // paths and stairs provide connectivity for reachability scoring
                 if (cb.Name.Contains("Path") || cb.Name.Contains("Stairs"))
                 {
                     foreach (var block in cb.BlockObject.PositionedBlocks.GetAllBlocks())
@@ -366,6 +425,7 @@ namespace Timberbot
                         pathTiles.Add((long)c.x * 1000000 + (long)c.y * 1000 + c.z);
                     }
                 }
+                // power-conducting buildings (anything with a PowerNode component)
                 if (cb.PowerNode != null)
                 {
                     foreach (var block in cb.BlockObject.PositionedBlocks.GetAllBlocks())
@@ -379,7 +439,10 @@ namespace Timberbot
             var orientNames = new[] { "south", "west", "north", "east" };
             var results = new List<(int x, int y, int z, int orient, bool pathAccess, int pathCount, bool reachable, bool nearPower, bool flooded)>();
 
-            // PERF: create ONE preview, reuse with Reposition for each candidate
+            // PERF: create ONE preview entity, reuse it for every candidate position.
+            // Preview is a Unity GameObject with validation components attached.
+            // Creating one per candidate would be ~1000x slower (Instantiate + Destroy).
+            // Reposition() moves the same preview to each new position for validation.
             var placeableSpec = buildingSpec.GetSpec<PlaceableBlockObjectSpec>();
             Preview cachedPreview = null;
             try { if (placeableSpec != null) cachedPreview = _previewFactory.Create(placeableSpec); } catch (System.Exception _ex) { TimberbotLog.Error("placement", _ex); }
@@ -393,16 +456,20 @@ namespace Timberbot
                         int tz = GetTerrainHeight(tx, ty);
                         if (tz <= 0) continue;
 
-                        // find best orientation (most path tiles adjacent to entrance side)
+                        // Try all 4 orientations and pick the one with the most adjacent
+                        // path tiles on its entrance side. This maximizes connectivity.
                         int bestOrient = -1;
                         int bestPathCount = -1;
 
                         for (int orient = 0; orient < 4; orient++)
                         {
-                            // validate using cached preview
+                            // validate using the cached preview (game's own placement rules)
                             if (cachedPreview == null) continue;
+                            // orient 1,3 (west/east) swap x and y dimensions of the footprint
                             int vrx = size.x, vry = size.y;
                             if (orient == 1 || orient == 3) { vrx = size.y; vry = size.x; }
+                            // origin correction: the game uses top-right corner as origin for some
+                            // orientations. We always think in bottom-left, so translate.
                             int vgx = tx, vgy = ty;
                             switch (orient)
                             {
@@ -554,11 +621,16 @@ namespace Timberbot
             return jw.ToString();
         }
 
-        // place with full validation before calling Place():
-        // 1. exists + unlocked
-        // 2. origin correction (user coords = bottom-left regardless of orientation)
-        // 3. per-tile: terrain height == z, no water (unless water building), no occupancy (dead trees ok), no underground clipping
-        // 4. Place() only after all checks pass
+        // Place a building at exact coordinates with full validation:
+        // 1. Prefab must exist in BuildingService and be unlocked (if it costs science)
+        // 2. Origin correction: the user specifies bottom-left corner, but the game's
+        //    internal coordinate system uses a different origin per orientation.
+        //    We translate so the caller never has to think about rotation math.
+        // 3. PreviewFactory validation: creates a temporary preview entity and checks
+        //    IsValid() -- this runs the game's own 9 validators (terrain, occupancy,
+        //    water buildings, district boundaries, etc.)
+        // 4. Only after all checks pass: BlockObjectPlacerService.Place() creates the
+        //    real building entity in the game world.
 
         private static int ParseOrientation(string orient)
         {
@@ -603,8 +675,13 @@ namespace Timberbot
                     currentPoints = _scienceService.SciencePoints
                 };
 
-            // correct origin so user coords = bottom-left corner regardless of orientation
-            // orientations 1,3 swap x/y dimensions
+            // Origin correction: user always specifies bottom-left corner (smallest x,y).
+            // The game's Placement struct expects a different origin depending on orientation:
+            //   south (0): bottom-left = same as user    -> gx=x, gy=y
+            //   west  (1): bottom-left is at top-left    -> shift gy up by height-1
+            //   north (2): bottom-left is at top-right   -> shift both gx right, gy up
+            //   east  (3): bottom-left is at bottom-right -> shift gx right by width-1
+            // For orient 1,3: footprint dimensions swap (a 2x4 building becomes 4x2)
             var size = blockObjectSpec.Size;
             int rx = size.x, ry = size.y;
             if (orientation == 1 || orientation == 3) { rx = size.y; ry = size.x; }
@@ -616,7 +693,8 @@ namespace Timberbot
                 case 3: gx = x + rx - 1; break;
             }
 
-            // validate using the game's own preview system (same as player UI)
+            // validate using the game's own preview system -- identical to what the player
+            // sees when placing a building (green = valid, red = invalid)
             if (!ValidatePlacement(buildingSpec, blockObjectSpec, x, y, z, orientation))
                 return new
                 {
@@ -628,7 +706,11 @@ namespace Timberbot
                     orientation = OrientNames[orientation]
                 };
 
-            // validation passed -- place the building
+            // Validation passed -- create the real building.
+            // GetMatchingPlacer returns the right placer for the block type (regular,
+            // stackable, etc). The callback fires synchronously with the new entity.
+            // We capture its InstanceID (same ID used everywhere in the API) and
+            // clean name (strips "(Clone)" suffix Unity adds).
             var orient = (Timberborn.Coordinates.Orientation)orientation;
             var placement = new Placement(new Vector3Int(gx, gy, z), orient,
                 FlipMode.Unflipped);

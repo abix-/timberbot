@@ -29,19 +29,31 @@ namespace Timberbot
             PreviewFactory = previewFactory;
         }
 
+        // Profile all read endpoints and collection patterns to catch performance regressions.
+        //
+        // Methodology:
+        //   1. Warmup: 3-10 iterations to JIT-compile methods and fill caches
+        //   2. Measure: N iterations with Stopwatch (high-resolution timer, not DateTime)
+        //   3. GC tracking: GC.CollectionCount(0) before/after to detect allocations
+        //      (any gc0 > 0 means the code allocated enough to trigger garbage collection)
+        //   4. Timing: ElapsedTicks / Stopwatch.Frequency gives sub-microsecond precision
+        //
+        // Returns per-test: totalMs, perCallMs, gc0 count, item count, pass/fail.
         public object RunBenchmark(int iterations)
         {
             var results = new List<object>();
             var buildings = Service.Cache.Buildings.Read;
 
-            // --- Test 1: BreedingPod.Nutrients foreach vs for ---
+            // --- Test 1: BreedingPod.Nutrients foreach ---
+            // Nutrients is IEnumerable<GoodAmount> (not IList), so foreach is the only
+            // option. This test measures the allocation cost of the enumerator.
             var breedingPods = new List<CachedBuilding>();
             for (int i = 0; i < buildings.Count; i++)
                 if (buildings[i].BreedingPod != null) breedingPods.Add(buildings[i]);
 
             if (breedingPods.Count > 0)
             {
-                // Warmup
+                // warmup: JIT compile + fill CPU caches
                 for (int w = 0; w < 10; w++)
                     for (int pi = 0; pi < breedingPods.Count; pi++)
                         foreach (var ga in breedingPods[pi].BreedingPod.Nutrients) { var _ = ga.Amount; }
@@ -55,8 +67,6 @@ namespace Timberbot
                 long gcForeach = GC.CollectionCount(0) - gcBefore;
                 double foreachMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
 
-                // Nutrients is IEnumerable<GoodAmount> -- not indexable
-                // Test alternative: .ToList() then iterate (trades enumerator box for list alloc)
                 results.Add(new
                 {
                     test = "BreedingPod.Nutrients",
@@ -246,8 +256,14 @@ namespace Timberbot
             }
 
             // --- Endpoint benchmarks: functional + performance ---
+            // BenchCall is a generic benchmark wrapper for any endpoint function.
+            // It warmups (3 calls), then times N iterations with GC tracking.
+            // knownItems overrides auto-detection for endpoints that return strings
+            // (JW-serialized JSON) instead of IList objects.
+            // pass = false if the endpoint returned an error dictionary.
             object BenchCall(string name, int iters, System.Func<object> fn, int knownItems = -1)
             {
+                // warmup: JIT + cache fill
                 object result = null;
                 for (int w = 0; w < 3; w++) result = fn();
 
@@ -258,10 +274,12 @@ namespace Timberbot
                 double bms = bsw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
                 long bgc0 = GC.CollectionCount(0) - bgc;
 
+                // item count: use knownItems if provided, otherwise try IList.Count
                 int items = knownItems >= 0 ? knownItems
                     : result is System.Collections.IList blist ? blist.Count
                     : result != null ? 1 : 0;
 
+                // functional check: did the endpoint return an error?
                 bool pass = !(result is Dictionary<string, object> bd && bd.ContainsKey("error"));
 
                 return new
@@ -276,6 +294,8 @@ namespace Timberbot
                 };
             }
 
+            // Heavy endpoints (CollectBuildings.full, CollectTiles, FindPlacement) run 10x
+            // fewer iterations because they're O(n*fields) and would take too long at full count
             int nHeavy = System.Math.Max(n / 10, 1);
             int nb = Service.Cache.Buildings.Read.Count;
             int nv = Service.Cache.Beavers.Read.Count;
@@ -322,19 +342,36 @@ namespace Timberbot
         // ================================================================
         // DEBUG -- reflection-based game state inspector
         // ================================================================
-        // all params passed as args dict from POST body
+        // Walk any game object graph at runtime using .NET reflection.
+        // This is the "god mode" inspector -- it can read/write any field, call any
+        // method, and chain results using $ (last result). Gated behind settings.json
+        // because it can crash the game if you call the wrong method.
+        //
+        // Targets:
+        //   help    -- list available root objects and examples
+        //   get     -- resolve a dot-path and return the value (e.g. "_scienceService.SciencePoints")
+        //   fields  -- list all fields/properties/methods on an object (with optional filter)
+        //   call    -- call a method with typed arguments (auto-parses int, float, Vector3Int, etc.)
+        //   validate     -- compare cached vs live state for one entity
+        //   validate_all -- compare cached vs live for ALL entities
+        //
+        // $ chaining: the result of any get/call is stored in _debugLastResult.
+        // Next call can use "$.PropertyName" to continue from where the last call left off.
         private static object _debugLastResult;
 
         public object DebugInspect(string target, Dictionary<string, string> args = null)
         {
             var info = new Dictionary<string, object>();
+            // include both public and private members -- we need access to game internals
             var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public
                       | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static;
             args = args ?? new Dictionary<string, string>();
 
             string Arg(string key, string def = "") => args.ContainsKey(key) ? args[key] : def;
 
-            // parse a string arg into any supported type
+            // Parse a string argument into a typed .NET object.
+            // Supports primitives (int, float, bool, string) and Unity types (Vector3Int, Vector3, Vector2Int).
+            // $ = reference to _debugLastResult for chaining calls.
             object ParseArg(string argStr, System.Type pType)
             {
                 if (argStr == "$") return _debugLastResult;
@@ -364,11 +401,19 @@ namespace Timberbot
                 return null;
             }
 
-            // resolve a dot-path from this service to a nested object
-            // supports: fields, properties, parameterless methods, list indexing [N], GetComponent<T>
-            // $ = last debug result (for chaining calls)
-            // e.g. "_districtCenterRegistry.FinishedDistrictCenters.[0].AllComponents"
-            // e.g. "$.HasNode" (call method on last result)
+            // Resolve a dot-separated path from TimberbotService to any nested object.
+            // Each segment can be:
+            //   fieldName     -- reads a field (public or private via reflection)
+            //   PropertyName  -- reads a property
+            //   MethodName    -- calls a parameterless method
+            //   [N]           -- indexes into IList or IEnumerable
+            //   ~TypeName     -- finds a component by type name (like GetComponent<T>)
+            //   $             -- starts from _debugLastResult instead of Service
+            //
+            // Examples:
+            //   "_districtCenterRegistry.FinishedDistrictCenters.[0].AllComponents"
+            //   "$.HasNode" (call method on last result)
+            //   "_navMeshService.~NodeIdService" (find component by type)
             object Resolve(string path)
             {
                 var parts = path.Split('.');
@@ -576,9 +621,18 @@ namespace Timberbot
         // ValidatePlacement lives in TimberbotService.Placement.cs (used by PlaceBuilding)
 
         // ================================================================
-        // VALIDATE -- compare cached double-buffer data against live game components.
-        // Reads the cached struct from Service.Cache.Buildings.Read/Service.Cache.Beavers.Read AND the live
-        // Unity component in the same call. Reports per-field match/mismatch.
+        // VALIDATE -- data accuracy verification.
+        //
+        // The double-buffer cache (TimberbotEntityCache) is refreshed every ~1 second.
+        // This validator reads the CACHED value from the Read buffer AND the LIVE value
+        // directly from the Unity component, then compares them field by field.
+        //
+        // Why this matters: if the cache is wrong, the AI makes decisions based on stale
+        // or incorrect data. The validator catches these bugs before production.
+        //
+        // Numeric comparison uses Convert.ToDouble on both sides because the cache may
+        // store an int (e.g. wellbeing=19) while the live component returns float (19.0f).
+        // A tolerance of 0.5 handles rounding from Math.Round in the cache.
         // ================================================================
 
         private object ValidateEntity(int id)
@@ -675,6 +729,10 @@ namespace Timberbot
             return new { error = "entity not found in cache", id };
         }
 
+        // Validate every entity in the cache against live game state.
+        // Returns aggregate stats (entities, fields, mismatches) and only includes
+        // entities with mismatches in the failures list (to keep response small).
+        // Used by test_validation.py to verify data accuracy across the entire colony.
         private object ValidateAll()
         {
             var results = new List<object>();

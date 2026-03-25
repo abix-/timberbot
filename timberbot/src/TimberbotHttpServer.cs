@@ -32,18 +32,23 @@ namespace Timberbot
         private readonly TimberbotService _service;
         private readonly HttpListener _listener;
         private readonly Thread _listenerThread;
+        // thread-safe queue: background listener thread enqueues, Unity main thread dequeues
         private readonly ConcurrentQueue<PendingRequest> _pending = new ConcurrentQueue<PendingRequest>();
+        // volatile: read by main thread, written by Stop(). No lock needed for bool.
         private volatile bool _running;
         private readonly bool _debugEnabled;
 
+        // Captures everything needed to process a POST request on the main thread.
+        // The JSON body is parsed on the listener thread (cheap) so the main thread
+        // only does game state mutations (expensive, must be single-threaded).
         class PendingRequest
         {
-            public HttpListenerContext Context;
-            public string Route;
-            public string Method;
-            public JObject Body;
-            public string Format;
-            public string Detail;
+            public HttpListenerContext Context;  // HTTP response handle
+            public string Route;                 // e.g. "/api/building/pause"
+            public string Method;                // "POST" (GET never queued)
+            public JObject Body;                 // parsed JSON body (null if no body)
+            public string Format;                // "toon" or "json" (response format)
+            public string Detail;                // "basic" or "full" (response detail level)
         }
 
         public TimberbotHttpServer(int port, TimberbotService service, bool debugEnabled = false)
@@ -52,6 +57,9 @@ namespace Timberbot
             _debugEnabled = debugEnabled;
             _listener = new HttpListener();
 
+            // Try wildcard binding first (http://+:port/) which accepts connections
+            // from any interface (LAN, WSL, etc). Requires admin/URL reservation on Windows.
+            // Falls back to localhost-only if that fails (no admin needed).
             try
             {
                 _listener.Prefixes.Add($"http://+:{port}/");
@@ -76,6 +84,9 @@ namespace Timberbot
             try { _listener?.Stop(); } catch { }
         }
 
+        // Called every frame from UpdateSingleton on the Unity main thread.
+        // Drains up to 10 queued POST requests per frame to avoid frame spikes.
+        // 10/frame at 60fps = 600 requests/sec throughput, more than enough for any AI.
         public void DrainRequests()
         {
             int processed = 0;
@@ -119,7 +130,9 @@ namespace Timberbot
                     continue;
                 }
 
-                // extract query params
+                // format: "toon" = flat key:value pairs (default, human-readable)
+                //         "json" = full nested JSON (machine-parseable)
+                // detail: "basic" = compact fields, "full" = all fields including inventory/needs
                 var format = ctx.Request.QueryString["format"] ?? "toon";
                 var detail = ctx.Request.QueryString["detail"] ?? "basic";
                 // GET requests: handled RIGHT HERE on the background listener thread.
@@ -163,6 +176,8 @@ namespace Timberbot
                     }
                 }
 
+                // POST requests can override format/detail in the JSON body too
+                // (body takes priority over query string)
                 format = body?.Value<string>("format") ?? format;
                 detail = body?.Value<string>("detail") ?? detail;
 
@@ -178,9 +193,18 @@ namespace Timberbot
             }
         }
 
+        // Central routing table. Maps HTTP method + path to service method calls.
+        // GET endpoints return cached data (thread-safe, called from background thread).
+        // POST endpoints mutate game state (called from main thread via DrainRequests).
+        //
+        // Notable exceptions to the GET=read/POST=write convention:
+        //   /api/tiles (POST): reads terrain data but needs body params for the region
+        //   /api/building/range (POST): reads work radius but needs body param for building ID
+        //   /api/placement/find (POST): reads valid spots but needs body params for search area
+        // These are logically reads but use POST because GET has no request body.
         private object RouteRequest(string path, string method, JObject body, string format = "toon", string detail = "basic")
         {
-            // GET endpoints (read)
+            // GET endpoints (read from double-buffered cache -- zero contention with game thread)
             if (method == "GET")
             {
                 switch (path)
@@ -233,7 +257,7 @@ namespace Timberbot
                 }
             }
 
-            // POST endpoints (write)
+            // POST endpoints (write -- executed on Unity main thread via queue)
             if (method == "POST")
             {
                 switch (path)
@@ -419,10 +443,14 @@ namespace Timberbot
             };
         }
 
+        // Send a JSON response. If data is already a string (from JW serialization),
+        // use it directly. Otherwise serialize via Newtonsoft.Json (for anonymous objects).
+        // StreamWriter writes directly to the output stream -- no intermediate byte[] allocation.
         private void Respond(HttpListenerContext ctx, int statusCode, object data)
         {
             try
             {
+                // JW endpoints return pre-serialized strings; anonymous objects need serialization
                 var json = data is string s ? s : JsonConvert.SerializeObject(data);
                 ctx.Response.StatusCode = statusCode;
                 ctx.Response.ContentType = "application/json";
