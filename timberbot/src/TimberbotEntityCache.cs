@@ -387,36 +387,32 @@ namespace Timberbot
                     if (counter != null)
                     {
                         cd.Resources = new Dictionary<string, (int, int)>();
-                        // pre-serialize toon format: "Water":50,"Log":236
-                        var dj = _districtJw.Reset();
-                        bool first = true;
+                        // pre-serialize toon: {"Water":50,"Log":236} -> strip outer {}
+                        var dj = _districtJw.Reset().OpenObj();
                         foreach (var goodId in goods)
                         {
                             var rc = counter.GetResourceCount(goodId);
                             if (rc.AllStock > 0)
                             {
                                 cd.Resources[goodId] = (rc.AvailableStock, rc.AllStock);
-                                if (!first) dj.Raw(",");
-                                first = false;
-                                dj.Raw("\"").Raw(goodId).Raw("\":").Int(rc.AvailableStock);
+                                dj.Key(goodId).Int(rc.AvailableStock);
                             }
                         }
-                        cd.ResourcesToon = dj.ToString();
+                        dj.CloseObj();
+                        var toonStr = dj.ToString();
+                        cd.ResourcesToon = toonStr.Length > 2 ? toonStr.Substring(1, toonStr.Length - 2) : "";
 
-                        // pre-serialize json format: "Water":{"available":50,"all":54}
-                        dj.Reset();
-                        first = true;
+                        // pre-serialize json: {"Water":{"available":50,"all":54}} -> strip outer {}
+                        dj.Reset().OpenObj();
                         foreach (var goodId in goods)
                         {
                             var rc = counter.GetResourceCount(goodId);
                             if (rc.AllStock > 0)
-                            {
-                                if (!first) dj.Raw(",");
-                                first = false;
-                                dj.Raw("\"").Raw(goodId).Raw("\":{\"available\":").Int(rc.AvailableStock).Raw(",\"all\":").Int(rc.AllStock).Raw("}");
-                            }
+                                dj.Key(goodId).OpenObj().Key("available").Int(rc.AvailableStock).Key("all").Int(rc.AllStock).CloseObj();
                         }
-                        cd.ResourcesJson = dj.ToString();
+                        dj.CloseObj();
+                        var jsonStr = dj.ToString();
+                        cd.ResourcesJson = jsonStr.Length > 2 ? jsonStr.Substring(1, jsonStr.Length - 2) : "";
                     }
                     Districts.Add(cd);
                 }
