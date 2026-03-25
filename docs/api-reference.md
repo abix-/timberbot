@@ -39,6 +39,49 @@ python timberbot.py --json <command>       # JSON format
 python timberbot.py <command> key:value    # with parameters
 ```
 
+### Pagination
+
+List endpoints (buildings, beavers, trees, crops, gatherables, alerts, notifications) support server-side pagination via query params:
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `limit` | 100 | Max items to return. `0` = unlimited (all items) |
+| `offset` | 0 | Skip first N items |
+
+When `limit > 0`, response wraps in a metadata object:
+
+```json
+{"total": 200, "offset": 50, "limit": 10, "items": [...]}
+```
+
+When `limit=0`, returns a flat array (backward compatible):
+
+```json
+[{...}, {...}, ...]
+```
+
+The Python CLI passes `limit=0` by default (AI/scripts typically want all data).
+
+### Server-side Filtering
+
+List endpoints also support server-side filtering via query params:
+
+| Param | Description |
+|-------|-------------|
+| `name` | Case-insensitive substring match on entity name |
+| `x` | X coordinate for proximity filter |
+| `y` | Y coordinate for proximity filter |
+| `radius` | Manhattan distance radius (requires x and y) |
+
+Filters apply BEFORE pagination. The `total` in paginated responses reflects filtered count.
+
+```
+GET /api/buildings?name=Farm                    # all FarmHouses
+GET /api/buildings?x=120&y=140&radius=20        # buildings near (120,140)
+GET /api/trees?name=Pine&limit=10               # first 10 pine trees
+GET /api/beavers?name=Bot&limit=0               # all bots (unlimited)
+```
+
 ---
 
 ## Game State
@@ -512,7 +555,7 @@ All placed buildings with state.
 
 **CLI:** `python timberbot.py buildings` | `python timberbot.py --json buildings`
 
-Pagination available in Python client only: `bot.buildings(limit=10, offset=20)`
+Supports server-side pagination (`?limit=10&offset=20`) and filtering (`?name=Farm`). See [Pagination](#pagination) above.
 
 #### Response (format=json)
 
@@ -594,7 +637,7 @@ All trees (alive and dead).
 
 **CLI:** `python timberbot.py trees`
 
-Pagination available in Python client only: `bot.trees(limit=50)`
+Supports server-side pagination (`?limit=10`) and filtering (`?name=Pine`). See [Pagination](#pagination) above.
 
 #### Response
 
@@ -663,7 +706,7 @@ All beavers and bots with wellbeing and needs.
 
 **CLI:** `python timberbot.py beavers` | `python timberbot.py --json beavers`
 
-Pagination available in Python client only: `bot.beavers(limit=10)`
+Supports server-side pagination (`?limit=10`) and filtering (`?name=Bot`). See [Pagination](#pagination) above.
 
 #### Detail modes
 

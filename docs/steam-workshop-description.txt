@@ -23,6 +23,8 @@ Or use it as a scripting API for your own tools, dashboards, and external automa
 
 [b]Webhooks:[/b] 68 push notification events -- drought start/end, beaver death, construction complete, game over, and more. Your scripts react instantly instead of polling.
 
+[b]Server-side pagination & filtering:[/b] list endpoints default to 100 items per page. Filter by name or proximity without downloading everything. Works with any faction automatically.
+
 [h1]Live dashboard[/h1]
 [code]
 timberbot.py top

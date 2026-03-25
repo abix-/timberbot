@@ -128,7 +128,7 @@ Pre-serialized strings detected in `Respond()`: `data is string s ? s : JsonConv
 68 event handlers registered on Timberborn's `EventBus`. Events accumulate in `_pendingEvents` list on the main thread. `FlushWebhooks()` runs every `webhookBatchMs` (default 200ms) from `UpdateSingleton`, sending ONE batched JSON array POST per webhook via `ThreadPool.QueueUserWorkItem`.
 
 - **Batching:** Configurable via `webhookBatchMs` in settings.json (0 = immediate, default 200ms)
-- **Circuit breaker:** 5 consecutive failures disables the webhook, logged via `TimberbotLog`
+- **Circuit breaker:** N consecutive failures (default 30, configurable) disables the webhook, logged via `TimberbotLog`
 - **Zero allocations with no subscribers:** `PushEvent()` early-exits if `_webhooks.Count == 0`
 
 ## Settings
@@ -149,19 +149,36 @@ Pre-serialized strings detected in `Respond()`: `data is string s ? s : JsonConv
 
 Loaded once on game load. Missing file or fields use defaults.
 
+## Pagination & Filtering
+
+List endpoints support server-side pagination and filtering via query params:
+
+- **Pagination:** `?limit=100` (default), `?offset=0`. `limit=0` = unlimited (flat array).
+- **Filtering:** `?name=Farm` (substring), `?x=120&y=140&radius=20` (proximity).
+- Filters apply BEFORE pagination. `total` reflects filtered count.
+- `PassesFilter()` helper in TimberbotRead keeps filtering DRY across all list endpoints.
+- Paginated response: `{total, offset, limit, items:[...]}`. Unlimited: flat `[...]`.
+
+## Faction Detection
+
+`FactionService.Current.Id` (from `Timberborn.GameFactionSystem`) detects the active faction
+at startup. The suffix (e.g. `.IronTeeth`, `.Folktails`) is cached in `TimberbotEntityCache.FactionSuffix`
+and used by `CleanName()` (strip faction from entity names) and `RoutePath()` (correct stairs/platform prefabs).
+
 ## Request flow
 
 ### GET (background thread, zero main-thread cost)
 
 ```
-HTTP request -> ListenLoop -> RouteRequest -> read _*Read buffers
+HTTP request -> ListenLoop -> parse query params (format, detail, limit, offset, name, x, y, radius)
+  -> RouteRequest -> read _*Read buffers -> PassesFilter -> pagination
   -> TimberbotJw serialization -> Respond -> HTTP response
 ```
 
 ### POST (main thread via queue)
 
 ```
-HTTP request -> ListenLoop -> parse body -> enqueue PendingRequest
+HTTP request -> ListenLoop -> parse body + query params -> enqueue PendingRequest
   -> [next frame] DrainRequests -> RouteRequest -> mutate game state
   -> Respond -> HTTP response
 ```

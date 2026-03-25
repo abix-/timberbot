@@ -50,10 +50,11 @@ Beavers die if food or water hits 0.
 | `prefabs` | Building templates with sizes, material costs, science cost |
 | `ping` | Health check -- is the game running? |
 | **Search/filter** | |
-| `find source:buildings name:X` | Look up building IDs by name |
-| `find source:buildings x:X y:Y radius:R` | Find buildings near a point |
+| `find source:buildings name:X` | Server-side name filter (case-insensitive substring) |
+| `find source:buildings x:X y:Y radius:R` | Server-side proximity filter (Manhattan distance) |
 | `find source:trees name:Pine` | Find specific tree types |
 | `building_range building_id:X` | Work radius tiles for farmhouse, lumberjack, forester, gatherer |
+| **Pagination** | List endpoints default to 100 items. Use `limit:0` for all. Response: `{total, offset, limit, items}` |
 | **Placement** | |
 | `find_placement prefab:Name x1:X y1:Y x2:X2 y2:Y2` | Find valid building spots sorted by reachability |
 | `find_planting crop:Kohlrabi building_id:X` | Find irrigated spots within farmhouse range |
