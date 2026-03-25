@@ -142,11 +142,8 @@ namespace Timberbot
             }
             // count adults only (children can't work, shouldn't count as idle haulers)
             int totalAdults = 0;
-            foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
-            {
-                var pop = dc.GetComponent<DistrictPopulation>();
-                if (pop != null) totalAdults += pop.NumberOfAdults;
-            }
+            foreach (var dc in _cache.Districts)
+                totalAdults += dc.Adults;
             int homeless = System.Math.Max(0, beaverCount - occupiedBeds);
             int unemployed = System.Math.Max(0, totalAdults - assignedWorkers);
             float avgWellbeing = beaverCount > 0 ? totalWellbeing / beaverCount : 0;
@@ -190,34 +187,26 @@ namespace Timberbot
             jw.Key("cropReady").Int(cropReady);
             jw.Key("cropGrowing").Int(cropGrowing);
 
-            // population + resources (first district)
+            // population + resources (from cached district snapshot)
             int totalFood = 0, totalWater = 0, logStock = 0, plankStock = 0, gearStock = 0;
-            var goods = _goodService.Goods;
-            foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+            foreach (var dc in _cache.Districts)
             {
-                var pop = dc.DistrictPopulation;
-                jw.Key("adults").Int(pop.NumberOfAdults);
-                jw.Key("children").Int(pop.NumberOfChildren);
-                jw.Key("bots").Int(pop.NumberOfBots);
-                var counter = dc.GetComponent<DistrictResourceCounter>();
-                if (counter != null)
+                jw.Key("adults").Int(dc.Adults);
+                jw.Key("children").Int(dc.Children);
+                jw.Key("bots").Int(dc.Bots);
+                if (dc.Resources != null)
                 {
-                    foreach (var goodId in goods)
+                    foreach (var kvp in dc.Resources)
                     {
-                        var rc = counter.GetResourceCount(goodId);
-                        if (rc.AllStock > 0)
-                        {
-                            int stock = rc.AvailableStock;
-                            jw.Key(goodId).Int(stock);
-                            if (goodId == "Water") totalWater += stock;
-                            else if (goodId == "Berries" || goodId == "Kohlrabi" || goodId == "Carrot" || goodId == "Potato"
-                                  || goodId == "Wheat" || goodId == "Bread" || goodId == "Cassava" || goodId == "Corn"
-                                  || goodId == "Eggplant" || goodId == "Soybean" || goodId == "MapleSyrup")
-                                totalFood += stock;
-                            else if (goodId == "Log") logStock = stock;
-                            else if (goodId == "Plank") plankStock = stock;
-                            else if (goodId == "Gear") gearStock = stock;
-                        }
+                        jw.Key(kvp.Key).Int(kvp.Value);
+                        if (kvp.Key == "Water") totalWater += kvp.Value;
+                        else if (kvp.Key == "Berries" || kvp.Key == "Kohlrabi" || kvp.Key == "Carrot" || kvp.Key == "Potato"
+                              || kvp.Key == "Wheat" || kvp.Key == "Bread" || kvp.Key == "Cassava" || kvp.Key == "Corn"
+                              || kvp.Key == "Eggplant" || kvp.Key == "Soybean" || kvp.Key == "MapleSyrup")
+                            totalFood += kvp.Value;
+                        else if (kvp.Key == "Log") logStock = kvp.Value;
+                        else if (kvp.Key == "Plank") plankStock = kvp.Value;
+                        else if (kvp.Key == "Gear") gearStock = kvp.Value;
                     }
                 }
             }

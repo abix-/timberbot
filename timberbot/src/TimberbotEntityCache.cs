@@ -725,5 +725,12 @@ namespace Timberbot
                 return c;
             }
         }
+
+        public class CachedDistrict
+        {
+            public string Name;
+            public int Adults, Children, Bots;
+            public Dictionary<string, int> Resources;
+        }
     }
 }
