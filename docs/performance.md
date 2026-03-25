@@ -81,41 +81,9 @@ All reads served on the listener thread from double-buffered read lists. Zero ma
 
 ## GC pressure
 
-`RefreshCachedState` runs every 1s (cadenced, configurable via settings.json).
+See [zero-alloc.md](zero-alloc.md) for the full allocation audit with per-field analysis, grades, and remaining gaps.
 
-### Per-refresh open items
-
-| Source | Allocs/refresh | Severity | Notes |
-|---|---|---|---|
-| `foreach` over `BreedingPod.Nutrients` | ~5 enumerator boxes | **minor** | foreach boxes enumerator (~40 bytes). Only ~5 breeding pods |
-| `foreach` over `Inventories.AllInventories` | ~500 enumerator boxes | **minor** | all buildings with inventories. At 1Hz = ~500 small allocs/sec |
-| `foreach` over `inv.Stock` (nested) | ~500+ enumerator boxes | **minor** | nested inside AllInventories loop, same boxing |
-| `NeedMgr.GetNeeds()` per beaver | 65 calls + 2470 List.Add | **unknown** | may allocate new collection per call. 38 needs x 65 beavers |
-
-Previously fixed: Priority.ToString (static lookup), nutrients dict (persistent + clear), static values (add-time only), 60fps refresh (cadenced to 1s), Orientation (add-time), CleanName (ref-compare).
-
-### Per-request open items
-
-| Source | Count | Severity |
-|---|---|---|
-| `$"string interpolation"` in alerts/summary | ~20 per call | negligible |
-| `jw.ToString()` | 1 per request | unavoidable, single shared `_jw` instance, pre-allocated 300KB |
-
-All Dictionary, List, anonymous object, LINQ, and Newtonsoft allocs eliminated from request paths.
-
-### Webhook allocations
-
-68 event handlers registered on EventBus. `PushEvent()` early-exits if `_webhooks.Count == 0` -- zero allocations with no subscribers. Events batch into `_pendingEvents` list, flushed every `webhookBatchMs` (default 200ms).
-
-| Source | Allocs | Notes |
-|---|---|---|
-| `JsonConvert.SerializeObject` per event | 1 string (~100-200 bytes) | on main thread, only if webhooks registered |
-| `_pendingEvents.Add` tuple | 1 per event | main thread list append |
-| `StringBuilder` per flush per webhook | 1 per webhook per batch | builds JSON array payload |
-| `new StringContent` per flush per webhook | 1 per webhook per batch | HTTP payload |
-| `ThreadPool.QueueUserWorkItem` per flush | 1 per webhook per batch | fire-and-forget |
-
-**Batching mitigates high-frequency events:** `block.set` (hundreds/sec) accumulates in `_pendingEvents` but only produces ONE ThreadPool item per webhook per 200ms flush. Circuit breaker disables dead URLs after 5 failures.
+**Summary:** Hot path (RefreshCachedState) is 98% zero-alloc. All containers reused via Clear(). Structs for stack alloc. RefChanged to skip string derivation. Indexed for-loops to avoid enumerator boxing. One unavoidable ToString() per HTTP response. Webhooks zero-alloc when no subscribers.
 
 ## Remaining bottlenecks
 
