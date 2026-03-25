@@ -25,7 +25,12 @@ using Timberborn.TimeSystem;
 using Timberborn.WaterSystem;
 using Timberborn.WeatherSystem;
 using Timberborn.WorkSystem;
+using Timberborn.Buildings;
+using Timberborn.NeedSpecs;
+using Timberborn.NeedSystem;
+using Timberborn.NotificationSystem;
 using Timberborn.ScienceSystem;
+using Timberborn.GameFactionSystem;
 using UnityEngine;
 
 namespace Timberbot
@@ -49,7 +54,11 @@ namespace Timberbot
         private readonly SpeedManager _speedManager;
         private readonly ScienceService _scienceService;
         private readonly WorkingHoursManager _workingHoursManager;
-        private readonly TimberbotEntityCache _cache;  // the cached entity data
+        private readonly BuildingService _buildingService;
+        private readonly BuildingUnlockingService _buildingUnlockingService;
+        private readonly FactionNeedService _factionNeedService;
+        private readonly NotificationSaver _notificationSaver;
+        private readonly TimberbotEntityCache _cache;
         // terrain/water services for CollectTiles (thread-safe by design)
         private readonly ITerrainService _terrainService;
         private readonly IThreadSafeWaterMap _waterMap;
@@ -73,7 +82,11 @@ namespace Timberbot
             MapIndexService mapIndexService,
             IThreadSafeColumnTerrainMap terrainMap,
             ISoilContaminationService soilContaminationService,
-            ISoilMoistureService soilMoistureService)
+            ISoilMoistureService soilMoistureService,
+            BuildingService buildingService,
+            BuildingUnlockingService buildingUnlockingService,
+            FactionNeedService factionNeedService,
+            NotificationSaver notificationSaver)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -90,6 +103,10 @@ namespace Timberbot
             _terrainMap = terrainMap;
             _soilContaminationService = soilContaminationService;
             _soilMoistureService = soilMoistureService;
+            _buildingService = buildingService;
+            _buildingUnlockingService = buildingUnlockingService;
+            _factionNeedService = factionNeedService;
+            _notificationSaver = notificationSaver;
         }
 
         // ================================================================
@@ -190,19 +207,53 @@ namespace Timberbot
 
             if (format == "json")
             {
-                return new
-                {
-                    time = CollectTime(),
-                    weather = CollectWeather(),
-                    districts = CollectDistricts("json"),
-                    trees = new { markedGrown = treeMarkedGrown, markedSeedling = treeMarkedSeedling, unmarkedGrown = treeUnmarkedGrown },
-                    crops = new { ready = cropReady, growing = cropGrowing },
-                    housing = new { occupiedBeds, totalBeds, homeless },
-                    employment = new { assigned = assignedWorkers, vacancies = totalVacancies, unemployed },
-                    wellbeing = new { average = System.Math.Round(avgWellbeing, 1), miserable, critical },
-                    science = _scienceService.SciencePoints,
-                    alerts = new { unstaffed = alertUnstaffed, unpowered = alertUnpowered, unreachable = alertUnreachable }
-                };
+                var jj = _cache.Jw.Reset().OpenObj();
+                jj.Key("time").OpenObj()
+                    .Key("dayNumber").Int(_dayNightCycle.DayNumber)
+                    .Key("dayProgress").Float((float)_dayNightCycle.DayProgress)
+                    .Key("partialDayNumber").Float((float)_dayNightCycle.PartialDayNumber)
+                    .CloseObj();
+                jj.Key("weather").OpenObj()
+                    .Key("cycle").Int(_gameCycleService.Cycle)
+                    .Key("cycleDay").Int(_gameCycleService.CycleDay)
+                    .Key("isHazardous").Bool(_weatherService.IsHazardousWeather)
+                    .Key("temperateWeatherDuration").Int(_weatherService.TemperateWeatherDuration)
+                    .Key("hazardousWeatherDuration").Int(_weatherService.HazardousWeatherDuration)
+                    .Key("cycleLengthInDays").Int(_weatherService.CycleLengthInDays)
+                    .CloseObj();
+                jj.Key("districts").Raw(CollectDistricts("json") as string);
+                jj.Key("trees").OpenObj()
+                    .Key("markedGrown").Int(treeMarkedGrown)
+                    .Key("markedSeedling").Int(treeMarkedSeedling)
+                    .Key("unmarkedGrown").Int(treeUnmarkedGrown)
+                    .CloseObj();
+                jj.Key("crops").OpenObj()
+                    .Key("ready").Int(cropReady)
+                    .Key("growing").Int(cropGrowing)
+                    .CloseObj();
+                jj.Key("housing").OpenObj()
+                    .Key("occupiedBeds").Int(occupiedBeds)
+                    .Key("totalBeds").Int(totalBeds)
+                    .Key("homeless").Int(homeless)
+                    .CloseObj();
+                jj.Key("employment").OpenObj()
+                    .Key("assigned").Int(assignedWorkers)
+                    .Key("vacancies").Int(totalVacancies)
+                    .Key("unemployed").Int(unemployed)
+                    .CloseObj();
+                jj.Key("wellbeing").OpenObj()
+                    .Key("average").Float((float)avgWellbeing, "F1")
+                    .Key("miserable").Int(miserable)
+                    .Key("critical").Int(critical)
+                    .CloseObj();
+                jj.Key("science").Int(_scienceService.SciencePoints);
+                jj.Key("alerts").OpenObj()
+                    .Key("unstaffed").Int(alertUnstaffed)
+                    .Key("unpowered").Int(alertUnpowered)
+                    .Key("unreachable").Int(alertUnreachable)
+                    .CloseObj();
+                jj.CloseObj();
+                return jj.ToString();
             }
 
             // build flat summary matching TOON output format
@@ -752,6 +803,118 @@ namespace Timberbot
                 endHours = _workingHoursManager.EndHours,
                 areWorkingHours = _workingHoursManager.AreWorkingHours
             };
+        }
+
+        // Science points and unlockable buildings with costs and status
+        public object CollectScience()
+        {
+            var jw = _cache.Jw.Reset().OpenObj().Key("points").Int(_scienceService.SciencePoints);
+            jw.Key("unlockables").OpenArr();
+            foreach (var building in _buildingService.Buildings)
+            {
+                var bs = building.GetSpec<BuildingSpec>();
+                if (bs == null || bs.ScienceCost <= 0) continue;
+                var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
+                var name = templateSpec?.TemplateName ?? "unknown";
+                jw.OpenObj().Key("name").Str(name).Key("cost").Int(bs.ScienceCost).Key("unlocked").Bool(_buildingUnlockingService.Unlocked(bs)).CloseObj();
+            }
+            jw.CloseArr().CloseObj();
+            return jw.ToString();
+        }
+
+        // Population wellbeing breakdown by need group (SocialLife, Fun, Nutrition, etc).
+        // Aggregates across all beavers from cached need data.
+        public object CollectWellbeing()
+        {
+            try
+            {
+                var beaverNeeds = _factionNeedService.GetBeaverNeeds();
+                var groupNeeds = new Dictionary<string, List<NeedSpec>>();
+                foreach (var ns in beaverNeeds)
+                {
+                    var groupId = ns.NeedGroupId;
+                    if (string.IsNullOrEmpty(groupId)) continue;
+                    if (!groupNeeds.ContainsKey(groupId))
+                        groupNeeds[groupId] = new List<NeedSpec>();
+                    groupNeeds[groupId].Add(ns);
+                }
+                int beaverCount = 0;
+                var groupTotals = new Dictionary<string, float>();
+                var groupMaxTotals = new Dictionary<string, float>();
+                var needToGroup = new Dictionary<string, string>();
+                foreach (var kvp in groupNeeds)
+                    foreach (var ns in kvp.Value)
+                        needToGroup[ns.Id] = kvp.Key;
+                foreach (var c in _cache.Beavers.Read)
+                {
+                    if (c.Needs == null) continue;
+                    beaverCount++;
+                    foreach (var n in c.Needs)
+                    {
+                        if (!needToGroup.TryGetValue(n.Id, out var groupId)) continue;
+                        if (!groupTotals.ContainsKey(groupId)) { groupTotals[groupId] = 0f; groupMaxTotals[groupId] = 0f; }
+                        groupTotals[groupId] += n.Wellbeing;
+                    }
+                    foreach (var kvp in groupNeeds)
+                    {
+                        var groupId = kvp.Key;
+                        float groupMax = 0f;
+                        foreach (var ns in kvp.Value) groupMax += ns.FavorableWellbeing;
+                        if (!groupMaxTotals.ContainsKey(groupId)) groupMaxTotals[groupId] = 0f;
+                        groupMaxTotals[groupId] += groupMax;
+                    }
+                }
+                var jw = _cache.Jw.Reset().OpenObj().Key("beavers").Int(beaverCount).Key("categories").OpenArr();
+                foreach (var kvp in groupNeeds)
+                {
+                    var groupId = kvp.Key;
+                    float avgCurrent = beaverCount > 0 ? groupTotals.GetValueOrDefault(groupId) / beaverCount : 0;
+                    float avgMax = beaverCount > 0 ? groupMaxTotals.GetValueOrDefault(groupId) / beaverCount : 0;
+                    jw.OpenObj().Key("group").Str(groupId).Key("current").Float((float)System.Math.Round(avgCurrent, 1), "F1").Key("max").Float((float)System.Math.Round(avgMax, 1), "F1");
+                    jw.Key("needs").OpenArr();
+                    foreach (var ns in kvp.Value)
+                        jw.OpenObj().Key("id").Str(ns.Id).Key("favorableWellbeing").Float(ns.FavorableWellbeing, "F1").Key("unfavorableWellbeing").Float(ns.UnfavorableWellbeing, "F1").CloseObj();
+                    jw.CloseArr().CloseObj();
+                }
+                jw.CloseArr().CloseObj();
+                return jw.ToString();
+            }
+            catch (System.Exception ex) { TimberbotLog.Error("wellbeing", ex); return new { error = ex.Message }; }
+        }
+
+        // Game event history (droughts, deaths, etc)
+        public object CollectNotifications()
+        {
+            var jw = _cache.Jw.Reset().OpenArr();
+            try
+            {
+                foreach (var n in _notificationSaver.Notifications)
+                    jw.OpenObj().Key("subject").Str(n.Subject.ToString()).Key("description").Str(n.Description.ToString()).Key("cycle").Int(n.Cycle).Key("cycleDay").Int(n.CycleDay).CloseObj();
+            }
+            catch (System.Exception _ex) { TimberbotLog.Error("notifications", _ex); }
+            jw.CloseArr();
+            return jw.ToString();
+        }
+
+        // Import/export settings per good per district
+        public object CollectDistribution()
+        {
+            var jw = _cache.Jw.Reset().OpenArr();
+            foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
+            {
+                var distSetting = dc.GetComponent<Timberborn.DistributionSystem.DistrictDistributionSetting>();
+                if (distSetting == null) continue;
+                jw.OpenObj().Key("district").Str(dc.DistrictName).Key("goods").OpenArr();
+                try
+                {
+                    foreach (var gs in distSetting.GoodDistributionSettings)
+                        jw.OpenObj().Key("good").Str(gs.GoodId).Key("importOption").Str(gs.ImportOption.ToString()).Key("exportThreshold").Float(gs.ExportThreshold, "F0").CloseObj();
+                }
+                catch (System.Exception _ex) { TimberbotLog.Error("distribution", _ex); }
+                jw.CloseArr().CloseObj();
+            }
+            jw.CloseArr();
+            return jw.ToString();
         }
 
         // Tile data for a rectangular region. Returns terrain height, water depth,
