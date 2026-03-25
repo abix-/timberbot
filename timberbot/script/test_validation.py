@@ -2094,6 +2094,20 @@ class TestRunner:
             self.check(f"toon valid: {name}", is_valid,
                        f"got {type(result).__name__}: {str(result)[:80]}" if not is_valid else "")
 
+        # --- cross-validate cached data vs live game state via debug endpoint ---
+        self.wait_for_refresh()
+        result = self.bot.debug(target="validate_all")
+        if isinstance(result, dict) and "mismatches" in result:
+            entities = result.get("entities", 0)
+            fields = result.get("fields", 0)
+            mismatches = result.get("mismatches", 0)
+            failures = result.get("failures", [])
+            self.check(f"cache vs live: {entities} entities, {fields} fields, {mismatches} mismatches",
+                       mismatches == 0,
+                       "; ".join(f"{f.get('name','?')}:{f.get('type','?')}" for f in failures[:5]) if failures else "")
+        else:
+            self.skip("cache vs live", "debug endpoint not available or unexpected response")
+
     def test_performance(self):
         print("\n=== performance ===\n")
 
