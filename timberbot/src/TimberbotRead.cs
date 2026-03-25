@@ -207,6 +207,8 @@ namespace Timberbot
 
             if (format == "json")
             {
+                // capture districts BEFORE using _cache.Jw -- CollectDistricts uses the same JwWriter
+                var districtsJson = CollectDistricts("json") as string;
                 var jj = _cache.Jw.Reset().OpenObj();
                 jj.Key("time").OpenObj()
                     .Key("dayNumber").Int(_dayNightCycle.DayNumber)
@@ -221,7 +223,7 @@ namespace Timberbot
                     .Key("hazardousWeatherDuration").Int(_weatherService.HazardousWeatherDuration)
                     .Key("cycleLengthInDays").Int(_weatherService.CycleLengthInDays)
                     .CloseObj();
-                jj.Key("districts").Raw(CollectDistricts("json") as string);
+                jj.Key("districts").Raw(districtsJson);
                 jj.Key("trees").OpenObj()
                     .Key("markedGrown").Int(treeMarkedGrown)
                     .Key("markedSeedling").Int(treeMarkedSeedling)

@@ -2054,7 +2054,7 @@ class TestRunner:
         self.check("schema: science (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         workhours = jbot.workhours()
-        errs = validate(workhours, {"endHours": int, "areWorkingHours": bool})
+        errs = validate(workhours, {"endHours": float, "areWorkingHours": bool})
         self.check("schema: workhours (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         prefabs = jbot.prefabs()
@@ -2062,7 +2062,7 @@ class TestRunner:
         self.check("schema: prefabs (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         power = jbot.power()
-        errs = validate(power, [{"networkId": int, "supply": int, "demand": int, "buildings": list}])
+        errs = validate(power, [{"id": int, "supply": int, "demand": int, "buildings": list}])
         self.check("schema: power (json)", len(errs) == 0, "; ".join(errs[:5]))
 
         districts = jbot.districts()
