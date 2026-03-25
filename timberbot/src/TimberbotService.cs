@@ -63,6 +63,16 @@ namespace Timberbot
             DebugTool = debug;
         }
 
+        // Called once when a game is loaded. Starts the HTTP server and hooks into
+        // the game's event system.
+        //
+        // Startup sequence:
+        //   1. Load settings.json from mod folder (Documents/Timberborn/Mods/Timberbot/)
+        //   2. Initialize logging (fresh log file per session)
+        //   3. Wire up cross-references between subsystems (Cache<->Webhooks, Debug<->Service)
+        //   4. Register EventBus listeners (entity lifecycle, weather, buildings, etc)
+        //   5. Build entity indexes from existing game state (all buildings/beavers/trees)
+        //   6. Start HTTP server on configured port
         public void Load()
         {
             LoadSettings();
@@ -74,12 +84,12 @@ namespace Timberbot
             WebhookMgr.BatchSeconds = _webhookBatchSeconds;
             WebhookMgr.CircuitBreakerThreshold = _webhookCircuitBreaker;
             TimberbotLog.Info($"v0.7.0 port={_httpPort} refresh={_refreshInterval}s debug={_debugEnabled} webhooks={_webhooksEnabled} batchMs={_webhookBatchSeconds * 1000:F0}");
-            Cache.WebhookMgr = WebhookMgr;
-            DebugTool.Service = this;
+            Cache.WebhookMgr = WebhookMgr;  // cache pushes webhook events on entity lifecycle
+            DebugTool.Service = this;         // debug needs Service reference for endpoint benchmarks
             _eventBus.Register(this);
-            WebhookMgr.Register();
-            Cache.Register();
-            Cache.BuildAllIndexes();
+            WebhookMgr.Register();            // subscribe to 68 game events
+            Cache.Register();                 // subscribe to entity lifecycle events
+            Cache.BuildAllIndexes();           // populate indexes from existing entities
             _server = new TimberbotHttpServer(_httpPort, this, _debugEnabled);
             TimberbotLog.Info($"HTTP server started on port {_httpPort}");
         }
@@ -132,6 +142,14 @@ namespace Timberbot
 
         private float _lastRefreshTime = 0f;
 
+        // Called every frame by Unity. This is the mod's main loop.
+        // Three things happen each frame:
+        //   1. Cache refresh (every _refreshInterval seconds, default 1s):
+        //      reads mutable state from all entities, swaps double buffers
+        //   2. Drain POST requests (up to 10/frame):
+        //      executes queued write commands from the HTTP server
+        //   3. Flush webhooks (every BatchSeconds, default 200ms):
+        //      sends batched events to registered webhook URLs
         public void UpdateSingleton()
         {
             float now = Time.realtimeSinceStartup;

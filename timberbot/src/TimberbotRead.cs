@@ -368,17 +368,25 @@ namespace Timberbot
             return jw.ToString();
         }
 
-        // PERF: O(n) entity scan + grid bucketing. Called occasionally for tree management.
+        // Find the densest tree clusters on the map.
+        // Algorithm: divide the map into cellSize x cellSize grid cells (default 10x10).
+        // Each tree's (x,y) is snapped to its cell center. Count grown + total trees per cell.
+        // Sort by grown count descending, return top N clusters.
+        //
+        // Used by the AI to decide where to send lumberjacks. A cluster with many grown
+        // trees is the best place to mark for cutting (high yield per lumberjack trip).
         public object CollectTreeClusters(int cellSize = 10, int top = 5)
         {
-            var cells = new Dictionary<long, int[]>(); // key -> [grown, total, centerX, centerY, z]
+            // key = cell center encoded as long, value = [grownCount, totalCount, centerX, centerY, z]
+            var cells = new Dictionary<long, int[]>();
             foreach (var nr in _cache.NaturalResources.Read)
             {
-                if (nr.Cuttable == null) continue;
-                if (nr.Living == null || nr.Living.IsDead) continue;
+                if (nr.Cuttable == null) continue;       // not a tree/cuttable
+                if (nr.Living == null || nr.Living.IsDead) continue;  // dead stump
                 if (nr.BlockObject == null) continue;
 
                 var c = nr.BlockObject.Coordinates;
+                // snap to grid cell center: (127, 143) with cellSize=10 -> center=(125, 145)
                 int cx = c.x / cellSize * cellSize + cellSize / 2;
                 int cy = c.y / cellSize * cellSize + cellSize / 2;
                 long key = (long)cx * 100000 + cy;
@@ -386,11 +394,12 @@ namespace Timberbot
                 if (!cells.ContainsKey(key))
                     cells[key] = new int[] { 0, 0, cx, cy, c.z };
 
-                cells[key][1]++;
+                cells[key][1]++;  // total
                 if (nr.Growable != null && nr.Growable.IsGrown)
-                    cells[key][0]++;
+                    cells[key][0]++;  // grown (ready to chop)
             }
 
+            // sort by grown count descending -- densest harvestable clusters first
             var sorted = new List<int[]>(cells.Values);
             sorted.Sort((a, b) => b[0].CompareTo(a[0]));
             var jw = _cache.Jw.Reset().OpenArr();
@@ -629,8 +638,9 @@ namespace Timberbot
             return jw.ToString();
         }
 
-        // PERF: cached component refs -- zero GetComponent per item.
-        // PERF: TimberbotJw serialization -- 2ms for 3000 trees. Zero Newtonsoft.
+        // Shared implementation for trees and crops endpoints.
+        // Filters the NaturalResources cache by species name (TreeSpecies or CropSpecies HashSet).
+        // Using JwWriter instead of Newtonsoft: ~2ms for 3000 trees vs ~15ms with serialization.
         private object CollectNaturalResourcesJw(TimberbotJw jw, System.Collections.Generic.HashSet<string> species)
         {
             jw.Reset().OpenArr();
@@ -672,7 +682,11 @@ namespace Timberbot
             return jw.ToString();
         }
 
-        // PERF: reads cached beaver data only. Zero GetComponent from background thread.
+        // List all beavers and bots. Same three modes as buildings (basic/full/id:N).
+        // Basic mode shows a wellbeing tier (ecstatic/happy/okay/unhappy/miserable) plus
+        // critical and unmet need summaries as "+"-separated strings for compact display.
+        // Full mode includes all ~30 individual needs with points, wellbeing contribution,
+        // favorable/critical flags, and need group (SocialLife, Fun, Nutrition, etc).
         public object CollectBeavers(string format = "toon", string detail = "basic")
         {
             int? singleId = null;
@@ -788,13 +802,15 @@ namespace Timberbot
             return jw.ToString();
         }
 
+        // Timberborn's internal speed values are 0, 1, 3, 7 (not 0-3).
+        // We map them to user-friendly 0-3 (pause, normal, fast, fastest).
         public static readonly int[] SpeedScale = { 0, 1, 3, 7 };
 
         public object CollectSpeed()
         {
             var raw = _speedManager.CurrentSpeed;
             int level = System.Array.IndexOf(SpeedScale, raw);
-            if (level < 0) level = 0;
+            if (level < 0) level = 0;  // unknown internal speed -> treat as paused
             return new { speed = level };
         }
 
@@ -939,7 +955,11 @@ namespace Timberbot
             x2 = Mathf.Clamp(x2, 0, size.x - 1);
             y2 = Mathf.Clamp(y2, 0, size.y - 1);
 
-            // build occupancy from cached indexes (zero GetComponent, thread-safe)
+            // Build occupancy map from cached entity data.
+            // Each tile can have multiple occupants at different z-levels (vertical stacking:
+            // a path on z=2 with a building on z=3). We track occupant names by z-level.
+            // Also track building entrances (for path connectivity analysis),
+            // seedlings (trees not yet grown), and dead resources (stumps).
             var occupants = new Dictionary<long, List<(string name, int z)>>();
             var entrances = new HashSet<long>();
             var seedlings = new HashSet<long>();
@@ -999,6 +1019,9 @@ namespace Timberbot
                     float waterContamination = 0f;
                     var waterCoord = new Vector3Int(x, y, terrainHeight);
                     try { waterHeight = _waterMap.CeiledWaterHeight(waterCoord); } catch (System.Exception _ex) { TimberbotLog.Error("map.water", _ex); }
+                    // Badwater (contaminated water) check: iterate water columns top-down.
+                    // Water is stored in columns (like terrain) -- multiple water layers can exist
+                    // at different heights. We check from top down and report the first contaminated one.
                     try
                     {
                         int wIdx2D = _mapIndexService.CellToIndex(new Vector2Int(x, y));

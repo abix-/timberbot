@@ -10,6 +10,13 @@ namespace Timberbot
     [Context("Game")]
     public class TimberbotConfigurator : Configurator
     {
+        // Register all Timberbot services with the DI container.
+        // Bindito auto-resolves constructor parameters from the game's service registry.
+        // AsSingleton() = one instance per game session, destroyed when the game unloads.
+        //
+        // TimberbotService implements ILoadableSingleton/IUpdatableSingleton, so Bindito
+        // automatically calls Load() at game start and UpdateSingleton() every frame.
+        // The other classes are plain singletons injected into TimberbotService.
         public override void Configure()
         {
             Bind<TimberbotEntityCache>().AsSingleton();

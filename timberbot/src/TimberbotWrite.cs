@@ -542,7 +542,20 @@ namespace Timberbot
             };
         }
 
-        // find valid planting spots in an area or within a building's range
+        // Find valid planting spots for a crop. Two modes:
+        //
+        // 1. By building (building_id != 0): uses InRangePlantingCoordinates to get all
+        //    tiles within the farmhouse's work range. Only farmhouses/foresters have this.
+        //    The range is a circle around the building, same as the green overlay in-game.
+        //
+        // 2. By area (x1,y1,x2,y2,z): scans a rectangular region.
+        //
+        // Each candidate is validated with PlantingAreaValidator.CanPlant() -- the same
+        // check the player UI uses (green/red tiles). Returns soil moisture and whether
+        // a crop is already planted at that spot.
+        //
+        // Crops need moist soil to grow. During drought, only tiles near standing water
+        // stay moist. The AI uses the "moist" field to choose where to plant.
         public object FindPlantingSpots(string crop, int buildingId, int x1, int y1, int x2, int y2, int z)
         {
             if (buildingId != 0)
@@ -609,14 +622,21 @@ namespace Timberbot
             };
         }
 
-        // unlock via ToolUnlockingService.TryToUnlock -- matches the exact UI flow
-        // when a player clicks "Unlock" in the science panel (cost deduction + events + UI refresh)
+        // Unlock a building using science points. Matches the exact UI flow when a
+        // player clicks "Unlock" in the science panel: checks cost, deducts points,
+        // fires events, and updates the UI toolbar.
+        //
+        // We iterate ToolButtons (the building toolbar) rather than BuildingService
+        // because ToolUnlockingService.UnlockInternal requires the BlockObjectTool
+        // reference to update the toolbar state. Without this, the building would be
+        // unlocked internally but the toolbar button would still show as locked.
         public object UnlockBuilding(string buildingName)
         {
             try
             {
                 foreach (var toolButton in _toolButtonService.ToolButtons)
                 {
+                    // only BlockObjectTool entries are buildings (others are path tool, demolish, etc)
                     var blockObjectTool = toolButton.Tool as BlockObjectTool;
                     if (blockObjectTool == null) continue;
                     var templateSpec = blockObjectTool.Template.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
@@ -660,7 +680,11 @@ namespace Timberbot
             }
         }
 
-        // set import/export settings for a good in a district
+        // Set import/export settings for a good in a district.
+        // Timberborn's distribution system controls how goods flow between districts:
+        //   ImportOption: None, Normal, Forced (Forced = always import even if local stock is ok)
+        //   ExportThreshold: export excess above this amount to other districts
+        // -1 for exportThreshold means "don't change" (only update import option).
         public object SetDistribution(string districtName, string goodId, string importOption, int exportThreshold)
         {
             foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
@@ -694,7 +718,10 @@ namespace Timberbot
             return new { error = "district not found", district = districtName };
         }
 
-        // building work range -- same green circle the player sees
+        // Get the work range for a building (farmhouse, lumberjack, forester, gatherer).
+        // Returns the list of tiles this building's workers can reach -- same green circle
+        // the player sees in the UI when selecting the building. Also counts how many
+        // tiles have moist soil (important for crop placement near water).
         public object CollectBuildingRange(int buildingId)
         {
             var ec = _cache.FindEntity(buildingId);

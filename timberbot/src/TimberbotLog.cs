@@ -3,8 +3,16 @@ using UnityEngine;
 
 namespace Timberbot
 {
-    // file-based error logging. fresh per session, timestamped, thread-safe.
-    // log file: Documents/Timberborn/Mods/Timberbot/timberbot.log
+    // File-based logging for the mod. Fresh log file each session (overwritten on Init).
+    //
+    // Dual output: writes to both Unity's console (Debug.Log/LogWarning, visible in
+    // BepInEx console and Player.log) AND a dedicated timberbot.log file for easy
+    // access without digging through Unity's logs.
+    //
+    // Thread-safe: lock protects file writes because PushEvent and HTTP responses
+    // can trigger logging from background threads.
+    //
+    // Log file: Documents/Timberborn/Mods/Timberbot/timberbot.log
     static class TimberbotLog
     {
         private static string _logPath;

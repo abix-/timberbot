@@ -120,7 +120,17 @@ namespace Timberbot
             _pendingEvents.Add((eventName, payload));
         }
 
-        // flush batched events to all matching webhooks (called from UpdateSingleton on main thread)
+        // Flush all pending events to registered webhooks.
+        // Called every frame from UpdateSingleton, but only actually sends if enough
+        // time has passed (BatchSeconds, default 200ms). This batching reduces HTTP
+        // overhead: instead of 50 individual POSTs for 50 events, send 1 POST with
+        // a JSON array of 50 events.
+        //
+        // For each webhook:
+        // 1. Build a JSON array of matching events (filter by event name if configured)
+        // 2. Send via ThreadPool (non-blocking, doesn't stall the game)
+        // 3. Circuit breaker: N consecutive failures disables the webhook to prevent
+        //    the game from accumulating thousands of failed HTTP requests
         public void FlushWebhooks(float now)
         {
             if (_pendingEvents.Count == 0) return;
@@ -130,8 +140,10 @@ namespace Timberbot
             for (int i = 0; i < _webhooks.Count; i++)
             {
                 var wh = _webhooks[i];
-                if (wh.Disabled) continue;
+                if (wh.Disabled) continue; // circuit breaker tripped
 
+                // build batched JSON array: [event1, event2, ...]
+                // reuse _webhookSb to avoid allocation
                 _webhookSb.Clear();
                 var sb = _webhookSb;
                 sb.Append('[');
@@ -139,14 +151,16 @@ namespace Timberbot
                 for (int j = 0; j < _pendingEvents.Count; j++)
                 {
                     var ev = _pendingEvents[j];
+                    // filter: if webhook registered for specific events, skip non-matching
                     if (wh.Events != null && !wh.Events.Contains(ev.name)) continue;
                     if (count > 0) sb.Append(',');
-                    sb.Append(ev.payload);
+                    sb.Append(ev.payload);  // pre-serialized JSON from PushEvent()
                     count++;
                 }
                 sb.Append(']');
-                if (count == 0) continue;
+                if (count == 0) continue; // no matching events for this webhook
 
+                // send on ThreadPool thread -- never block the game's main thread
                 var batchPayload = sb.ToString();
                 var url = wh.Url;
                 var whRef = wh;
@@ -156,13 +170,14 @@ namespace Timberbot
                     try
                     {
                         _webhookClient.PostAsync(url, new System.Net.Http.StringContent(batchPayload, System.Text.Encoding.UTF8, "application/json")).Wait();
-                        whRef.ConsecutiveFailures = 0;
+                        whRef.ConsecutiveFailures = 0; // success resets the counter
                     }
                     catch (Exception _ex)
                     {
                         whRef.ConsecutiveFailures++;
                         if (whRef.ConsecutiveFailures >= threshold)
                         {
+                            // circuit breaker: disable this webhook permanently (until re-registered)
                             whRef.Disabled = true;
                             TimberbotLog.Error($"webhook {whRef.Id} disabled after {threshold} failures: {url}", _ex);
                         }
