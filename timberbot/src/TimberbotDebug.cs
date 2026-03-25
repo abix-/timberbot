@@ -76,12 +76,20 @@ using CachedBeaver = Timberbot.TimberbotEntityCache.CachedBeaver;
 
 namespace Timberbot
 {
-    public partial class TimberbotService
+    public class TimberbotDebug
     {
+        private readonly PreviewFactory PreviewFactory;
+        public TimberbotService Service; // set by TimberbotService.Load()
+
+        public TimberbotDebug(PreviewFactory previewFactory)
+        {
+            PreviewFactory = previewFactory;
+        }
+
         public object RunBenchmark(int iterations)
         {
             var results = new List<object>();
-            var buildings = Cache.Buildings.Read;
+            var buildings = Service.Cache.Buildings.Read;
 
             // --- Test 1: BreedingPod.Nutrients foreach vs for ---
             var breedingPods = new List<CachedBuilding>();
@@ -158,7 +166,7 @@ namespace Timberbot
 
             // --- Test: NeedMgr.GetNeeds() allocation ---
             var beaversWithNeeds = new List<CachedBeaver>();
-            var beaverBuf = Cache.Beavers.Read;
+            var beaverBuf = Service.Cache.Beavers.Read;
             for (int i = 0; i < beaverBuf.Count; i++)
                 if (beaverBuf[i].NeedMgr != null) beaversWithNeeds.Add(beaverBuf[i]);
 
@@ -225,41 +233,41 @@ namespace Timberbot
             }
 
             int nHeavy = System.Math.Max(n / 10, 1);
-            int nb = Cache.Buildings.Read.Count;
-            int nv = Cache.Beavers.Read.Count;
-            int nr = Cache.NaturalResources.Read.Count;
+            int nb = Service.Cache.Buildings.Read.Count;
+            int nv = Service.Cache.Beavers.Read.Count;
+            int nr = Service.Cache.NaturalResources.Read.Count;
 
-            results.Add(BenchCall("CollectSummary", n, () => CollectSummary("json")));
-            results.Add(BenchCall("CollectBuildings", n, () => CollectBuildings("json", "basic"), nb));
-            results.Add(BenchCall("CollectBuildings.full", nHeavy, () => CollectBuildings("json", "full"), nb));
-            results.Add(BenchCall("CollectBeavers", n, () => CollectBeavers("json", "basic"), nv));
-            results.Add(BenchCall("CollectBeavers.full", nHeavy, () => CollectBeavers("json", "full"), nv));
-            results.Add(BenchCall("CollectTrees", n, () => CollectTrees(), nr));
-            results.Add(BenchCall("CollectCrops", n, () => CollectCrops(), nr));
-            results.Add(BenchCall("CollectGatherables", n, () => CollectGatherables()));
-            results.Add(BenchCall("CollectPowerNetworks", n, () => CollectPowerNetworks()));
-            results.Add(BenchCall("CollectAlerts", n, () => CollectAlerts()));
-            results.Add(BenchCall("CollectWellbeing", n, () => CollectWellbeing(), nv));
-            results.Add(BenchCall("CollectScience", n, () => CollectScience()));
-            results.Add(BenchCall("CollectResources", n, () => CollectResources("json")));
-            results.Add(BenchCall("CollectPopulation", n, () => CollectPopulation(), nv));
-            results.Add(BenchCall("CollectDistricts", n, () => CollectDistricts("json")));
-            results.Add(BenchCall("CollectDistribution", n, () => CollectDistribution()));
-            results.Add(BenchCall("CollectTime", n, () => CollectTime()));
-            results.Add(BenchCall("CollectWeather", n, () => CollectWeather()));
-            results.Add(BenchCall("CollectSpeed", n, () => CollectSpeed()));
-            results.Add(BenchCall("CollectWorkHours", n, () => CollectWorkHours()));
-            results.Add(BenchCall("CollectNotifications", n, () => CollectNotifications()));
-            results.Add(BenchCall("CollectTreeClusters", nHeavy, () => CollectTreeClusters()));
-            results.Add(BenchCall("CollectPrefabs", nHeavy, () => CollectPrefabs()));
-            results.Add(BenchCall("CollectTiles.20x20", nHeavy, () => CollectTiles(120, 130, 140, 150), 400));
-            results.Add(BenchCall("FindPlacement", nHeavy, () => FindPlacement("Path", 120, 135, 130, 145)));
+            results.Add(BenchCall("CollectSummary", n, () => Service.CollectSummary("json")));
+            results.Add(BenchCall("CollectBuildings", n, () => Service.CollectBuildings("json", "basic"), nb));
+            results.Add(BenchCall("CollectBuildings.full", nHeavy, () => Service.CollectBuildings("json", "full"), nb));
+            results.Add(BenchCall("CollectBeavers", n, () => Service.CollectBeavers("json", "basic"), nv));
+            results.Add(BenchCall("CollectBeavers.full", nHeavy, () => Service.CollectBeavers("json", "full"), nv));
+            results.Add(BenchCall("CollectTrees", n, () => Service.CollectTrees(), nr));
+            results.Add(BenchCall("CollectCrops", n, () => Service.CollectCrops(), nr));
+            results.Add(BenchCall("CollectGatherables", n, () => Service.CollectGatherables()));
+            results.Add(BenchCall("CollectPowerNetworks", n, () => Service.CollectPowerNetworks()));
+            results.Add(BenchCall("CollectAlerts", n, () => Service.CollectAlerts()));
+            results.Add(BenchCall("CollectWellbeing", n, () => Service.CollectWellbeing(), nv));
+            results.Add(BenchCall("CollectScience", n, () => Service.CollectScience()));
+            results.Add(BenchCall("CollectResources", n, () => Service.CollectResources("json")));
+            results.Add(BenchCall("CollectPopulation", n, () => Service.CollectPopulation(), nv));
+            results.Add(BenchCall("CollectDistricts", n, () => Service.CollectDistricts("json")));
+            results.Add(BenchCall("CollectDistribution", n, () => Service.CollectDistribution()));
+            results.Add(BenchCall("CollectTime", n, () => Service.CollectTime()));
+            results.Add(BenchCall("CollectWeather", n, () => Service.CollectWeather()));
+            results.Add(BenchCall("CollectSpeed", n, () => Service.CollectSpeed()));
+            results.Add(BenchCall("CollectWorkHours", n, () => Service.CollectWorkHours()));
+            results.Add(BenchCall("CollectNotifications", n, () => Service.CollectNotifications()));
+            results.Add(BenchCall("CollectTreeClusters", nHeavy, () => Service.CollectTreeClusters()));
+            results.Add(BenchCall("CollectPrefabs", nHeavy, () => Service.CollectPrefabs()));
+            results.Add(BenchCall("CollectTiles.20x20", nHeavy, () => Service.CollectTiles(120, 130, 140, 150), 400));
+            results.Add(BenchCall("FindPlacement", nHeavy, () => Service.FindPlacement("Path", 120, 135, 130, 145)));
 
             // metadata
             results.Insert(0, new { test = "_meta",
-                buildings = Cache.Buildings.Read.Count,
-                beavers = Cache.Beavers.Read.Count,
-                trees = Cache.NaturalResources.Read.Count });
+                buildings = Service.Cache.Buildings.Read.Count,
+                beavers = Service.Cache.Beavers.Read.Count,
+                trees = Service.Cache.NaturalResources.Read.Count });
 
             return new { benchmarks = results };
         }
@@ -317,7 +325,7 @@ namespace Timberbot
             object Resolve(string path)
             {
                 var parts = path.Split('.');
-                object current = parts[0] == "$" ? _debugLastResult : (object)this;
+                object current = parts[0] == "$" ? _debugLastResult : (object)Service;
                 if (parts[0] == "$") parts = parts.Skip(1).ToArray();
                 foreach (var part in parts)
                 {
@@ -445,7 +453,7 @@ namespace Timberbot
                     case "fields":
                     {
                         var path = Arg("path", "");
-                        object obj = string.IsNullOrEmpty(path) ? (object)this : Resolve(path);
+                        object obj = string.IsNullOrEmpty(path) ? (object)Service : Resolve(path);
                         if (obj == null) { info["error"] = $"could not resolve '{path}'"; break; }
                         info["type"] = obj.GetType().FullName;
                         var filter = Arg("filter", "");
@@ -472,7 +480,7 @@ namespace Timberbot
                         var path = Arg("path", "");
                         var methodName = Arg("method", "");
                         if (string.IsNullOrEmpty(methodName)) { info["error"] = "pass method:MethodName"; break; }
-                        object obj = string.IsNullOrEmpty(path) ? (object)this : Resolve(path);
+                        object obj = string.IsNullOrEmpty(path) ? (object)Service : Resolve(path);
                         if (obj == null) { info["error"] = $"could not resolve '{path}'"; break; }
                         // find all overloads
                         var methods = obj.GetType().GetMethods(flags);
@@ -518,47 +526,11 @@ namespace Timberbot
             return info;
         }
 
-        // validate placement using the game's own preview system (same as player UI)
-        // PreviewFactory.Create() handles water buildings, terrain, occupancy -- all 9 validators
-        private bool ValidatePlacement(BuildingSpec buildingSpec, BlockObjectSpec blockObjectSpec, int x, int y, int z, int orientation)
-        {
-            var size = blockObjectSpec.Size;
-            int rx = size.x, ry = size.y;
-            if (orientation == 1 || orientation == 3) { rx = size.y; ry = size.x; }
-            int gx = x, gy = y;
-            switch (orientation)
-            {
-                case 1: gy = y + ry - 1; break;
-                case 2: gx = x + rx - 1; gy = y + ry - 1; break;
-                case 3: gx = x + rx - 1; break;
-            }
-
-            var placeableSpec = buildingSpec.GetSpec<PlaceableBlockObjectSpec>();
-            if (placeableSpec == null) return false;
-            Preview preview = null;
-            try
-            {
-                var placement = new Placement(new Vector3Int(gx, gy, z),
-                    (Timberborn.Coordinates.Orientation)orientation, FlipMode.Unflipped);
-                preview = _previewFactory.Create(placeableSpec);
-                preview.Reposition(placement);
-                return preview.BlockObject.IsValid();
-            }
-            catch (System.Exception ex)
-            {
-                TimberbotLog.Error($"ValidatePlacement at ({x},{y},{z})", ex);
-                return false;
-            }
-            finally
-            {
-                if (preview != null)
-                    UnityEngine.Object.Destroy(preview.GameObject);
-            }
-        }
+        // ValidatePlacement lives in TimberbotService.Placement.cs (used by PlaceBuilding)
 
         // ================================================================
         // VALIDATE -- compare cached double-buffer data against live game components.
-        // Reads the cached struct from Cache.Buildings.Read/Cache.Beavers.Read AND the live
+        // Reads the cached struct from Service.Cache.Buildings.Read/Service.Cache.Beavers.Read AND the live
         // Unity component in the same call. Reports per-field match/mismatch.
         // ================================================================
 
@@ -580,7 +552,7 @@ namespace Timberbot
             }
 
             // check buildings
-            var buildings = Cache.Buildings.Read;
+            var buildings = Service.Cache.Buildings.Read;
             for (int i = 0; i < buildings.Count; i++)
             {
                 var c = buildings[i];
@@ -623,7 +595,7 @@ namespace Timberbot
             }
 
             // check beavers
-            var beavers = Cache.Beavers.Read;
+            var beavers = Service.Cache.Beavers.Read;
             for (int i = 0; i < beavers.Count; i++)
             {
                 var c = beavers[i];
@@ -655,7 +627,7 @@ namespace Timberbot
             int totalEntities = 0, totalFields = 0, totalMismatches = 0;
 
             // validate all buildings
-            var buildings = Cache.Buildings.Read;
+            var buildings = Service.Cache.Buildings.Read;
             for (int i = 0; i < buildings.Count; i++)
             {
                 var result = ValidateEntity(buildings[i].Id);
@@ -670,7 +642,7 @@ namespace Timberbot
             }
 
             // validate all beavers
-            var beavers = Cache.Beavers.Read;
+            var beavers = Service.Cache.Beavers.Read;
             for (int i = 0; i < beavers.Count; i++)
             {
                 var result = ValidateEntity(beavers[i].Id);

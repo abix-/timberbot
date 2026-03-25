@@ -362,11 +362,11 @@ namespace Timberbot
                         if (body != null)
                             foreach (var prop in body.Properties())
                                 debugArgs[prop.Name] = prop.Value?.ToString() ?? "";
-                        return _service.DebugInspect(
+                        return _service.DebugTool.DebugInspect(
                             body?.Value<string>("target") ?? "help", debugArgs);
                     case "/api/benchmark":
                         if (!_debugEnabled) return new { error = "benchmark endpoint disabled in settings.json" };
-                        return _service.RunBenchmark(
+                        return _service.DebugTool.RunBenchmark(
                             body?.Value<int>("iterations") ?? 100);
                     case "/api/path/place":
                         return _service.RoutePath(

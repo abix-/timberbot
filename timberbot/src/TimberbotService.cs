@@ -125,6 +125,7 @@ namespace Timberbot
         private readonly PreviewFactory _previewFactory;                       // create preview entities for placement validation
         private readonly EventBus _eventBus;                                    // game event bus for entity lifecycle events
         public readonly TimberbotWebhook WebhookMgr;                      // batched webhook push notifications
+        public readonly TimberbotDebug DebugTool;                              // benchmark + reflection inspector
         private TimberbotHttpServer _server;
 
         // settings (loaded from settings.json in mod folder)
@@ -173,7 +174,8 @@ namespace Timberbot
             NeedGroupSpecService needGroupSpecService,
             PreviewFactory previewFactory,
             EventBus eventBus,
-            TimberbotWebhook webhookMgr)
+            TimberbotWebhook webhookMgr,
+            TimberbotDebug debug)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -212,6 +214,7 @@ namespace Timberbot
             _previewFactory = previewFactory;
             _eventBus = eventBus;
             WebhookMgr = webhookMgr;
+            DebugTool = debug;
         }
 
         public void Load()
@@ -226,6 +229,7 @@ namespace Timberbot
             WebhookMgr.CircuitBreakerThreshold = _webhookCircuitBreaker;
             TimberbotLog.Info($"v0.7.0 port={_httpPort} refresh={_refreshInterval}s debug={_debugEnabled} webhooks={_webhooksEnabled} batchMs={_webhookBatchSeconds * 1000:F0}");
             Cache.WebhookMgr = WebhookMgr;
+            DebugTool.Service = this;
             _eventBus.Register(this);
             WebhookMgr.Register();
             Cache.Register();

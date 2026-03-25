@@ -639,5 +639,40 @@ namespace Timberbot
 
             return new { id = placedId, name = placedName, x, y, z, orientation = TimberbotEntityCache.OrientNames[orientation] };
         }
+
+        private bool ValidatePlacement(BuildingSpec buildingSpec, BlockObjectSpec blockObjectSpec, int x, int y, int z, int orientation)
+        {
+            var size = blockObjectSpec.Size;
+            int rx = size.x, ry = size.y;
+            if (orientation == 1 || orientation == 3) { rx = size.y; ry = size.x; }
+            int gx = x, gy = y;
+            switch (orientation)
+            {
+                case 1: gy = y + ry - 1; break;
+                case 2: gx = x + rx - 1; gy = y + ry - 1; break;
+                case 3: gx = x + rx - 1; break;
+            }
+            var placeableSpec = buildingSpec.GetSpec<PlaceableBlockObjectSpec>();
+            if (placeableSpec == null) return false;
+            Preview preview = null;
+            try
+            {
+                var placement = new Placement(new Vector3Int(gx, gy, z),
+                    (Timberborn.Coordinates.Orientation)orientation, FlipMode.Unflipped);
+                preview = _previewFactory.Create(placeableSpec);
+                preview.Reposition(placement);
+                return preview.BlockObject.IsValid();
+            }
+            catch (System.Exception ex)
+            {
+                TimberbotLog.Error($"ValidatePlacement at ({x},{y},{z})", ex);
+                return false;
+            }
+            finally
+            {
+                if (preview != null)
+                    UnityEngine.Object.Destroy(preview.GameObject);
+            }
+        }
     }
 }
