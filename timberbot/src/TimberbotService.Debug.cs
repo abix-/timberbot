@@ -154,6 +154,51 @@ namespace Timberbot
                     speedup = foreachMs > 0 ? foreachMs / forMs : 0 });
             }
 
+            // --- Test: NeedMgr.GetNeeds() allocation ---
+            var beaversWithNeeds = new List<CachedBeaver>();
+            var beaverBuf = _beavers.Read;
+            for (int i = 0; i < beaverBuf.Count; i++)
+                if (beaverBuf[i].NeedMgr != null) beaversWithNeeds.Add(beaverBuf[i]);
+
+            int n = System.Math.Max(iterations, 10);
+            if (beaversWithNeeds.Count > 0)
+            {
+                for (int w = 0; w < 3; w++)
+                    for (int bi = 0; bi < beaversWithNeeds.Count; bi++)
+                        foreach (var ns in beaversWithNeeds[bi].NeedMgr.GetNeeds()) { var _ = ns.Id; }
+
+                var nsw = System.Diagnostics.Stopwatch.StartNew();
+                long ngc = GC.CollectionCount(0);
+                for (int iter = 0; iter < n; iter++)
+                    for (int bi = 0; bi < beaversWithNeeds.Count; bi++)
+                        foreach (var ns in beaversWithNeeds[bi].NeedMgr.GetNeeds()) { var _ = ns.Id; }
+                nsw.Stop();
+                long ngc1 = GC.CollectionCount(0) - ngc;
+                double nms1 = nsw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
+                nsw.Restart();
+                ngc = GC.CollectionCount(0);
+                for (int iter = 0; iter < n; iter++)
+                    for (int bi = 0; bi < beaversWithNeeds.Count; bi++)
+                    {
+                        var mgr = beaversWithNeeds[bi].NeedMgr;
+                        foreach (var ns in mgr.GetNeeds())
+                        {
+                            var need = mgr.GetNeed(ns.Id);
+                            var wb = mgr.GetNeedWellbeing(ns.Id);
+                            var _ = need.Points;
+                        }
+                    }
+                nsw.Stop();
+                long ngc2 = GC.CollectionCount(0) - ngc;
+                double nms2 = nsw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
+                results.Add(new { test = "NeedMgr.GetNeeds.foreach", count = beaversWithNeeds.Count, iterations = n,
+                    totalMs = nms1, perCallMs = nms1 / n, gc0 = ngc1 });
+                results.Add(new { test = "NeedMgr.FullNeedLoop", count = beaversWithNeeds.Count, iterations = n,
+                    totalMs = nms2, perCallMs = nms2 / n, gc0 = ngc2 });
+            }
+
             // --- Endpoint benchmarks: functional + performance ---
             object BenchCall(string name, int iters, System.Func<object> fn, int knownItems = -1)
             {
@@ -177,7 +222,6 @@ namespace Timberbot
                              perCallMs = bms / iters, gc0 = bgc0, items, pass };
             }
 
-            int n = System.Math.Max(iterations, 10);
             int nHeavy = System.Math.Max(n / 10, 1);
             int nb = _buildings.Read.Count;
             int nv = _beavers.Read.Count;

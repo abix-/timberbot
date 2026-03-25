@@ -2,8 +2,6 @@
 //
 // Timberborn uses Bindito (a custom DI framework) to wire game services.
 // [Context("Game")] means this runs when a game is loaded (not on the main menu).
-// It registers TimberbotService as a singleton, which triggers Bindito to
-// resolve all 35 constructor parameters from the game's service container.
 
 using Bindito.Core;
 
@@ -14,6 +12,7 @@ namespace Timberbot
     {
         public override void Configure()
         {
+            Bind<TimberbotWebhook>().AsSingleton();
             Bind<TimberbotService>().AsSingleton();
         }
     }

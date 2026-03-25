@@ -1,105 +1,86 @@
-// TimberbotService.Webhooks.cs -- Batched push event notifications to external URLs.
+// TimberbotWebhook.cs -- Batched push event notifications to external URLs.
 //
 // Register a webhook URL via POST /api/webhooks, optionally filtering by event name.
 // Events accumulate in _pendingEvents and flush every webhookBatchMs (default 200ms)
-// from UpdateSingleton. Each flush sends ONE batched JSON array POST per webhook.
+// from FlushWebhooks(). Each flush sends ONE batched JSON array POST per webhook.
 //
-// Circuit breaker: 5 consecutive failures disables the webhook (visible via GET /api/webhooks).
+// Circuit breaker: N consecutive failures disables the webhook (visible via GET /api/webhooks).
 //
 // All [OnEvent] handlers call PushEvent(name, data) which just serializes and appends.
 // Actual HTTP delivery happens in FlushWebhooks() on background ThreadPool threads.
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using Timberborn.BlockSystem;
-using Timberborn.BuilderPrioritySystem;
-using Timberborn.Buildings;
 using Timberborn.BaseComponentSystem;
-using Timberborn.BlockObjectTools;
-using Timberborn.Coordinates;
-using Timberborn.Cutting;
-using Timberborn.TemplateInstantiation;
-using Timberborn.MapIndexSystem;
-using Timberborn.TerrainSystem;
-using Timberborn.WaterSystem;
+using Timberborn.BlockSystem;
+using Timberborn.Bots;
+using Timberborn.Buildings;
 using Timberborn.EntitySystem;
-using Timberborn.Forestry;
-using Timberborn.Planting;
-using Timberborn.Gathering;
 using Timberborn.GameCycleSystem;
 using Timberborn.GameDistricts;
-using Timberborn.Goods;
-using Timberborn.InventorySystem;
-using Timberborn.NaturalResourcesLifecycle;
-using Timberborn.PrioritySystem;
-using Timberborn.ResourceCountingSystem;
-using Timberborn.SingletonSystem;
-using Timberborn.Stockpiles;
-using Timberborn.TimeSystem;
-using Timberborn.WaterBuildings;
-using Timberborn.WeatherSystem;
-using Timberborn.WorkSystem;
-using Timberborn.NeedSystem;
-using Timberborn.LifeSystem;
-using Timberborn.Wellbeing;
-using Timberborn.BuildingsReachability;
-using Timberborn.ConstructionSites;
-using Timberborn.MechanicalSystem;
-using Timberborn.ScienceSystem;
-using Timberborn.BeaverContaminationSystem;
-using Timberborn.Bots;
-using Timberborn.Carrying;
-using Timberborn.DeteriorationSystem;
-using Timberborn.Wonders;
-using Timberborn.NotificationSystem;
-using Timberborn.StatusSystem;
-using Timberborn.DwellingSystem;
-using Timberborn.PowerManagement;
-using Timberborn.SoilContaminationSystem;
-using Timberborn.Hauling;
-using Timberborn.Workshops;
-using Timberborn.Reproduction;
-using Timberborn.Fields;
 using Timberborn.GameDistrictsMigration;
-using Timberborn.ToolButtonSystem;
-using Timberborn.ToolSystem;
-using Timberborn.PlantingUI;
-using Timberborn.BuildingsNavigation;
-using Timberborn.SoilMoistureSystem;
-using Timberborn.NeedSpecs;
-using Timberborn.GameFactionSystem;
-using Timberborn.RangedEffectSystem;
+using Timberborn.NeedSystem;
+using Timberborn.SingletonSystem;
+using Timberborn.TimeSystem;
+using Timberborn.WeatherSystem;
 using UnityEngine;
 
 namespace Timberbot
 {
-    public partial class TimberbotService
+    public class TimberbotWebhook
     {
-        // webhooks: batched push to registered URLs with circuit breaker
+        private readonly IDayNightCycle _dayNightCycle;
+        private readonly WeatherService _weatherService;
+        private readonly GameCycleService _gameCycleService;
+        private readonly SpeedManager _speedManager;
+        private readonly EventBus _eventBus;
+
+        // config (set by TimberbotService after construction)
+        public bool Enabled = true;
+        public float BatchSeconds = 0.2f;
+        public int CircuitBreakerThreshold = 30;
+
         private class WebhookRegistration
         {
             public string Id;
             public string Url;
-            public System.Collections.Generic.HashSet<string> Events;
+            public HashSet<string> Events;
             public int ConsecutiveFailures;
             public bool Disabled;
         }
         private readonly List<WebhookRegistration> _webhooks = new List<WebhookRegistration>();
-        private static readonly System.Net.Http.HttpClient _webhookClient = new System.Net.Http.HttpClient { Timeout = System.TimeSpan.FromSeconds(5) };
+        private static readonly System.Net.Http.HttpClient _webhookClient = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(5) };
         private int _webhookIdCounter = 0;
 
-        // batching: accumulate events, flush periodically from UpdateSingleton
+        // batching
         private readonly List<(string name, string payload)> _pendingEvents = new List<(string, string)>();
         private readonly System.Text.StringBuilder _webhookSb = new System.Text.StringBuilder(1024);
         private float _lastWebhookFlush = 0f;
-        // circuit breaker threshold loaded from _webhookCircuitBreaker field in TimberbotService.cs
+
+        public int Count => _webhooks.Count;
+
+        public TimberbotWebhook(
+            IDayNightCycle dayNightCycle,
+            WeatherService weatherService,
+            GameCycleService gameCycleService,
+            SpeedManager speedManager,
+            EventBus eventBus)
+        {
+            _dayNightCycle = dayNightCycle;
+            _weatherService = weatherService;
+            _gameCycleService = gameCycleService;
+            _speedManager = speedManager;
+            _eventBus = eventBus;
+        }
+
+        public void Register() => _eventBus.Register(this);
+        public void Unregister() => _eventBus.Unregister(this);
 
         public object RegisterWebhook(string url, List<string> events)
         {
-            if (!_webhooksEnabled) return new { error = "webhooks disabled in settings.json" };
+            if (!Enabled) return new { error = "webhooks disabled in settings.json" };
             var id = $"wh_{System.Threading.Interlocked.Increment(ref _webhookIdCounter)}";
-            var reg = new WebhookRegistration { Id = id, Url = url, Events = events != null && events.Count > 0 ? new System.Collections.Generic.HashSet<string>(events) : null };
+            var reg = new WebhookRegistration { Id = id, Url = url, Events = events != null && events.Count > 0 ? new HashSet<string>(events) : null };
             _webhooks.Add(reg);
             return new { id, url, events = reg.Events != null ? (object)events : "all" };
         }
@@ -119,24 +100,24 @@ namespace Timberbot
         }
 
         // accumulate event into pending batch (called from main thread EventBus handlers)
-        private void PushEvent(string eventName, object data)
+        public void PushEvent(string eventName, object data)
         {
             if (_webhooks.Count == 0) return;
             var payload = Newtonsoft.Json.JsonConvert.SerializeObject(new
             {
                 @event = eventName,
                 day = _dayNightCycle.DayNumber,
-                timestamp = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 data
             });
             _pendingEvents.Add((eventName, payload));
         }
 
         // flush batched events to all matching webhooks (called from UpdateSingleton on main thread)
-        private void FlushWebhooks(float now)
+        public void FlushWebhooks(float now)
         {
             if (_pendingEvents.Count == 0) return;
-            if (_webhookBatchSeconds > 0 && now - _lastWebhookFlush < _webhookBatchSeconds) return;
+            if (BatchSeconds > 0 && now - _lastWebhookFlush < BatchSeconds) return;
             _lastWebhookFlush = now;
 
             for (int i = 0; i < _webhooks.Count; i++)
@@ -144,7 +125,6 @@ namespace Timberbot
                 var wh = _webhooks[i];
                 if (wh.Disabled) continue;
 
-                // build batched payload: reuse field-level SB to avoid per-flush allocation
                 _webhookSb.Clear();
                 var sb = _webhookSb;
                 sb.Append('[');
@@ -162,7 +142,8 @@ namespace Timberbot
 
                 var batchPayload = sb.ToString();
                 var url = wh.Url;
-                var whRef = wh; // capture for lambda
+                var whRef = wh;
+                var threshold = CircuitBreakerThreshold;
                 System.Threading.ThreadPool.QueueUserWorkItem(_ =>
                 {
                     try
@@ -170,13 +151,13 @@ namespace Timberbot
                         _webhookClient.PostAsync(url, new System.Net.Http.StringContent(batchPayload, System.Text.Encoding.UTF8, "application/json")).Wait();
                         whRef.ConsecutiveFailures = 0;
                     }
-                    catch (System.Exception _ex)
+                    catch (Exception _ex)
                     {
                         whRef.ConsecutiveFailures++;
-                        if (whRef.ConsecutiveFailures >= _webhookCircuitBreaker)
+                        if (whRef.ConsecutiveFailures >= threshold)
                         {
                             whRef.Disabled = true;
-                            TimberbotLog.Error($"webhook {whRef.Id} disabled after {_webhookCircuitBreaker} failures: {url}", _ex);
+                            TimberbotLog.Error($"webhook {whRef.Id} disabled after {threshold} failures: {url}", _ex);
                         }
                         else
                             TimberbotLog.Error("webhook.post", _ex);
@@ -186,9 +167,12 @@ namespace Timberbot
             _pendingEvents.Clear();
         }
 
+        // helper used by entity lifecycle handlers
+        private static string CleanName(string name) =>
+            name.Replace("(Clone)", "").Replace(".IronTeeth", "").Replace(".Folktails", "").Trim();
+
         // ================================================================
-        // WEBHOOK EVENT HANDLERS -- one line per event. Add new events here.
-        // All use PushEvent(name, data) which is fire-and-forget on background thread.
+        // WEBHOOK EVENT HANDLERS
         // ================================================================
 
         // weather
@@ -203,8 +187,8 @@ namespace Timberbot
         [OnEvent] public void OnDayStart(Timberborn.TimeSystem.DaytimeStartEvent e) { if (_webhooks.Count > 0) PushEvent("day.start", new { day = _dayNightCycle.DayNumber }); }
         [OnEvent] public void OnNightStart(Timberborn.TimeSystem.NighttimeStartEvent e) { if (_webhooks.Count > 0) PushEvent("night.start", new { day = _dayNightCycle.DayNumber }); }
 
-        // buildings (continued)
-        [OnEvent] public void OnBuildingFinished(Timberborn.BlockSystem.EnteredFinishedStateEvent e) { try { var go = e.BlockObject?.GetComponent<EntityComponent>()?.GameObject; PushEvent("building.finished", new { id = go?.GetInstanceID() ?? 0, name = go != null ? CleanName(go.name) : "" }); } catch (System.Exception _ex) { TimberbotLog.Error("webhook.building_finished", _ex); } }
+        // buildings
+        [OnEvent] public void OnBuildingFinished(EnteredFinishedStateEvent e) { try { var go = e.BlockObject?.GetComponent<EntityComponent>()?.GameObject; PushEvent("building.finished", new { id = go?.GetInstanceID() ?? 0, name = go != null ? CleanName(go.name) : "" }); } catch (Exception _ex) { TimberbotLog.Error("webhook.building_finished", _ex); } }
         [OnEvent] public void OnDistrictChanged(Timberborn.GameDistricts.DistrictCenterRegistryChangedEvent e) => PushEvent("district.changed", null);
 
         // population
@@ -238,7 +222,7 @@ namespace Timberbot
         [OnEvent] public void OnPowerNetworkCreated(Timberborn.MechanicalSystem.MechanicalGraphCreatedEvent e) => PushEvent("power.network.created", null);
         [OnEvent] public void OnPowerNetworkRemoved(Timberborn.MechanicalSystem.MechanicalGraphRemovedEvent e) => PushEvent("power.network.removed", null);
 
-        // buildings
+        // buildings (continued)
         [OnEvent] public void OnBuildingUnlocked(Timberborn.ScienceSystem.BuildingUnlockedEvent e) => PushEvent("building.unlocked", null);
         [OnEvent] public void OnBuildingDeconstructed(Timberborn.DeconstructionSystem.BuildingDeconstructedEvent e) => PushEvent("building.deconstructed", null);
         [OnEvent] public void OnDemolishableMarked(Timberborn.Demolishing.DemolishableMarkedEvent e) => PushEvent("demolish.marked", null);
@@ -246,7 +230,7 @@ namespace Timberbot
 
         // game state
         [OnEvent] public void OnGameOver(Timberborn.GameOver.GameOverEvent e) => PushEvent("game.over", null);
-        [OnEvent] public void OnSpeedChanged(Timberborn.TimeSystem.CurrentSpeedChangedEvent e) { if (_webhooks.Count > 0) PushEvent("speed.changed", new { speed = _speedManager.CurrentSpeed }); }
+        [OnEvent] public void OnSpeedChanged(CurrentSpeedChangedEvent e) { if (_webhooks.Count > 0) PushEvent("speed.changed", new { speed = _speedManager.CurrentSpeed }); }
         [OnEvent] public void OnWorkHoursChanged(Timberborn.WorkSystem.WorkingHoursChangedEvent e) => PushEvent("workhours.changed", null);
         [OnEvent] public void OnWorkHoursTransitioned(Timberborn.WorkSystem.WorkingHoursTransitionedEvent e) => PushEvent("workhours.transitioned", null);
         [OnEvent] public void OnAutosave(Timberborn.Autosaving.AutosaveEvent e) => PushEvent("autosave", null);
@@ -262,19 +246,19 @@ namespace Timberbot
         // zipline
         [OnEvent] public void OnZiplineActivated(Timberborn.ZiplineSystem.ZiplineConnectionActivatedEvent e) => PushEvent("zipline.activated", null);
 
-        // blocks (lower-level than building -- paths, levees, platforms, everything)
-        [OnEvent] public void OnBlockSet(Timberborn.BlockSystem.BlockObjectSetEvent e) => PushEvent("block.set", null);
-        [OnEvent] public void OnBlockUnset(Timberborn.BlockSystem.BlockObjectUnsetEvent e) => PushEvent("block.unset", null);
-        [OnEvent] public void OnConstructionStarted(Timberborn.BlockSystem.EnteredUnfinishedStateEvent e) => PushEvent("construction.started", null);
-        [OnEvent] public void OnBuildingUnfinished(Timberborn.BlockSystem.ExitedFinishedStateEvent e) => PushEvent("building.unfinished", null);
+        // blocks
+        [OnEvent] public void OnBlockSet(BlockObjectSetEvent e) => PushEvent("block.set", null);
+        [OnEvent] public void OnBlockUnset(BlockObjectUnsetEvent e) => PushEvent("block.unset", null);
+        [OnEvent] public void OnConstructionStarted(EnteredUnfinishedStateEvent e) => PushEvent("construction.started", null);
+        [OnEvent] public void OnBuildingUnfinished(ExitedFinishedStateEvent e) => PushEvent("building.unfinished", null);
 
-        // entities (lower-level)
-        [OnEvent] public void OnEntityCreated(Timberborn.EntitySystem.EntityCreatedEvent e) => PushEvent("entity.created", null);
+        // entities
+        [OnEvent] public void OnEntityCreated(EntityCreatedEvent e) => PushEvent("entity.created", null);
 
         // factions
         [OnEvent] public void OnFactionUnlocked(Timberborn.FactionSystem.FactionUnlockedEvent e) => PushEvent("faction.unlocked", null);
 
-        // districts (connections)
+        // districts
         [OnEvent] public void OnDistrictConnectionsChanged(Timberborn.GameDistricts.DistrictConnectionsChangedEvent e) => PushEvent("district.connections.changed", null);
         [OnEvent] public void OnMigrationDistrictChanged(Timberborn.GameDistrictsMigration.MigrationDistrictChangedEvent e) => PushEvent("migration.district.changed", null);
 
@@ -285,14 +269,14 @@ namespace Timberbot
         [OnEvent] public void OnPowerGeneratorAdded(Timberborn.MechanicalSystem.MechanicalGraphGeneratorAddedEvent e) => PushEvent("power.generator.added", null);
         [OnEvent] public void OnPowerGeneratorUpdated(Timberborn.MechanicalSystem.MechanicalGraphGeneratorUpdatedEvent e) => PushEvent("power.generator.updated", null);
 
-        // planting (coordinates)
+        // planting
         [OnEvent] public void OnPlantingCoordsSet(Timberborn.Planting.PlantingCoordinatesSetEvent e) => PushEvent("planting.coords.set", null);
         [OnEvent] public void OnPlantingCoordsUnset(Timberborn.Planting.PlantingCoordinatesUnsetEvent e) => PushEvent("planting.coords.unset", null);
 
         // game startup
         [OnEvent] public void OnNewGame(Timberborn.Common.NewGameInitializedEvent e) => PushEvent("game.new", null);
         [OnEvent] public void OnStartingBuilding(Timberborn.GameStartup.StartingBuildingPlacedEvent e) => PushEvent("game.starting.building", null);
-        [OnEvent] public void OnSpeedLockChanged(Timberborn.TimeSystem.SpeedLockChangedEvent e) => PushEvent("speed.lock.changed", null);
+        [OnEvent] public void OnSpeedLockChanged(SpeedLockChangedEvent e) => PushEvent("speed.lock.changed", null);
 
         // naming + alerts
         [OnEvent] public void OnEntityRenamed(Timberborn.EntityNaming.EntityNameChangedEvent e) => PushEvent("entity.renamed", null);

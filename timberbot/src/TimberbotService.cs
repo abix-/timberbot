@@ -124,15 +124,17 @@ namespace Timberbot
         private readonly NeedGroupSpecService _needGroupSpecService;       // need group categories (Social, Hygiene, etc)
         private readonly PreviewFactory _previewFactory;                       // create preview entities for placement validation
         private readonly EventBus _eventBus;                                    // game event bus for entity lifecycle events
+        public readonly TimberbotWebhook WebhookMgr;                      // batched webhook push notifications
         private TimberbotHttpServer _server;
 
         // settings (loaded from settings.json in mod folder)
         private float _refreshInterval = 1.0f;   // seconds between cache refreshes (default: 1s)
         private bool _debugEnabled = false;       // enable /api/debug endpoint (default: off)
         private int _httpPort = 8085;             // HTTP server port
-        private bool _webhooksEnabled = true;     // enable webhook push notifications (default: on)
-        private float _webhookBatchSeconds = 0.2f; // webhook batching window (default: 200ms, 0 = immediate)
-        private int _webhookCircuitBreaker = 30;   // consecutive failures before disabling webhook (default: 30)
+        // webhook settings applied to WebhookMgr in Load()
+        private bool _webhooksEnabled = true;
+        private float _webhookBatchSeconds = 0.2f;
+        private int _webhookCircuitBreaker = 30;
 
         public TimberbotService(
             IGoodService goodService,
@@ -170,7 +172,8 @@ namespace Timberbot
             FactionNeedService factionNeedService,
             NeedGroupSpecService needGroupSpecService,
             PreviewFactory previewFactory,
-            EventBus eventBus)
+            EventBus eventBus,
+            TimberbotWebhook webhookMgr)
         {
             _goodService = goodService;
             _districtCenterRegistry = districtCenterRegistry;
@@ -208,6 +211,7 @@ namespace Timberbot
             _needGroupSpecService = needGroupSpecService;
             _previewFactory = previewFactory;
             _eventBus = eventBus;
+            WebhookMgr = webhookMgr;
         }
 
         public void Load()
@@ -217,8 +221,12 @@ namespace Timberbot
                 System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),
                 "Timberborn", "Mods", "Timberbot");
             TimberbotLog.Init(modDir);
-            TimberbotLog.Info($"v0.6.0 port={_httpPort} refresh={_refreshInterval}s debug={_debugEnabled} webhooks={_webhooksEnabled} batchMs={_webhookBatchSeconds * 1000:F0}");
+            WebhookMgr.Enabled = _webhooksEnabled;
+            WebhookMgr.BatchSeconds = _webhookBatchSeconds;
+            WebhookMgr.CircuitBreakerThreshold = _webhookCircuitBreaker;
+            TimberbotLog.Info($"v0.7.0 port={_httpPort} refresh={_refreshInterval}s debug={_debugEnabled} webhooks={_webhooksEnabled} batchMs={_webhookBatchSeconds * 1000:F0}");
             _eventBus.Register(this);
+            WebhookMgr.Register();
             BuildAllIndexes();
             _server = new TimberbotHttpServer(_httpPort, this, _debugEnabled);
             TimberbotLog.Info($"HTTP server started on port {_httpPort}");
@@ -262,6 +270,7 @@ namespace Timberbot
 
         public void Unload()
         {
+            WebhookMgr.Unregister();
             _eventBus.Unregister(this);
             _server?.Stop();
             _server = null;
@@ -279,7 +288,7 @@ namespace Timberbot
                 RefreshCachedState();
             }
             _server?.DrainRequests();
-            FlushWebhooks(now);
+            WebhookMgr.FlushWebhooks(now);
         }
     }
 }

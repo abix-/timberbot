@@ -586,13 +586,13 @@ namespace Timberbot
         {
             AddToIndexes(e.Entity);
             // webhooks (guarded -- no alloc if 0 subscribers)
-            if (_webhooks.Count > 0)
+            if (WebhookMgr.Count > 0)
             {
                 var ec = e.Entity;
                 if (ec.GetComponent<Building>() != null)
-                    PushEvent("building.placed", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
+                    WebhookMgr.PushEvent("building.placed", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
                 else if (ec.GetComponent<NeedManager>() != null)
-                    PushEvent("beaver.born", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name), isBot = ec.GetComponent<Bot>() != null });
+                    WebhookMgr.PushEvent("beaver.born", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name), isBot = ec.GetComponent<Bot>() != null });
             }
         }
 
@@ -600,13 +600,13 @@ namespace Timberbot
         public void OnEntityDeleted(EntityDeletedEvent e)
         {
             // webhooks (guarded -- no alloc if 0 subscribers)
-            if (_webhooks.Count > 0)
+            if (WebhookMgr.Count > 0)
             {
                 var ec = e.Entity;
                 if (ec.GetComponent<Building>() != null)
-                    PushEvent("building.demolished", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
+                    WebhookMgr.PushEvent("building.demolished", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
                 else if (ec.GetComponent<NeedManager>() != null)
-                    PushEvent("beaver.died", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
+                    WebhookMgr.PushEvent("beaver.died", new { id = ec.GameObject.GetInstanceID(), name = CleanName(ec.GameObject.name) });
             }
             RemoveFromIndexes(e.Entity);
         }
