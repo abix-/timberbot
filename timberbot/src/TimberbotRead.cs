@@ -351,19 +351,40 @@ namespace Timberbot
         }
 
         // PERF: iterates _cache.Buildings.Read instead of all entities.
-        public object CollectAlerts()
+        public object CollectAlerts(int limit = 100, int offset = 0)
         {
+            bool paginated = limit > 0;
+            int skipped = 0, emitted = 0;
             var jw = _cache.Jw.Reset().OpenArr();
             foreach (var c in _cache.Buildings.Read)
             {
                 if (c.Workplace != null && c.DesiredWorkers > 0 && c.AssignedWorkers < c.DesiredWorkers)
-                    jw.OpenObj().Key("type").Str("unstaffed").Key("id").Int(c.Id).Key("name").Str(c.Name).Key("workers").Str($"{c.AssignedWorkers}/{c.DesiredWorkers}").CloseObj();
-
+                {
+                    if (offset > 0 && skipped < offset) { skipped++; }
+                    else if (!paginated || emitted < limit)
+                    {
+                        jw.OpenObj().Key("type").Str("unstaffed").Key("id").Int(c.Id).Key("name").Str(c.Name).Key("workers").Str($"{c.AssignedWorkers}/{c.DesiredWorkers}").CloseObj();
+                        emitted++;
+                    }
+                }
                 if (c.IsConsumer && !c.Powered)
-                    jw.OpenObj().Key("type").Str("unpowered").Key("id").Int(c.Id).Key("name").Str(c.Name).CloseObj();
-
+                {
+                    if (offset > 0 && skipped < offset) { skipped++; }
+                    else if (!paginated || emitted < limit)
+                    {
+                        jw.OpenObj().Key("type").Str("unpowered").Key("id").Int(c.Id).Key("name").Str(c.Name).CloseObj();
+                        emitted++;
+                    }
+                }
                 if (c.Unreachable)
-                    jw.OpenObj().Key("type").Str("unreachable").Key("id").Int(c.Id).Key("name").Str(c.Name).CloseObj();
+                {
+                    if (offset > 0 && skipped < offset) { skipped++; }
+                    else if (!paginated || emitted < limit)
+                    {
+                        jw.OpenObj().Key("type").Str("unreachable").Key("id").Int(c.Id).Key("name").Str(c.Name).CloseObj();
+                        emitted++;
+                    }
+                }
             }
             jw.CloseArr();
             return jw.ToString();
@@ -517,7 +538,10 @@ namespace Timberbot
         //
         // Uses JwWriter to build JSON directly in a pre-allocated StringBuilder.
         // No Newtonsoft, no Dictionary, no anonymous objects. Just string appends.
-        public object CollectBuildings(string format = "toon", string detail = "basic")
+        // Server-side pagination: limit=100 default, limit=0 means unlimited.
+        // When limit/offset are used, response wraps in {total, offset, limit, items:[...]}.
+        // When unlimited (limit=0), returns flat array for backward compatibility.
+        public object CollectBuildings(string format = "toon", string detail = "basic", int limit = 100, int offset = 0)
         {
             // parse "id:-12345" to filter to a single building
             int? singleId = null;
@@ -527,12 +551,20 @@ namespace Timberbot
                     singleId = parsed;
             }
             bool fullDetail = detail == "full" || singleId.HasValue;
+            bool paginated = limit > 0 && !singleId.HasValue;
+            int total = _cache.Buildings.Read.Count;
+            int skipped = 0, emitted = 0;
 
-            var jw = _cache.Jw.Reset().OpenArr();
+            var jw = _cache.Jw.Reset();
+            if (paginated) jw.OpenObj().Key("total").Int(total).Key("offset").Int(offset).Key("limit").Int(limit).Key("items");
+            jw.OpenArr();
             foreach (var c in _cache.Buildings.Read)
             {
                 if (singleId.HasValue && c.Id != singleId.Value)
                     continue;
+                if (offset > 0 && skipped < offset) { skipped++; continue; }
+                if (paginated && emitted >= limit) break;
+                emitted++;
 
                 // every building gets these base fields
                 jw.OpenObj()
@@ -609,19 +641,33 @@ namespace Timberbot
                 jw.CloseObj();
             }
             jw.CloseArr();
+            if (paginated) jw.CloseObj();
             return jw.ToString();
         }
 
         // Shared implementation for trees and crops endpoints.
         // Filters the NaturalResources cache by species name (TreeSpecies or CropSpecies HashSet).
         // Using JwWriter instead of Newtonsoft: ~2ms for 3000 trees vs ~15ms with serialization.
-        private object CollectNaturalResourcesJw(TimberbotJw jw, System.Collections.Generic.HashSet<string> species)
+        private object CollectNaturalResourcesJw(TimberbotJw jw, System.Collections.Generic.HashSet<string> species, int limit = 100, int offset = 0)
         {
-            jw.Reset().OpenArr();
+            bool paginated = limit > 0;
+            int skipped = 0, emitted = 0;
+            // count matching items for total (needed for pagination metadata)
+            int total = 0;
+            if (paginated)
+                foreach (var c in _cache.NaturalResources.Read)
+                    if (c.Cuttable != null && species.Contains(c.Name)) total++;
+
+            jw.Reset();
+            if (paginated) jw.OpenObj().Key("total").Int(total).Key("offset").Int(offset).Key("limit").Int(limit).Key("items");
+            jw.OpenArr();
             foreach (var c in _cache.NaturalResources.Read)
             {
                 if (c.Cuttable == null) continue;
                 if (!species.Contains(c.Name)) continue;
+                if (offset > 0 && skipped < offset) { skipped++; continue; }
+                if (paginated && emitted >= limit) break;
+                emitted++;
                 jw.OpenObj()
                     .Key("id").Int(c.Id)
                     .Key("name").Str(c.Name)
@@ -633,18 +679,30 @@ namespace Timberbot
                     .CloseObj();
             }
             jw.CloseArr();
+            if (paginated) jw.CloseObj();
             return jw.ToString();
         }
 
-        public object CollectTrees() => CollectNaturalResourcesJw(_cache.Jw, TimberbotEntityCache.TreeSpecies);
-        public object CollectCrops() => CollectNaturalResourcesJw(_cache.Jw, TimberbotEntityCache.CropSpecies);
+        public object CollectTrees(int limit = 100, int offset = 0) => CollectNaturalResourcesJw(_cache.Jw, TimberbotEntityCache.TreeSpecies, limit, offset);
+        public object CollectCrops(int limit = 100, int offset = 0) => CollectNaturalResourcesJw(_cache.Jw, TimberbotEntityCache.CropSpecies, limit, offset);
 
-        public object CollectGatherables()
+        public object CollectGatherables(int limit = 100, int offset = 0)
         {
-            var jw = _cache.Jw.Reset().OpenArr();
+            bool paginated = limit > 0;
+            int skipped = 0, emitted = 0, total = 0;
+            if (paginated)
+                foreach (var c in _cache.NaturalResources.Read)
+                    if (c.Gatherable != null) total++;
+
+            var jw = _cache.Jw.Reset();
+            if (paginated) jw.OpenObj().Key("total").Int(total).Key("offset").Int(offset).Key("limit").Int(limit).Key("items");
+            jw.OpenArr();
             foreach (var c in _cache.NaturalResources.Read)
             {
                 if (c.Gatherable == null) continue;
+                if (offset > 0 && skipped < offset) { skipped++; continue; }
+                if (paginated && emitted >= limit) break;
+                emitted++;
                 jw.OpenObj()
                     .Key("id").Int(c.Id)
                     .Key("name").Str(c.Name)
@@ -653,6 +711,7 @@ namespace Timberbot
                     .CloseObj();
             }
             jw.CloseArr();
+            if (paginated) jw.CloseObj();
             return jw.ToString();
         }
 
@@ -661,7 +720,7 @@ namespace Timberbot
         // critical and unmet need summaries as "+"-separated strings for compact display.
         // Full mode includes all ~30 individual needs with points, wellbeing contribution,
         // favorable/critical flags, and need group (SocialLife, Fun, Nutrition, etc).
-        public object CollectBeavers(string format = "toon", string detail = "basic")
+        public object CollectBeavers(string format = "toon", string detail = "basic", int limit = 100, int offset = 0)
         {
             int? singleId = null;
             if (detail != null && detail.StartsWith("id:"))
@@ -670,12 +729,20 @@ namespace Timberbot
                     singleId = parsed;
             }
             bool fullDetail = detail == "full" || singleId.HasValue;
+            bool paginated = limit > 0 && !singleId.HasValue;
+            int total = _cache.Beavers.Read.Count;
+            int skipped = 0, emitted = 0;
 
-            var jw = _cache.Jw.Reset().OpenArr();
+            var jw = _cache.Jw.Reset();
+            if (paginated) jw.OpenObj().Key("total").Int(total).Key("offset").Int(offset).Key("limit").Int(limit).Key("items");
+            jw.OpenArr();
             foreach (var c in _cache.Beavers.Read)
             {
                 if (singleId.HasValue && c.Id != singleId.Value)
                     continue;
+                if (offset > 0 && skipped < offset) { skipped++; continue; }
+                if (paginated && emitted >= limit) break;
+                emitted++;
 
                 jw.OpenObj()
                     .Key("id").Int(c.Id)
@@ -734,6 +801,7 @@ namespace Timberbot
                 jw.CloseArr().CloseObj();
             }
             jw.CloseArr();
+            if (paginated) jw.CloseObj();
             return jw.ToString();
         }
 
@@ -875,13 +943,20 @@ namespace Timberbot
         }
 
         // Game event history (droughts, deaths, etc)
-        public object CollectNotifications()
+        public object CollectNotifications(int limit = 100, int offset = 0)
         {
+            bool paginated = limit > 0;
+            int skipped = 0, emitted = 0;
             var jw = _cache.Jw.Reset().OpenArr();
             try
             {
                 foreach (var n in _notificationSaver.Notifications)
+                {
+                    if (offset > 0 && skipped < offset) { skipped++; continue; }
+                    if (paginated && emitted >= limit) break;
+                    emitted++;
                     jw.OpenObj().Key("subject").Str(n.Subject.ToString()).Key("description").Str(n.Description.ToString()).Key("cycle").Int(n.Cycle).Key("cycleDay").Int(n.CycleDay).CloseObj();
+                }
             }
             catch (System.Exception _ex) { TimberbotLog.Error("notifications", _ex); }
             jw.CloseArr();

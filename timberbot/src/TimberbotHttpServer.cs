@@ -49,6 +49,8 @@ namespace Timberbot
             public JObject Body;                 // parsed JSON body (null if no body)
             public string Format;                // "toon" or "json" (response format)
             public string Detail;                // "basic" or "full" (response detail level)
+            public int Limit;                    // max items to return (0 = unlimited, default 100)
+            public int Offset;                   // skip first N items
         }
 
         public TimberbotHttpServer(int port, TimberbotService service, bool debugEnabled = false)
@@ -95,7 +97,7 @@ namespace Timberbot
                 processed++;
                 try
                 {
-                    var data = RouteRequest(req.Route, req.Method, req.Body, req.Format, req.Detail);
+                    var data = RouteRequest(req.Route, req.Method, req.Body, req.Format, req.Detail, req.Limit, req.Offset);
                     Respond(req.Context, 200, data);
                 }
                 catch (Exception ex)
@@ -135,6 +137,10 @@ namespace Timberbot
                 // detail: "basic" = compact fields, "full" = all fields including inventory/needs
                 var format = ctx.Request.QueryString["format"] ?? "toon";
                 var detail = ctx.Request.QueryString["detail"] ?? "basic";
+                // pagination: limit=100 default (0=unlimited), offset=0 default
+                int.TryParse(ctx.Request.QueryString["limit"], out int limit);
+                int.TryParse(ctx.Request.QueryString["offset"], out int offset);
+                if (ctx.Request.QueryString["limit"] == null) limit = 100;
                 // GET requests: handled RIGHT HERE on the background listener thread.
                 // This is the key performance trick -- reads never block the game.
                 // All CollectX() methods read from double-buffered cached data, so they're
@@ -143,7 +149,7 @@ namespace Timberbot
                 {
                     try
                     {
-                        var data = RouteRequest(path, method, null, format, detail);
+                        var data = RouteRequest(path, method, null, format, detail, limit, offset);
                         Respond(ctx, 200, data);
                     }
                     catch (Exception ex)
@@ -176,10 +182,12 @@ namespace Timberbot
                     }
                 }
 
-                // POST requests can override format/detail in the JSON body too
+                // POST requests can override format/detail/limit/offset in the JSON body too
                 // (body takes priority over query string)
                 format = body?.Value<string>("format") ?? format;
                 detail = body?.Value<string>("detail") ?? detail;
+                if (body?["limit"] != null) limit = body.Value<int>("limit");
+                if (body?["offset"] != null) offset = body.Value<int>("offset");
 
                 _pending.Enqueue(new PendingRequest
                 {
@@ -188,7 +196,9 @@ namespace Timberbot
                     Method = method,
                     Body = body,
                     Format = format,
-                    Detail = detail
+                    Detail = detail,
+                    Limit = limit,
+                    Offset = offset
                 });
             }
         }
@@ -202,7 +212,7 @@ namespace Timberbot
         //   /api/building/range (POST): reads work radius but needs body param for building ID
         //   /api/placement/find (POST): reads valid spots but needs body params for search area
         // These are logically reads but use POST because GET has no request body.
-        private object RouteRequest(string path, string method, JObject body, string format = "toon", string detail = "basic")
+        private object RouteRequest(string path, string method, JObject body, string format = "toon", string detail = "basic", int limit = 100, int offset = 0)
         {
             // GET endpoints (read from double-buffered cache -- zero contention with game thread)
             if (method == "GET")
@@ -212,7 +222,7 @@ namespace Timberbot
                     case "/api/summary":
                         return _service.Read.CollectSummary(format);
                     case "/api/alerts":
-                        return _service.Read.CollectAlerts();
+                        return _service.Read.CollectAlerts(limit, offset);
                     case "/api/tree_clusters":
                         return _service.Read.CollectTreeClusters();
                     case "/api/resources":
@@ -226,15 +236,15 @@ namespace Timberbot
                     case "/api/districts":
                         return _service.Read.CollectDistricts(format);
                     case "/api/buildings":
-                        return _service.Read.CollectBuildings(format, detail);
+                        return _service.Read.CollectBuildings(format, detail, limit, offset);
                     case "/api/trees":
-                        return _service.Read.CollectTrees();
+                        return _service.Read.CollectTrees(limit, offset);
                     case "/api/crops":
-                        return _service.Read.CollectCrops();
+                        return _service.Read.CollectCrops(limit, offset);
                     case "/api/gatherables":
-                        return _service.Read.CollectGatherables();
+                        return _service.Read.CollectGatherables(limit, offset);
                     case "/api/beavers":
-                        return _service.Read.CollectBeavers(format, detail);
+                        return _service.Read.CollectBeavers(format, detail, limit, offset);
                     case "/api/distribution":
                         return _service.Read.CollectDistribution();
                     case "/api/science":
@@ -242,7 +252,7 @@ namespace Timberbot
                     case "/api/wellbeing":
                         return _service.Read.CollectWellbeing();
                     case "/api/notifications":
-                        return _service.Read.CollectNotifications();
+                        return _service.Read.CollectNotifications(limit, offset);
                     case "/api/workhours":
                         return _service.Read.CollectWorkHours();
 

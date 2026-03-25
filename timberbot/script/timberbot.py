@@ -115,48 +115,31 @@ class Timberbot:
         return self._get("/api/districts")
 
     def buildings(self, limit=0, offset=0, detail="basic"):
-        """All buildings. detail: basic (compact), full (all fields), id:<id> (single building)."""
-        params = {}
+        """All buildings. detail: basic (compact), full (all fields), id:<id> (single building).
+        Server defaults to limit=100. CLI passes limit=0 (unlimited) by default."""
+        params = {"limit": limit, "offset": offset}
         if detail != "basic":
             params["detail"] = detail
-        data = self._get("/api/buildings", params=params)
-        if isinstance(data, list):
-            if offset: data = data[offset:]
-            if limit: data = data[:limit]
-        return data
+        return self._get("/api/buildings", params=params)
 
     def trees(self, limit=0, offset=0):
         """Trees: [{id, name, x, y, z, marked, alive, grown, growth}]."""
-        data = self._get("/api/trees")
-        if isinstance(data, list):
-            if offset: data = data[offset:]
-            if limit: data = data[:limit]
-        return data
+        return self._get("/api/trees", params={"limit": limit, "offset": offset})
 
     def crops(self, limit=0, offset=0):
         """Crops in the ground: [{id, name, x, y, z, marked, alive, grown, growth}]."""
-        data = self._get("/api/crops")
-        if isinstance(data, list):
-            if offset: data = data[offset:]
-            if limit: data = data[:limit]
-        return data
+        return self._get("/api/crops", params={"limit": limit, "offset": offset})
 
     def gatherables(self, limit=0, offset=0):
         """All gatherable resources (berry bushes etc): [{id, name, x, y, z, alive}]."""
-        data = self._get("/api/gatherables")
-        if offset: data = data[offset:]
-        if limit: data = data[:limit]
-        return data
+        return self._get("/api/gatherables", params={"limit": limit, "offset": offset})
 
     def beavers(self, limit=0, offset=0, detail="basic"):
         """All beavers with wellbeing and needs. detail:full shows all needs with group category."""
-        params = {}
+        params = {"limit": limit, "offset": offset}
         if detail != "basic":
             params["detail"] = detail
-        data = self._get("/api/beavers", params=params)
-        if offset: data = data[offset:]
-        if limit: data = data[:limit]
-        return data
+        return self._get("/api/beavers", params=params)
 
     def workhours(self):
         """Work schedule: {endHours, areWorkingHours, hoursPassedToday}."""
