@@ -113,6 +113,48 @@ namespace Timberbot
         // After:  jw.RawProp("districts", districtsJson)
         public TimberbotJw RawProp(string name, string json) => Key(name).Raw(json);
 
+        // --- One-call response builders ---
+        // Pass all properties as tuples. Handles Reset/OpenObj/CloseObj/ToString internally.
+        //
+        //   _jw.Result(("id", 5), ("name", "Path"), ("placed", true))
+        //   -> {"id":5,"name":"Path","placed":true}
+        //
+        //   _jw.Error("not found")
+        //   -> {"error":"not found"}
+        //
+        //   _jw.Error("not found", ("id", buildingId))
+        //   -> {"error":"not found","id":42}
+        public string Result(params (string key, object val)[] props)
+        {
+            Reset().OpenObj();
+            foreach (var (key, val) in props)
+                WriteProp(key, val);
+            CloseObj();
+            return ToString();
+        }
+
+        public string Error(string msg, params (string key, object val)[] extra)
+        {
+            Reset().OpenObj().Prop("error", msg);
+            foreach (var (key, val) in extra)
+                WriteProp(key, val);
+            CloseObj();
+            return ToString();
+        }
+
+        private void WriteProp(string key, object val)
+        {
+            switch (val)
+            {
+                case int i: Prop(key, i); break;
+                case long l: Prop(key, l); break;
+                case bool b: Prop(key, b); break;
+                case float f: Prop(key, f); break;
+                case string s: Prop(key, s); break;
+                default: Prop(key, val); break; // Newtonsoft fallback for complex types
+            }
+        }
+
         public override string ToString() => _sb.ToString();
 
         // Returns the content inside the outermost {} or [] without the braces.
