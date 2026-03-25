@@ -333,6 +333,7 @@ namespace Timberbot
                         }
                         else
                         {
+                            // going down: ramp on lower z side, forward from cx
                             rampTileX = cx + dx * step;
                             rampTileY = cy + dy * step;
                         }
@@ -358,7 +359,8 @@ namespace Timberbot
                     // fall through to place path at current tile
                 }
 
-                plan.Add((cx, cy, tz, "Path", "south"));
+                if (!plan.Exists(p => p.x == cx && p.y == cy))
+                    plan.Add((cx, cy, tz, "Path", "south"));
                 prevZ = tz;
                 if (cx == x2 && cy == y2) break;
                 cx += dx; cy += dy;
@@ -798,7 +800,21 @@ namespace Timberbot
                     foreach (var block in preview.BlockObject.PositionedBlocks.GetAllBlocks())
                     {
                         if (bv.BlockConflictsWithExistingObject(block))
-                            return $"occupied at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
+                        {
+                            var bc = block.Coordinates;
+                            string blocker = null;
+                            foreach (var cb in _cache.Buildings.Read)
+                            {
+                                if (cb.OccupiedTiles == null) continue;
+                                foreach (var t in cb.OccupiedTiles)
+                                    if (t.x == bc.x && t.y == bc.y) { blocker = cb.Name; break; }
+                                if (blocker != null) break;
+                            }
+                            if (blocker == null)
+                                foreach (var nr in _cache.NaturalResources.Read)
+                                    if (nr.X == bc.x && nr.Y == bc.y) { blocker = nr.Name; break; }
+                            return $"occupied by {blocker ?? "unknown"} at ({bc.x},{bc.y},{bc.z})";
+                        }
                         if (bv.BlockConflictsWithTerrain(block))
                             return $"terrain conflict at ({block.Coordinates.x},{block.Coordinates.y},{block.Coordinates.z})";
                         if (bv.BlockConflictsWithBlocksBelow(block))

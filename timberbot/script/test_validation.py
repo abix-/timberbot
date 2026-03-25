@@ -14,6 +14,7 @@ Usage:
     python test_validation.py --list       # show all test names
 """
 import json
+import os
 import subprocess
 import sys
 import time
@@ -222,7 +223,10 @@ class TestRunner:
         self.test_orientation()
         self.test_find_placement()
         self.test_water_placement()
-        self.test_path_routing()
+        self.test_path_flat()
+        self.test_path_1z()
+        self.test_path_2z()
+        self.test_path_errors()
         self.test_overridable_placement()
         self.test_summary_projection()
         self.test_map_moisture()
@@ -879,64 +883,66 @@ class TestRunner:
                            isinstance(wt["water"], (int, float)) and wt["water"] > 0 and wt["water"] < 10,
                            f"water={wt['water']}")
 
-    def test_path_routing(self):
-        print("\n=== path routing ===\n")
+    def _path_demolish_range(self, x1, y1, x2, y2):
+        """demolish all paths/stairs/platforms in a range"""
+        self.wait_for_refresh()
+        buildings = self.bot.buildings()
+        if not isinstance(buildings, list):
+            return
+        for b in buildings:
+            bx, by = b.get("x", -1), b.get("y", -1)
+            name = str(b.get("name", ""))
+            if name in ("Path", "Stairs", "Platform") and min(x1, x2) <= bx <= max(x1, x2) and min(y1, y2) <= by <= max(y1, y2):
+                self.bot.demolish_building(b["id"])
 
-        cx, cy = self.center_x, self.center_y
+    def _path_place_and_check(self, label, x1, y1, x2, y2, expect_stairs=False, expect_platforms=False):
+        """cleanup test area, place a path, verify results"""
+        self._path_demolish_range(x1, y1, x2, y2)
+        result = self.bot.place_path(x1, y1, x2, y2)
+        placed = result.get("placed", {}) if isinstance(result, dict) else {}
+        errs = str(result.get("errors", ""))
 
-        def demolish_range(x1, y1, x2, y2):
-            """demolish all paths/stairs/platforms in a range"""
-            self.wait_for_refresh()
-            buildings = self.bot.buildings()
-            if not isinstance(buildings, list):
-                return
-            for b in buildings:
-                bx, by = b.get("x", -1), b.get("y", -1)
-                name = str(b.get("name", ""))
-                if name in ("Path", "Stairs", "Platform") and min(x1, x2) <= bx <= max(x1, x2) and min(y1, y2) <= by <= max(y1, y2):
-                    self.bot.demolish_building(b["id"])
+        if "not unlocked" in errs or "not_unlocked" in errs:
+            self.skip(label, "stairs/platforms not unlocked")
+            return
 
-        def place_and_check(label, x1, y1, x2, y2, expect_stairs=False, expect_platforms=False):
-            """place a path and verify results, then cleanup"""
-            result = self.bot.place_path(x1, y1, x2, y2)
-            placed = result.get("placed", {}) if isinstance(result, dict) else {}
-            errs = str(result.get("errors", ""))
+        self.check(f"{label}: paths placed", placed.get("paths", 0) > 0, json.dumps(result)[:120])
+        if expect_stairs:
+            self.check(f"{label}: stairs placed", placed.get("stairs", 0) > 0, json.dumps(result)[:120])
+        if expect_platforms:
+            self.check(f"{label}: platforms placed", placed.get("platforms", 0) > 0, json.dumps(result)[:120])
+        self.check(f"{label}: no skipped", result.get("skipped", 0) == 0, json.dumps(result)[:120])
 
-            if "not unlocked" in errs or "not_unlocked" in errs:
-                self.skip(label, "stairs/platforms not unlocked")
-                return
+    def test_path_flat(self):
+        print("\n=== path routing: flat ===\n")
+        # z=3 area far east, avoids player builds
+        self._path_place_and_check("flat east", 160, 143, 164, 143)
+        self._path_place_and_check("flat west", 164, 142, 160, 142)
+        self._path_place_and_check("flat north", 160, 139, 160, 143)
+        self._path_place_and_check("flat south", 161, 143, 161, 139)
 
-            self.check(f"{label}: paths placed", placed.get("paths", 0) > 0, json.dumps(result)[:120])
-            if expect_stairs:
-                self.check(f"{label}: stairs placed", placed.get("stairs", 0) > 0, json.dumps(result)[:120])
-            if expect_platforms:
-                self.check(f"{label}: platforms placed", placed.get("platforms", 0) > 0, json.dumps(result)[:120])
-            self.check(f"{label}: no skipped", result.get("skipped", 0) == 0, json.dumps(result)[:120])
-            demolish_range(x1, y1, x2, y2)
+    def test_path_1z(self):
+        print("\n=== path routing: 1 z-level ===\n")
+        # east of gear workshop: z=2->3 diagonal boundary
+        # each test uses its own row, no overlap
+        self._path_place_and_check("1z east", 152, 133, 158, 133, expect_stairs=True)  # z change at x=155->156
+        self._path_place_and_check("1z west", 158, 137, 150, 137, expect_stairs=True)  # z change at x=154->153
 
-        # --- FLAT PATHS (z=2 area east of DC, far enough to avoid player builds) ---
-        place_and_check("flat EW y=143", 160, 143, 164, 143)
-        place_and_check("flat EW y=142", 160, 142, 164, 142)
-        place_and_check("flat NS x=160", 160, 139, 160, 143)
-        place_and_check("flat NS x=161", 161, 139, 161, 143)
+    def test_path_2z(self):
+        print("\n=== path routing: 2 z-level ===\n")
+        # behind lumber mill: z=2->4 at y=149->150
+        self._path_place_and_check("2z north", 137, 146, 137, 152, expect_stairs=True, expect_platforms=True)
+        self._path_place_and_check("2z south", 138, 152, 138, 146, expect_stairs=True, expect_platforms=True)
+        # west of barrack: z=6->4 at x=150->151
+        self._path_place_and_check("2z east", 148, 154, 154, 154, expect_stairs=True, expect_platforms=True)
+        self._path_place_and_check("2z west", 154, 155, 148, 155, expect_stairs=True, expect_platforms=True)
 
-        # --- 1-LEVEL Z-CHANGE (z=2 to z=3, east of gear workshop area) ---
-        # oasis map static coords: z=2->3 transition at x=154->155, NS at y=133->134
-        place_and_check("1z EW y=135", 152, 135, 157, 135, expect_stairs=True)
-        place_and_check("1z EW y=136", 152, 136, 157, 136, expect_stairs=True)
-        place_and_check("1z NS x=155", 155, 131, 155, 136, expect_stairs=True)
-        place_and_check("1z NS x=154", 154, 133, 154, 138, expect_stairs=True)
-
-        # --- 2-LEVEL Z-CHANGE (z=2 to z=4, directly behind lumber mill at 137,143) ---
-        # mill is 2 wide (x=137-138), z=2->4 at y=149->150
-        place_and_check("2z NS x=137", 137, 146, 137, 152, expect_stairs=True, expect_platforms=True)
-        place_and_check("2z NS x=138", 138, 146, 138, 152, expect_stairs=True, expect_platforms=True)
-
-        # --- ERROR HANDLING ---
-        result2 = self.bot.place_path(100, 100, 105, 105)
+    def test_path_errors(self):
+        print("\n=== path routing: errors ===\n")
+        result = self.bot.place_path(100, 100, 105, 105)
         self.check("diagonal path rejected",
-                   self.err(result2) and "invalid_param" in str(result2.get("error", "")),
-                   json.dumps(result2)[:100])
+                   self.err(result) and "invalid_param" in str(result.get("error", "")),
+                   json.dumps(result)[:100])
 
     def test_overridable_placement(self):
         print("\n=== overridable placement ===\n")
@@ -2648,6 +2654,19 @@ class TestRunner:
                    f"burst took {burst_ms:.0f}ms")
 
 
+class TeeWriter:
+    """Write to both terminal and a log file."""
+    def __init__(self, terminal, logfile):
+        self.terminal = terminal
+        self.logfile = logfile
+    def write(self, message):
+        self.terminal.write(message)
+        self.logfile.write(message)
+    def flush(self):
+        self.terminal.flush()
+        self.logfile.flush()
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Timberbot API test suite")
@@ -2673,6 +2692,16 @@ def main():
     if not runner.bot.ping():
         print("error: game not reachable")
         sys.exit(1)
+
+    # tee output to timestamped results file
+    from datetime import datetime
+    results_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "test-results")
+    os.makedirs(results_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    test_names = "-".join(args.tests) if args.tests else "all"
+    logpath = os.path.join(results_dir, f"{timestamp}-{test_names}.txt")
+    logfile = open(logpath, "w")
+    sys.stdout = TeeWriter(sys.__stdout__, logfile)
 
     if args.benchmark:
         # call the in-game benchmark endpoint directly
@@ -2720,6 +2749,9 @@ def main():
         summary += f", {runner.skipped} skipped"
     summary += " ===\n"
     print(summary)
+    print(f"results: {logpath}")
+    logfile.close()
+    sys.stdout = sys.__stdout__
     sys.exit(1 if runner.failed else 0)
 
 

@@ -4,6 +4,7 @@ obj/
 *.suo
 .vs/
 __pycache__/
+timberbot/test-results/
 *.pyc
 *.egg-info/
 dist/
