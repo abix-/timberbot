@@ -57,10 +57,14 @@ Major performance overhaul. All GET requests now served on a background thread w
 - Live `top` dashboard ([`cfec1a5`][cfec1a5])
 - Flood validation in `find_placement` ([`04feca0`][04feca0])
 - Resource projection: logDays, plankDays, gearDays ([`f0a3ccf`][f0a3ccf])
+- Carried goods, bot durability on beavers ([`79ccde1`][79ccde1])
 - Power networks, beaver position, district, map stacking ([`79ccde1`][79ccde1])
+- `manager` command: auto-manage haulers by pausing low-priority buildings ([`15f5bcc`][15f5bcc])
+- Cadenced cache refresh with `settings.json` config ([`17469fa`][17469fa])
 
 ### Fixes
 - Pause/unpause uses game methods for proper UI icon ([`57e7323`][57e7323])
+- Unemployed count uses adults only (children can't work) ([`f8b8bd2`][f8b8bd2])
 - Double-buffer race condition on entity add/remove ([`f9a3ffe`][f9a3ffe])
 - JsonWriter double-comma bug and UTF-8 BOM ([`38597be`][38597be], [`e65f7ed`][e65f7ed])
 - Shared reference-type fields between buffers ([`e781c3e`][e781c3e])
@@ -93,6 +97,9 @@ Major performance overhaul. All GET requests now served on a background thread w
 [f9a3ffe]: https://github.com/abix-/TimberbornMods/commit/f9a3ffe
 [38597be]: https://github.com/abix-/TimberbornMods/commit/38597be
 [e65f7ed]: https://github.com/abix-/TimberbornMods/commit/e65f7ed
+[15f5bcc]: https://github.com/abix-/TimberbornMods/commit/15f5bcc
+[17469fa]: https://github.com/abix-/TimberbornMods/commit/17469fa
+[f8b8bd2]: https://github.com/abix-/TimberbornMods/commit/f8b8bd2
 [e781c3e]: https://github.com/abix-/TimberbornMods/commit/e781c3e
 
 ## [v0.5.5] (2026-03-24)
