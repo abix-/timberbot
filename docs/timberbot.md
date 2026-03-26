@@ -81,7 +81,7 @@ Beavers die if food or water hits 0.
 
 ## HARD RULE: Sequential execution
 
-**NEVER run game API calls in parallel.** Every placement, path, or config call changes the map state that the next call depends on. A failed placement invalidates every subsequent call that assumed it succeeded. Run each call sequentially, confirm it worked, then proceed. Read-only calls (`summary`, `buildings`, `find_placement`, `map`, `tiles`, `weather`, etc.) CAN run in parallel with each other since they don't mutate state. But any mutating call (`place_building`, `place_path`, `demolish_building`, `set_*`, `plant_crop`, `mark_trees`, etc.) must complete and succeed before the next action.
+**NEVER run game API calls in parallel.** Every placement, path, or config call changes the map state that the next call depends on. A failed placement invalidates every subsequent call that assumed it succeeded. Run each call sequentially, confirm it worked, then proceed. Read-only calls (`brain`, `buildings`, `find_placement`, `map`, `tiles`, `weather`, etc.) CAN run in parallel with each other since they don't mutate state. But any mutating call (`place_building`, `place_path`, `demolish_building`, `set_*`, `plant_crop`, `mark_trees`, etc.) must complete and succeed before the next action.
 
 ## Roads
 
@@ -147,7 +147,7 @@ Timberborn has 4 speed levels. Choose based on **your confidence in the current 
 
 ## Brain (persistent memory)
 
-`brain` is the ONE command for colony awareness. Always fresh from game. Replaces `summary`. Run it at session start, after placing buildings, whenever you need the current picture. **NEVER use `summary` -- use `brain`.**
+`brain` is the ONE command for AI colony awareness. Always fresh from game. Superior to `summary` because it adds persistence, task tracking, resource clusters, faction detection, and spatial memory. `summary` still works as a lightweight endpoint but `brain` is what you should use.
 
 Everything persists to `~/Documents/Timberborn/Mods/Timberbot/memory/` in toon format. Survives between sessions.
 

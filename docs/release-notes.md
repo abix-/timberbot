@@ -55,7 +55,7 @@ New `distance` field. Uses game's flow-field pathfinding to report actual path c
 
 ## breaking changes
 
-- `summary` deprecated -- use `brain` instead
+- `summary` still works but `brain` is the preferred command for AI players -- brain adds persistence, task tracking, resource clusters, faction detection, spatial memory
 - `save_brain` / `load_brain` removed -- use `brain`
 - `map` syntax: `x:X y:Y radius:N` -> `x1:X y1:Y x2:X2 y2:Y2`
 - all boolean fields return `0`/`1` instead of `true`/`false`
