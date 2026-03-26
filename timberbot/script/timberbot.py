@@ -659,109 +659,21 @@ class Timberbot:
     # ------------------------------------------------------------------
 
     def brain(self):
-        """Full colony picture. Always fresh from game. Preserves maps + tasks. Replaces summary/save_brain/load_brain."""
+        """Full colony picture. One API call + disk persistence for maps/tasks."""
         global _MEMORY_DIR
-        _t0 = time.perf_counter()
-        _timings = {}
-        def _mark(label): _timings[label] = (time.perf_counter() - _t0) * 1000
 
+        # one call gets everything: summary + faction + DC + building roles + clusters
         summary = self._get_json("/api/summary")
-        _mark("summary")
 
         # set per-settlement memory dir
         settlement = _sanitize_name(summary.get("settlementName", "unknown") if isinstance(summary, dict) else "unknown")
         _MEMORY_DIR = os.path.join(_MEMORY_BASE, settlement)
+
+        # slim buildings index (separate call -- summary doesn't include per-building data)
         buildings_data = self.buildings(limit=0)
-        _mark("buildings")
         items = buildings_data.get("items", buildings_data) if isinstance(buildings_data, dict) else buildings_data
         items = items if isinstance(items, list) else []
-
-        # slim buildings index
         slim = [{"id": b["id"], "name": b.get("name", ""), "x": b["x"], "y": b["y"], "z": b["z"]} for b in items]
-
-        # building breakdown by role
-        _roles = {
-            "water": {"Pump", "Tank", "FluidDump", "AquiferDrill"},
-            "food": {"FarmHouse", "AquaticFarmhouse", "EfficientFarmHouse", "Gatherer", "Grill",
-                     "Gristmill", "Bakery", "FoodFactory", "Fermenter", "HydroponicGarden"},
-            "housing": {"Lodge", "MiniLodge", "DoubleLodge", "TripleLodge", "Rowhouse", "Barrack"},
-            "wood": {"Lumberjack", "LumberMill", "IndustrialLumberMill", "Forester"},
-            "storage": {"Warehouse", "Pile", "ReservePile", "ReserveWarehouse", "ReserveTank"},
-            "power": {"PowerWheel", "LargePowerWheel", "WaterWheel", "WindTurbine",
-                      "LargeWindTurbine", "SteamEngine", "PowerShaft", "Clutch", "GravityBattery"},
-            "science": {"Inventor", "Numbercruncher", "Observatory"},
-            "production": {"GearWorkshop", "Smelter", "Metalsmith", "Scavenger", "Mine",
-                           "BotAssembler", "BotPartFactory", "PaperMill", "PrintingPress",
-                           "WoodWorkshop", "Centrifuge", "ExplosivesFactory", "Refinery"},
-            "leisure": {"Campfire", "Scratcher", "Shower", "DoubleShower", "SwimmingPool",
-                        "Carousel", "MudPit", "MudBath", "ExercisePlaza", "WindTunnel",
-                        "Motivatorium", "Lido", "Detailer", "ContemplationSpot", "Agora",
-                        "DanceHall", "RooftopTerrace", "MedicalBed", "TeethGrindstone",
-                        "Herbalist", "DecontaminationPod", "ChargingStation"},
-        }
-        building_counts = {}
-        for b in items:
-            n = b.get("name", "")
-            if n == "Path":
-                building_counts["paths"] = building_counts.get("paths", 0) + 1
-                continue
-            matched = False
-            for role, keywords in _roles.items():
-                if any(k in n for k in keywords):
-                    building_counts[role] = building_counts.get(role, 0) + 1
-                    matched = True
-                    break
-            if not matched:
-                building_counts["other"] = building_counts.get("other", 0) + 1
-
-        # find DC and compute entrance
-        dc = None
-        for b in items:
-            if "DistrictCenter" in str(b.get("name", "")):
-                orient = b.get("orientation", "south")
-                bx, by, bz = b["x"], b["y"], b["z"]
-                ex, ey = bx + 1, by + 1
-                if orient == "south":
-                    ex, ey = bx + 1, by - 1
-                elif orient == "north":
-                    ex, ey = bx + 1, by + 3
-                elif orient == "east":
-                    ex, ey = bx + 3, by + 1
-                elif orient == "west":
-                    ex, ey = bx - 1, by + 1
-                dc = {"x": bx, "y": by, "z": bz, "orientation": orient, "entrance": [ex, ey]}
-                break
-
-        # detect faction
-        try:
-            prefabs = self._get_json("/api/prefabs")
-            plist = prefabs if isinstance(prefabs, list) else []
-            ft = sum(1 for p in plist if "Folktails" in p.get("name", ""))
-            faction = "Folktails" if ft > 0 else "IronTeeth"
-        except Exception:
-            faction = "unknown"
-        _mark("prefabs")
-
-        # nearby resource clusters: same z-level as DC, within 40 tiles
-        dc_z = dc["z"] if dc else 0
-        dc_x = dc["x"] if dc else 0
-        dc_y = dc["y"] if dc else 0
-
-        def _nearby(clusters):
-            return [c for c in (clusters if isinstance(clusters, list) else [])
-                    if c.get("z") == dc_z
-                    and abs(c.get("x", 0) - dc_x) + abs(c.get("y", 0) - dc_y) <= 40]
-
-        try:
-            tree_clusters = _nearby(self._get_json("/api/tree_clusters"))
-        except Exception:
-            tree_clusters = []
-        _mark("tree_clusters")
-        try:
-            food_clusters = _nearby(self._get_json("/api/food_clusters"))
-        except Exception:
-            food_clusters = []
-        _mark("food_clusters")
 
         # preserve maps and tasks from existing brain
         existing_maps = {}
@@ -781,12 +693,7 @@ class Timberbot:
         result = {
             "timestamp": datetime.now().isoformat(),
             "settlement": settlement,
-            "faction": faction,
-            "dc": dc,
             "summary": summary,
-            "buildings": building_counts,
-            "treeClusters": tree_clusters,
-            "foodClusters": food_clusters,
             "maps": existing_maps,
             "tasks": existing_tasks,
         }
@@ -798,18 +705,11 @@ class Timberbot:
             _t.dump(result, f)
         with open(os.path.join(_MEMORY_DIR, "buildings.json"), "w") as f:
             json.dump(slim, f, indent=2)
-        _mark("persist")
-
-        # print timings to stderr
-        prev = 0
-        for label, ms in _timings.items():
-            print(f"  brain: {label:<20} {ms - prev:>6.0f}ms (cumulative {ms:.0f}ms)", file=sys.stderr)
-            prev = ms
 
         # auto-map DC area on first run
+        dc = summary.get("dc") if isinstance(summary, dict) else None
         if dc and not existing_maps:
             self.map(dc["x"] - 20, dc["y"] - 20, dc["x"] + 20, dc["y"] + 20, name="districtcenter")
-            # reload to pick up maps index
             with open(bpath) as f:
                 result = _t.load(f)
 

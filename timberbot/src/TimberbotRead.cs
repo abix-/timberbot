@@ -199,29 +199,72 @@ namespace Timberbot
             }
 
             // --- BUILDINGS ---
-            // Aggregate housing, employment, and alert data from cached building state.
-            // All fields were snapshotted in RefreshCachedState -- we just sum them here.
+            // Aggregate housing, employment, alerts, DC location, and role counts.
+            int dcX = 0, dcY = 0, dcZ = 0, entranceX = 0, entranceY = 0;
+            string dcOrientation = "south";
+            bool foundDC = false;
+            var roleCounts = new Dictionary<string, int>();
+            var roleMap = new Dictionary<string, string[]> {
+                {"water", new[]{"Pump","Tank","FluidDump","AquiferDrill"}},
+                {"food", new[]{"FarmHouse","AquaticFarmhouse","EfficientFarmHouse","Gatherer","Grill","Gristmill","Bakery","FoodFactory","Fermenter","HydroponicGarden"}},
+                {"housing", new[]{"Lodge","MiniLodge","DoubleLodge","TripleLodge","Rowhouse","Barrack"}},
+                {"wood", new[]{"Lumberjack","LumberMill","IndustrialLumberMill","Forester"}},
+                {"storage", new[]{"Warehouse","Pile","ReservePile","ReserveWarehouse","ReserveTank"}},
+                {"power", new[]{"PowerWheel","LargePowerWheel","WaterWheel","WindTurbine","LargeWindTurbine","SteamEngine","PowerShaft","Clutch","GravityBattery"}},
+                {"science", new[]{"Inventor","Numbercruncher","Observatory"}},
+                {"production", new[]{"GearWorkshop","Smelter","Metalsmith","Scavenger","Mine","BotAssembler","BotPartFactory","PaperMill","PrintingPress","WoodWorkshop","Centrifuge","ExplosivesFactory","Refinery"}},
+                {"leisure", new[]{"Campfire","Scratcher","Shower","DoubleShower","SwimmingPool","Carousel","MudPit","MudBath","ExercisePlaza","WindTunnel","Motivatorium","Lido","Detailer","ContemplationSpot","Agora","DanceHall","RooftopTerrace","MedicalBed","TeethGrindstone","Herbalist","DecontaminationPod","ChargingStation"}},
+            };
+
             foreach (var c in _cache.Buildings.Read)
             {
-                if (c.Dwelling != null) // housing (barracks, rowhouses, lodges)
+                if (c.Dwelling != null)
                 {
                     occupiedBeds += c.Dwellers;
                     totalBeds += c.MaxDwellers;
                 }
-                if (c.Workplace != null) // any building with workers
+                if (c.Workplace != null)
                 {
                     assignedWorkers += c.AssignedWorkers;
                     totalVacancies += c.DesiredWorkers;
-                    // unstaffed = wants workers but doesn't have enough
                     if (c.DesiredWorkers > 0 && c.AssignedWorkers < c.DesiredWorkers)
                         alertUnstaffed++;
                 }
-                // unpowered = consumes power but isn't getting any
                 if (c.IsConsumer != 0 && c.Powered == 0)
                     alertUnpowered++;
                 if (c.Unreachable != 0)
                     alertUnreachable++;
+
+                // DC detection
+                if (!foundDC && c.Name != null && c.Name.Contains("DistrictCenter"))
+                {
+                    foundDC = true;
+                    dcX = c.X; dcY = c.Y; dcZ = c.Z;
+                    dcOrientation = c.Orientation ?? "south";
+                    entranceX = c.X + 1; entranceY = c.Y + 1;
+                    if (dcOrientation == "south") { entranceX = c.X + 1; entranceY = c.Y - 1; }
+                    else if (dcOrientation == "north") { entranceX = c.X + 1; entranceY = c.Y + 3; }
+                    else if (dcOrientation == "east") { entranceX = c.X + 3; entranceY = c.Y + 1; }
+                    else if (dcOrientation == "west") { entranceX = c.X - 1; entranceY = c.Y + 1; }
+                }
+
+                // role counting
+                string name = c.Name ?? "";
+                if (name == "Path") { roleCounts["paths"] = roleCounts.GetValueOrDefault("paths") + 1; continue; }
+                bool matched = false;
+                foreach (var kv in roleMap)
+                {
+                    foreach (var keyword in kv.Value)
+                    {
+                        if (name.Contains(keyword)) { roleCounts[kv.Key] = roleCounts.GetValueOrDefault(kv.Key) + 1; matched = true; break; }
+                    }
+                    if (matched) break;
+                }
+                if (!matched) roleCounts["other"] = roleCounts.GetValueOrDefault("other") + 1;
             }
+
+            // faction
+            string faction = TimberbotEntityCache.FactionSuffix == ".Folktails" ? "Folktails" : TimberbotEntityCache.FactionSuffix == ".IronTeeth" ? "IronTeeth" : "unknown";
 
             // --- BEAVERS ---
             // miserable = wellbeing below 4 (struggling, may die soon)
@@ -297,6 +340,35 @@ namespace Timberbot
                     .Prop("unpowered", alertUnpowered)
                     .Prop("unreachable", alertUnreachable)
                     .CloseObj();
+                jj.Prop("faction", faction);
+                jj.Obj("dc").Prop("x", dcX).Prop("y", dcY).Prop("z", dcZ).Prop("orientation", dcOrientation).Prop("entranceX", entranceX).Prop("entranceY", entranceY).CloseObj();
+                jj.Obj("buildings");
+                foreach (var kv in roleCounts) jj.Prop(kv.Key, kv.Value);
+                jj.CloseObj();
+                // nearby clusters (same z, within 40 tiles of DC)
+                {
+                    var tcAll = CollectTreeClusters("json") as string;
+                    var fcAll = CollectFoodClusters("json") as string;
+                    // parse and filter -- reuse JwWriter for output
+                    var tcList = Newtonsoft.Json.JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(tcAll ?? "[]");
+                    var fcList = Newtonsoft.Json.JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(fcAll ?? "[]");
+                    jj.Arr("treeClusters");
+                    if (tcList != null) foreach (var tc in tcList)
+                    {
+                        int cx = System.Convert.ToInt32(tc["x"]), cy = System.Convert.ToInt32(tc["y"]), cz = System.Convert.ToInt32(tc["z"]);
+                        if (cz == dcZ && System.Math.Abs(cx - dcX) + System.Math.Abs(cy - dcY) <= 40)
+                            jj.OpenObj().Prop("x", cx).Prop("y", cy).Prop("z", cz).Prop("grown", System.Convert.ToInt32(tc["grown"])).Prop("total", System.Convert.ToInt32(tc["total"])).CloseObj();
+                    }
+                    jj.CloseArr();
+                    jj.Arr("foodClusters");
+                    if (fcList != null) foreach (var fc in fcList)
+                    {
+                        int cx = System.Convert.ToInt32(fc["x"]), cy = System.Convert.ToInt32(fc["y"]), cz = System.Convert.ToInt32(fc["z"]);
+                        if (cz == dcZ && System.Math.Abs(cx - dcX) + System.Math.Abs(cy - dcY) <= 40)
+                            jj.OpenObj().Prop("x", cx).Prop("y", cy).Prop("z", cz).Prop("grown", System.Convert.ToInt32(fc["grown"])).Prop("total", System.Convert.ToInt32(fc["total"])).CloseObj();
+                    }
+                    jj.CloseArr();
+                }
                 return jj.End();
             }
 
@@ -389,6 +461,13 @@ namespace Timberbot
                 alertStr = string.Join(", ", parts);
             }
             jw.Prop("alerts", alertStr);
+
+            // brain fields
+            jw.Prop("faction", faction);
+            jw.Obj("dc").Prop("x", dcX).Prop("y", dcY).Prop("z", dcZ).Prop("orientation", dcOrientation).Prop("entranceX", entranceX).Prop("entranceY", entranceY).CloseObj();
+            jw.Obj("buildings");
+            foreach (var kv in roleCounts) jw.Prop(kv.Key, kv.Value);
+            jw.CloseObj();
 
             return jw.End();
         }
