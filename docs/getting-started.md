@@ -76,7 +76,7 @@ After this, commands work from any directory:
 
 ```bash
 timberbot.py summary
-timberbot.py map x:120 y:140 radius:10
+timberbot.py map x1:110 y1:130 x2:130 y2:150
 ```
 
 !!! note "Shebang for Git Bash / WSL"
@@ -110,7 +110,7 @@ timberbot.py summary                                # colony snapshot: populatio
 timberbot.py buildings                              # all buildings with workers, priority, power
 timberbot.py beavers                                # wellbeing and critical needs per beaver
 timberbot.py set_speed speed:3                      # fast forward (0=pause, 1/2/3)
-timberbot.py map x:120 y:140 radius:10              # ASCII map with terrain height shading
+timberbot.py map x1:110 y1:130 x2:130 y2:150              # ASCII map with terrain height shading
 timberbot.py place_path x1:120 y1:140 x2:120 y2:150  # route a path with auto-stairs
 ```
 
@@ -122,7 +122,7 @@ timberbot.py place_path x1:120 y1:140 x2:120 y2:150  # route a path with auto-st
 `map` renders a colored ASCII grid of your colony. Background shading shows terrain height, characters represent buildings, trees, water, and crops. A legend is printed below the grid.
 
 ```bash
-timberbot.py map x:120 y:140 radius:15
+timberbot.py map x1:110 y1:130 x2:130 y2:150
 ```
 
 ### Live dashboard
@@ -175,6 +175,25 @@ cp docs/timberbot.md ~/.claude/skills/timberbot/SKILL.md
 ### Other LLMs
 
 Paste the contents of `docs/timberbot.md` as a system prompt. Then ask the AI to run `timberbot.py summary` and take it from there. The prompt includes a decision loop, placement workflow, and all the API commands it needs.
+
+## Remote connections
+
+By default the Python client connects to `127.0.0.1:8085`. To connect to a game running on another machine:
+
+```bash
+timberbot.py --host=192.168.1.50 --port=8085 summary
+```
+
+Or set defaults in `settings.json` (mod folder):
+
+```json
+{
+  "httpHost": "192.168.1.50",
+  "httpPort": 8085
+}
+```
+
+The client reads `httpHost` and `httpPort` from settings.json when no CLI flags are given. CLI flags take precedence.
 
 ## Troubleshooting
 

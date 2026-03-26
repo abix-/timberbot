@@ -75,7 +75,8 @@ Edit settings.json in your mod folder (Documents/Timberborn/Mods/Timberbot/):
   "webhooksEnabled": true,
   "webhookBatchMs": 200,
   "webhookCircuitBreaker": 30,
-  "httpPort": 8085
+  "httpPort": 8085,
+  "httpHost": "127.0.0.1"
 }
 [/code]
 

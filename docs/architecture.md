@@ -185,11 +185,13 @@ Rule: functional tests that parse data use JSON. Tests that validate output form
   "refreshIntervalSeconds": 1.0,
   "debugEndpointEnabled": false,
   "httpPort": 8085,
+  "httpHost": "127.0.0.1",
   "webhooksEnabled": true,
   "webhookBatchMs": 200
 }
 ```
 
+- `httpHost`: host address for Python client remote connections (read by timberbot.py, not the server). Default `"127.0.0.1"`
 - `webhookBatchMs`: batching window in milliseconds (default 200, 0 = immediate dispatch)
 
 Loaded once on game load. Missing file or fields use defaults.

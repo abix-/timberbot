@@ -50,6 +50,9 @@
 | [Placement distance](api-reference.md#post-apiplacement-find) | Flow-field path distance from DC on find_placement results for optimal building placement | Yes |
 | [Path routing](api-reference.md#post-apipathroute) | Auto-stairs and platforms across z-levels, checks science unlocks | Yes |
 | [Crops endpoint](api-reference.md#get-apicrops) | Separate crops listing with growth status, independent from trees | Yes |
+| [Food clusters](api-reference.md#get-apifood_clusters) | Top gatherable food clusters by density, excluding trees | Yes |
+| [Settlement name](api-reference.md#get-apisettlement) | Save game / settlement name for per-settlement memory folders | Yes |
+| [Remote connection](getting-started.md#remote-connections) | `--host=` and `--port=` CLI flags, `httpHost` in settings.json | Yes |
 | [Benchmark](api-reference.md#post-apibenchmark) | Per-endpoint performance profiling | Yes |
 
 ## By design
