@@ -1,7 +1,7 @@
 ---
 title: Timberbot AI
 description: Single authoritative AI guide for Claude and other LLMs playing Timberborn via timberbot.py.
-version: "0.8.0"
+version: "0.8.1"
 ---
 # Timberbot AI
 
@@ -19,30 +19,32 @@ On the first invocation of `/timberbot` per session, complete two phases in orde
 ### Phase 1: Boot (rules confirmation -- NO API calls)
 
 1. Read this entire guide top to bottom before calling any game APIs.
-2. Immediately print this boot report in markdown. Use lowercase throughout:
+2. Immediately print this boot report in markdown. Replace every placeholder yourself. Use lowercase throughout:
 
 ```md
 ## TIMBERBOT
 
-`[OK]` read the ai guide before acting
-`[OK]` sequential mutating calls only
-`[OK]` dc entrance is the root of path distance
-`[OK]` unpathed buildings cannot be staffed or supplied
-`[OK]` find_placement for all building placement
-`[OK]` find_planting for crop placement
-`[OK]` paths occupy tiles and block building footprints
-`[OK]` entrance must face a path
-`[OK]` beavers die at 0 food or water
-`[OK]` never guess coordinates
-`[OK]` human can change state between calls
-`[OK]` placement and pathing work at speed 0
-`[OK]` brain = live state + persistent goal/tasks/maps
-`[OK]` api details live in docs/api-reference.md
-`[OK]` gameplay and strategy rules live in docs/timberbot.md
+> **docs source** `<cwd docs | workshop docs | github docs with user approval>`
+> **ai doc** `<loaded path | MISSING>`
+> **api doc** `<loaded path | MISSING>`
+> **setup doc** `<loaded path | MISSING>`
 
-**ready for link**
+- **boot rule** `<once per session unless restart or clear>`
+- **first read** `<brain>`
+- **placement** `<find_placement>`
+- **crops** `<find_planting>`
+- **mutations** `<sequential only>`
+- **path root** `<dc entrance>`
+- **prefabs** `<faction suffix rule>`
+- **power** `<paths do not conduct power>`
+- **errors** `<code: detail>`
+- **remote** `<--host/--port or settings.json>`
+
+> **boot result** `<PASSED | FAILED>`
 ```
 
+If boot is `PASSED`, continue immediately to Phase 2 and run the `brain` link call.
+If any doc is `MISSING`, any placeholder is left blank, or any fact cannot be stated, boot is `FAILED`. Report the issue, ask the user for guidance, and do not make any game API calls.
 ### Phase 2: Link (one command)
 
 3. Run `timberbot.py brain goal:"<player's request>"`. This is the only boot API call. The player's prompt becomes the persistent goal. Memory is per-settlement and stored in `memory/<settlement>/`.

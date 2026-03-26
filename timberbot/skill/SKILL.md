@@ -1,7 +1,7 @@
 ---
 name: timberbot
 description: Collaborate with a human player on Timberborn via timberbot.py. Help keep beavers alive, wellbeing high, and needs met.
-version: "0.8.3"
+version: "0.8.4"
 ---
 # Timberbot
 
@@ -29,11 +29,8 @@ NEVER improvise API contract details.
 ALWAYS use `docs/getting-started.md` for install, PATH, remote host, Workshop path, and troubleshooting.
 NEVER treat setup docs as gameplay docs.
 
-ALWAYS follow the boot/link flow from `docs/timberbot.md` on the first invocation in a session.
-NEVER act before boot completes.
-
-ALWAYS skip boot later in the same session unless the user explicitly wants to restart or clear memory.
-NEVER reboot the session just because the task changed.
+ALWAYS run the boot/link flow once at session start, and only run it again if the user explicitly wants to restart or clear memory.
+NEVER act before boot completes or repeat boot just because the task changed.
 
 ALWAYS run mutating game actions sequentially.
 NEVER overlap mutating game API calls.
@@ -43,3 +40,4 @@ NEVER guess state, coordinates, faction prefabs, or irrigated tiles.
 
 ALWAYS re-read state after each mutation batch.
 NEVER trust pre-mutation observations after state changes.
+
