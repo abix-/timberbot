@@ -1112,18 +1112,29 @@ namespace Timberbot
 
                     jw.OpenObj().Prop("x", x).Prop("y", y).Prop("terrain", terrainHeight);
                     jw.Prop("water", waterDepth, "F1");
-                    if (waterContamination > 0) jw.Prop("badwater", (float)System.Math.Round(waterContamination, 2));
-                    if (occList != null)
+
+                    if (format == "json")
                     {
-                        if (format == "json")
+                        // JSON: sparse -- only include fields when present
+                        if (waterContamination > 0) jw.Prop("badwater", (float)System.Math.Round(waterContamination, 2));
+                        if (occList != null)
                         {
                             jw.Arr("occupants");
                             foreach (var o in occList) jw.OpenObj().Prop("name", o.name).Prop("z", o.z).CloseObj();
                             jw.CloseArr();
                         }
-                        else
+                        if (entrances.Contains(key)) jw.Prop("entrance", true);
+                        if (seedlings.Contains(key)) jw.Prop("seedling", true);
+                        if (deadTiles.Contains(key)) jw.Prop("dead", true);
+                        try { if (_soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight))) jw.Prop("contaminated", true); } catch (System.Exception _ex) { TimberbotLog.Error("map.soil", _ex); }
+                        try { if (_soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight))) jw.Prop("moist", true); } catch (System.Exception _ex) { TimberbotLog.Error("map.moisture", _ex); }
+                    }
+                    else
+                    {
+                        // TOON: uniform schema -- always emit all fields for CSV table
+                        string occStr = "";
+                        if (occList != null)
                         {
-                            // Collapse consecutive same-name occupants into z-ranges
                             occList.Sort((a, b) => a.name != b.name ? string.Compare(a.name, b.name) : a.z - b.z);
                             var sb = new System.Text.StringBuilder();
                             int si = 0;
@@ -1140,14 +1151,14 @@ namespace Timberbot
                                 if (zhi > zlo) sb.Append('-').Append(zhi);
                                 si++;
                             }
-                            jw.Prop("occupants", sb.ToString());
+                            occStr = sb.ToString();
                         }
+                        jw.Prop("occupants", occStr);
+                        jw.Prop("entrance", entrances.Contains(key));
+                        bool moist = false;
+                        try { moist = _soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight)); } catch (System.Exception _ex) { TimberbotLog.Error("map.moisture", _ex); }
+                        jw.Prop("moist", moist);
                     }
-                    if (entrances.Contains(key)) jw.Prop("entrance", true);
-                    if (seedlings.Contains(key)) jw.Prop("seedling", true);
-                    if (deadTiles.Contains(key)) jw.Prop("dead", true);
-                    try { if (_soilContaminationService.SoilIsContaminated(new Vector3Int(x, y, terrainHeight))) jw.Prop("contaminated", true); } catch (System.Exception _ex) { TimberbotLog.Error("map.soil", _ex); }
-                    try { if (_soilMoistureService.SoilIsMoist(new Vector3Int(x, y, terrainHeight))) jw.Prop("moist", true); } catch (System.Exception _ex) { TimberbotLog.Error("map.moisture", _ex); }
                     jw.CloseObj();
                 }
             }
