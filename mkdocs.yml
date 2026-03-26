@@ -62,8 +62,11 @@ extra:
 nav:
   - Getting Started: getting-started.md
   - API Reference: api-reference.md
-  - AI Prompt: timberbot.md
+  - AI Core: timberbot.md
+  - AI Reference: timberbot-reference.md
   - Features: features.md
   - Developing: developing.md
 
 copyright: Timberbot API &mdash; Play Timberborn with an AI
+
+

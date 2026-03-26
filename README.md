@@ -38,8 +38,11 @@ curl -X POST http://localhost:8085/api/speed -d '{"speed": 3}'
 
 - [Getting Started](docs/getting-started.md). Install, first steps, examples
 - [API Reference](docs/api-reference.md). All HTTP endpoints
-- [Timberbot AI](docs/timberbot.md). Strategy guide for AI agents playing Timberborn. Works as a Claude Code skill
+- [Timberbot AI Core](docs/timberbot.md). Core operating guide for AI agents playing Timberborn
+- [Timberbot AI Reference](docs/timberbot-reference.md). Faction buildings, lookup tables, and gameplay reference
 - [Developing](docs/developing.md). Build from source, add endpoints, Workshop publishing
+
+Claude Code entrypoint: `timberbot/skill/SKILL.md`
 
 ## Requirements
 
@@ -59,3 +62,4 @@ Learned from these Timberborn modding projects:
 - [CordialGnom/timberborn-unity-modding](https://github.com/CordialGnom/timberborn-unity-modding) -- `PlantingService.SetPlantingCoordinates()` for crop planting, `PlantingAreaValidator.CanPlant()` for planting validation
 - [Timberborn-KyP-Mods/TimberPrint](https://github.com/Timberborn-KyP-Mods/TimberPrint) -- `PreviewFactory` + `BlockValidator` patterns for placement validation
 - [toon-format/toon](https://github.com/toon-format/toon) -- Token-Oriented Object Notation for compact AI output
+

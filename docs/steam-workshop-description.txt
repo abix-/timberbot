@@ -53,12 +53,13 @@ Works with any language that speaks HTTP. Python client is optional. Raw curl wo
 
 [h1]AI setup (Claude Code)[/h1]
 [code]
-cp docs/timberbot.md ~/.claude/skills/timberbot/SKILL.md
+cp timberbot/skill/SKILL.md ~/.claude/skills/timberbot/SKILL.md
+# run Claude from the Timberbot mod folder root so ./docs is available
 /loop 1m /timberbot
 [/code]
-The mod ships with an AI prompt that teaches Claude every game mechanic, API command, and building recipe. The AI decides its own strategy. You tell it what you want, and it works alongside whatever in-game automation you've already set up.
+The mod ships with a thin Claude skill plus docs. Claude reads the core guide first, then loads the API reference and gameplay reference only when it needs them. The AI decides its own strategy and works alongside whatever in-game automation you've already set up.
 
-Works with ChatGPT too. Paste docs/timberbot.md as a system prompt.
+Works with ChatGPT too. Paste docs/timberbot.md as the core prompt and keep docs/api-reference.md plus docs/timberbot-reference.md nearby as references.
 
 [h1]Getting started[/h1]
 1. Subscribe and enable in Mod Manager
@@ -83,7 +84,10 @@ Edit settings.json in your mod folder (Documents/Timberborn/Mods/Timberbot/):
 [h1]Docs[/h1]
 [url=https://abix-.github.io/TimberbornMods/getting-started/]Getting Started[/url] Install, first commands, AI setup
 [url=https://abix-.github.io/TimberbornMods/api-reference/]API Reference[/url] All endpoints with request/response examples
-[url=https://abix-.github.io/TimberbornMods/timberbot/]AI Prompt[/url] Teach Claude or ChatGPT to run your colony
+[url=https://abix-.github.io/TimberbornMods/timberbot/]AI Core[/url] Core operating guide for Claude or ChatGPT
+[url=https://abix-.github.io/TimberbornMods/timberbot-reference/]AI Reference[/url] Faction buildings, lookup tables, and gameplay reference
 [url=https://abix-.github.io/TimberbornMods/features/]Features[/url] Full compatibility matrix (40 game systems)
 [url=https://abix-.github.io/TimberbornMods/webhooks/]Webhooks[/url] 68 push notification events for game automation
 [url=https://github.com/abix-/TimberbornMods]Source Code[/url]
+
+

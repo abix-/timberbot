@@ -159,22 +159,28 @@ curl -X POST http://localhost:8085/api/building/place -d '{"prefab": "Path", "x"
 
 ## Let AI play your colony
 
-The mod includes an AI prompt ([timberbot.md](timberbot.md)) that teaches Claude, ChatGPT, or any LLM how to run your colony autonomously -- managing food, water, housing, workers, and expansion.
+The mod ships a thin Claude skill plus docs for AI play:
+
+- `timberbot/skill/SKILL.md` is the distributable Claude Code entrypoint
+- [timberbot.md](timberbot.md) is the core operating guide
+- [timberbot-reference.md](timberbot-reference.md) is the long-form gameplay reference
+- [api-reference.md](api-reference.md) is the endpoint and response source of truth
 
 ### Claude Code setup
 
 ```bash
-# copy the prompt as a Claude Code skill
+# copy the thin skill entrypoint
 mkdir -p ~/.claude/skills/timberbot
-cp docs/timberbot.md ~/.claude/skills/timberbot/SKILL.md
+cp timberbot/skill/SKILL.md ~/.claude/skills/timberbot/SKILL.md
 
-# let Claude play on a loop
+# start Claude from the Timberbot repo root or the distributed mod folder root
+# (the folder that contains ./docs and where timberbot.py is available)
 /loop 1m /timberbot
 ```
 
 ### Other LLMs
 
-Paste the contents of `docs/timberbot.md` as a system prompt. Then ask the AI to run `timberbot.py summary` and take it from there. The prompt includes a decision loop, placement workflow, and all the API commands it needs.
+Paste the contents of `docs/timberbot.md` as the core system prompt. Keep `docs/timberbot-reference.md` and `docs/api-reference.md` available as reference material for gameplay lookups and exact endpoint details.
 
 ## Remote connections
 
@@ -211,6 +217,9 @@ The client reads `httpHost` and `httpPort` from settings.json when no CLI flags 
 ---
 
 - [API Reference](api-reference.md) -- every endpoint with request/response examples
-- [AI Prompt](timberbot.md) -- autonomous colony management
+- [AI Core](timberbot.md) -- core operating guide for AI play
+- [AI Reference](timberbot-reference.md) -- faction buildings, lookup tables, and gameplay reference
 - [Features](features.md) -- what's implemented vs gaps
 - [Developing](developing.md) -- build from source
+
+
