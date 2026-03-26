@@ -31,7 +31,7 @@ Print the boot output below as markdown (Claude Code renders markdown, NOT ANSI 
 `[___]` priority: water > food > housing > wood > science
 `[___]` pause to plan, unpause with objectives
 `[___]` sequential mutating calls only
-`[___]` load_brain at session start, save_brain after changes
+`[___]` brain at session start and after changes
 `[___]` add_task before multi-step work, update on completion/failure
 `[___]` prefabs FT:___ IT:___
 `[___]` endpoints ___
@@ -49,7 +49,7 @@ Fill EVERY `___` -- both the rule status markers (replace with `OK`) and the inv
 
 ### Phase 2: Link (one command)
 
-3. Run `timberbot.py load_brain`. This is the ONLY boot API call. It auto-creates brain if none exists, which runs summary, detects faction, maps DC area, finds tree clusters and gatherables. Returns everything needed. Print readout from brain data:
+3. Run `timberbot.py brain`. This is the ONLY boot API call. It auto-creates brain if none exists, which runs summary, detects faction, maps DC area, finds tree clusters and gatherables. Returns everything needed. Print readout from brain data:
 
 ```
 **link established** -- reading brain
@@ -186,10 +186,7 @@ Everything the AI knows about the colony lives in `~/Documents/Timberborn/Mods/T
 
 ### Workflows
 
-**Session start:**
-1. `load_brain` -- recall DC location, building index, map regions, and any pending/failed tasks
-2. Check tasks -- resume failed/active tasks before starting new work
-3. Read relevant map files if needed for spatial context
+**Session start:** `brain` -- gives you everything. Check tasks, resume failed/active before new work.
 
 **During work:**
 1. `add_task action:"description"` before starting each step
@@ -197,7 +194,7 @@ Everything the AI knows about the colony lives in `~/Documents/Timberborn/Mods/T
 3. `update_task id:N status:done` on success
 4. `update_task id:N status:failed error:"reason"` on failure -- then STOP and reassess
 
-**After placing buildings:** `save_brain` to update the building index.
+**Need a refresh:** `brain` again. Always fresh from game. Run it after placing buildings, after major changes, or whenever you need current state.
 
 **After mapping a new area:** `map ... name:region` auto-updates brain.json maps index.
 
@@ -205,9 +202,8 @@ Everything the AI knows about the colony lives in `~/Documents/Timberborn/Mods/T
 
 ### HARD RULE: Use the brain
 
-- **ALWAYS load_brain at session start.** Do not re-discover DC, buildings, or terrain from scratch.
+- **ALWAYS `brain` at session start and after placing buildings.** One command, always fresh, replaces summary.
 - **ALWAYS add_task before multi-step work.** If you place 5 buildings without tracking tasks, a failure at step 3 means steps 4-5 are lost context.
-- **ALWAYS save_brain after placing buildings.** The building index is only as fresh as the last save.
 - **NEVER ignore failed tasks.** They exist because something went wrong. Read the error, fix the root cause, then retry or mark done.
 
 ## Factions -- building names differ
@@ -344,8 +340,7 @@ Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `current
 | `map x1:X y1:Y x2:X2 y2:Y2 [name:label]` | ANSI map. `name` saves to memory/ for persistent spatial reference |
 | `tiles x1:X y1:Y x2:X2 y2:Y2` | Per-tile terrain, water, badwater, occupants (z-stacking), moisture, contamination |
 | **Brain (memory)** | |
-| `save_brain` | Save DC + slim building index to `memory/brain.json`. Preserves maps and tasks |
-| `load_brain` | Load brain. ALWAYS run at session start |
+| `brain` | Full colony picture. Always fresh. Replaces summary. Run at boot and whenever you need current state |
 | `list_maps` | List saved map files |
 | `add_task action:"description"` | Add pending task to brain |
 | `update_task id:N status:done\|failed [error:"reason"]` | Update task status |

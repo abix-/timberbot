@@ -627,16 +627,15 @@ class Timberbot:
     # Spatial memory
     # ------------------------------------------------------------------
 
-    def save_brain(self):
-        """Save colony index to memory/brain.json. Slim buildings, full summary, faction detection."""
-        # use json mode for structured summary
+    def brain(self):
+        """Full colony picture. Always fresh from game. Preserves maps + tasks. Replaces summary/save_brain/load_brain."""
         jbot = Timberbot(json_mode=True)
         summary = jbot.summary()
         buildings_data = self.buildings(limit=0)
         items = buildings_data.get("items", buildings_data) if isinstance(buildings_data, dict) else buildings_data
         items = items if isinstance(items, list) else []
 
-        # slim buildings: just enough to look things up
+        # slim buildings index
         slim = [{"id": b["id"], "name": b.get("name", ""), "x": b["x"], "y": b["y"], "z": b["z"]} for b in items]
 
         # find DC and compute entrance
@@ -657,7 +656,7 @@ class Timberbot:
                 dc = {"x": bx, "y": by, "z": bz, "orientation": orient, "entrance": [ex, ey]}
                 break
 
-        # detect faction from prefabs
+        # detect faction
         try:
             prefabs = jbot.prefabs()
             plist = prefabs if isinstance(prefabs, list) else []
@@ -666,30 +665,26 @@ class Timberbot:
         except Exception:
             faction = "unknown"
 
-        # best tree clusters: same z-level as DC and within 40 tiles
+        # nearby resource clusters: same z-level as DC, within 40 tiles
         dc_z = dc["z"] if dc else 0
         dc_x = dc["x"] if dc else 0
         dc_y = dc["y"] if dc else 0
+
+        def _nearby(clusters):
+            return [c for c in (clusters if isinstance(clusters, list) else [])
+                    if c.get("z") == dc_z
+                    and abs(c.get("x", 0) - dc_x) + abs(c.get("y", 0) - dc_y) <= 40]
+
         try:
-            all_clusters = jbot.tree_clusters()
-            all_clusters = all_clusters if isinstance(all_clusters, list) else []
-            tree_clusters = [c for c in all_clusters
-                             if c.get("z") == dc_z
-                             and abs(c.get("x", 0) - dc_x) + abs(c.get("y", 0) - dc_y) <= 40]
+            tree_clusters = _nearby(jbot.tree_clusters())
         except Exception:
             tree_clusters = []
-
-        # food clusters (berries, bushes): same z, within 40 tiles of DC
         try:
-            all_food = jbot.food_clusters()
-            all_food = all_food if isinstance(all_food, list) else []
-            food_clusters = [c for c in all_food
-                             if c.get("z") == dc_z
-                             and abs(c.get("x", 0) - dc_x) + abs(c.get("y", 0) - dc_y) <= 40]
+            food_clusters = _nearby(jbot.food_clusters())
         except Exception:
             food_clusters = []
 
-        # preserve existing maps and tasks sections
+        # preserve maps and tasks from existing brain
         existing_maps = {}
         existing_tasks = []
         bpath = os.path.join(_MEMORY_DIR, "brain.json")
@@ -703,7 +698,7 @@ class Timberbot:
                 pass
 
         from datetime import datetime
-        brain = {
+        result = {
             "timestamp": datetime.now().isoformat(),
             "faction": faction,
             "dc": dc,
@@ -714,32 +709,22 @@ class Timberbot:
             "maps": existing_maps,
             "tasks": existing_tasks,
         }
+
+        # persist
         os.makedirs(_MEMORY_DIR, exist_ok=True)
         with open(bpath, "w") as f:
-            json.dump(brain, f, indent=2)
-        # buildings to separate file
-        bldg_path = os.path.join(_MEMORY_DIR, "buildings.json")
-        with open(bldg_path, "w") as f:
+            json.dump(result, f, indent=2)
+        with open(os.path.join(_MEMORY_DIR, "buildings.json"), "w") as f:
             json.dump(slim, f, indent=2)
-        return {"saved": bpath, "faction": faction, "buildings": len(slim)}
 
-    def load_brain(self):
-        """Load brain.json. Creates new brain + DC map if none exists."""
-        fpath = os.path.join(_MEMORY_DIR, "brain.json")
-        created = False
-        if not os.path.exists(fpath):
-            self.save_brain()
-            created = True
-        with open(fpath) as f:
-            brain = json.load(f)
-        # auto-map DC area if no maps exist yet
-        dc = brain.get("dc")
-        if dc and not brain.get("maps"):
+        # auto-map DC area on first run
+        if dc and not existing_maps:
             self.map(dc["x"] - 20, dc["y"] - 20, dc["x"] + 20, dc["y"] + 20, name="districtcenter")
-            # reload to pick up the maps index update
-            with open(fpath) as f:
-                brain = json.load(f)
-        return brain
+            # reload to pick up maps index
+            with open(bpath) as f:
+                result = json.load(f)
+
+        return result
 
     def list_maps(self):
         """List saved map files in memory/."""
