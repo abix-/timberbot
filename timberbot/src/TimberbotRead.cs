@@ -1123,11 +1123,22 @@ namespace Timberbot
                         }
                         else
                         {
+                            // Collapse consecutive same-name occupants into z-ranges
+                            occList.Sort((a, b) => a.name != b.name ? string.Compare(a.name, b.name) : a.z - b.z);
                             var sb = new System.Text.StringBuilder();
-                            for (int oi = 0; oi < occList.Count; oi++)
+                            int si = 0;
+                            while (si < occList.Count)
                             {
-                                if (oi > 0) sb.Append('/');
-                                sb.Append(occList[oi].name).Append(':').Append(occList[oi].z);
+                                if (sb.Length > 0) sb.Append('/');
+                                string n = occList[si].name;
+                                int zlo = occList[si].z, zhi = zlo;
+                                while (si + 1 < occList.Count && occList[si + 1].name == n && occList[si + 1].z == zhi + 1)
+                                {
+                                    zhi = occList[++si].z;
+                                }
+                                sb.Append(n).Append(":z").Append(zlo);
+                                if (zhi > zlo) sb.Append('-').Append(zhi);
+                                si++;
                             }
                             jw.Prop("occupants", sb.ToString());
                         }
