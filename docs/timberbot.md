@@ -41,7 +41,7 @@ Print the boot output below as markdown (Claude Code renders markdown, NOT ANSI 
 `[___]` skill ___ ln / ___ sec
 `[___]` last "___"
 
-**all systems nominal -- ready for link**
+**ready**
 ```
 
 Fill EVERY `___` -- both the rule status markers (replace with `OK`) and the inventory counts. NONE are pre-filled. Claude filling them in IS the confirmation of readiness. Wrong/missing/skipped = not ready to play.
@@ -55,8 +55,6 @@ Fill EVERY `___` -- both the rule status markers (replace with `OK`) and the inv
 **If no existing memory:** Brain auto-creates it with DC map. Print readout:
 
 ```
-**link established** -- reading brain
-
 > **settlement** `<name>` | `<faction>` | <"new" or "loaded">
 > **goal** `<goal text or "none -- awaiting orders">`
 >
