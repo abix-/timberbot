@@ -692,7 +692,6 @@ class Timberbot:
         from datetime import datetime
         result = {
             "timestamp": datetime.now().isoformat(),
-            "settlement": settlement,
             "summary": summary,
             "maps": existing_maps,
             "tasks": existing_tasks,
