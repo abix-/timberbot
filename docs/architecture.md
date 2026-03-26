@@ -128,13 +128,27 @@ Pre-serialized strings detected in `Respond()`: `data is string s ? s : JsonConv
 
 All endpoints accept a `format` parameter: `toon` (default) or `json`.
 
-- **toon**: compact token-efficient output for LLM/AI consumption. Flat strings, optional fields omitted when zero/false. Lists render one-line-per-item via toons library.
-- **json**: full nested objects for programmatic access. All fields always present. Arrays of objects with named keys.
+- **toon**: compact token-efficient output for LLM/AI consumption. The `toons` library auto-detects uniform arrays and renders them as CSV tables with a header row.
+- **json**: full nested objects for programmatic access. Arrays of objects with named keys.
 
-Key differences:
-- `tiles` occupants: toon = `"Path:6/Stairs:5"` (flat string), json = `[{"name":"Path","z":6},...]` (array)
-- `tiles` water: toon = omitted when 0, json = always present
-- `find_placement` booleans: always 0/1 integers in both formats
+### CRITICAL: uniform schema rule
+
+**Every object in an array MUST have identical keys in BOTH formats at ALL detail levels.** No conditional/optional fields. Missing components get defaults: `""` for strings, `0` for numbers, `false` for bools. JSON collections get empty `{}` or `[]` when absent.
+
+Why: the `toons` library detects uniform arrays -> compact CSV tables. Non-uniform schemas (different objects having different keys) break detection and fall back to verbose YAML-like output (10-17x larger). Non-uniform schemas also make programmatic parsing fragile.
+
+**When adding new fields to any list endpoint: add them to EVERY object in the array with appropriate defaults.**
+
+### format differences
+
+The schema is identical between toon and json. The only structural difference is how collections are represented:
+
+| field | toon | json |
+|---|---|---|
+| `occupants` (tiles) | `"Path:z2/Lodge:z2-4"` (flat string, z-ranges) | `[{"name":"Path","z":2},...]` (array) |
+| `inventory` (buildings full) | `"Water:30/Logs:5"` (flat string) | `{"Water":30,"Logs":5}` (object) |
+| `recipes` (buildings full) | `"Recipe1/Recipe2"` (flat string) | `["Recipe1","Recipe2"]` (array) |
+| `find_placement` booleans | 0/1 integers | 0/1 integers |
 
 ### Client design
 
@@ -211,6 +225,15 @@ HTTP request -> ListenLoop -> parse body + query params -> enqueue PendingReques
   -> [next frame] DrainRequests -> RouteRequest -> mutate game state
   -> Respond -> HTTP response
 ```
+
+## Spatial memory
+
+Persistent colony knowledge in `~/Documents/Timberborn/Mods/Timberbot/memory/`:
+
+- **`brain.json`** -- colony snapshot: DC location + entrance coords, all buildings with IDs/coords, summary stats. Updated via `save_brain`, read via `load_brain`.
+- **`map-{name}-{x1}x{y1}y-{x2}x{y2}y.txt`** -- named ANSI map files with full encoding (z-level bg shading, moisture color, building/water/tree characters). Saved via `map ... name:label`, listed via `list_maps`.
+
+Map rendering uses delta-encoded ANSI (only emits escape codes when bg/fg changes from previous tile) to keep output compact (~6KB for 41x41 area vs ~35KB with per-tile encoding).
 
 ## Data staleness
 
