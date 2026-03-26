@@ -154,14 +154,14 @@ Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `current
 
 ## Game Speed Levels
 
-Timberborn has 4 speed levels:
+Timberborn has 4 speed levels. Choose based on **your confidence in the current setup**:
 
 | Level | Name | Use Case |
 |-------|------|----------|
 | 0 | **Paused** | Strategic planning: place buildings, route paths, set priorities, queue work. No time passes. FREE time for decisions. |
-| 1 | **Speed 1 (Normal)** | Early game or uncertain situations. Time progresses slowly, giving you time to react to problems before they escalate. |
-| 2 | **Speed 2 (Fast)** | Middle speed. Balanced progress when you're confident in your setup but don't want to rush. |
-| 3 | **Speed 3 (Fastest)** | Pass time quickly. Use when all objectives are queued and stable, and you just need to let beavers work. |
+| 1 | **Speed 1 (Normal)** | Low confidence: early game, uncertain situations, risky builds. Time progresses slowly, giving you time to react if problems escalate. |
+| 2 | **Speed 2 (Fast)** | Medium confidence: monitoring work when setup is solid but not bulletproof. Faster than Speed 1, slower than Speed 3. |
+| 3 | **Speed 3 (Fastest)** | High confidence: all objectives queued and stable, setup is rock-solid. Pass time quickly while beavers execute work. |
 
 ## HARD RULE: Strategic Game Speed Management
 
@@ -170,8 +170,11 @@ Timberborn has 4 speed levels:
 **Workflow:**
 1. **Assess state** (PAUSED) — read summary, buildings, beavers, alerts
 2. **Place buildings & queue actions** (PAUSED) — `place_building`, `place_path`, `set_priority`, `set_workers`, pause/unpause buildings
-3. **Unpause** (SPEED 3 or 1) — only after physical work is queued and ready for beavers to execute
-4. **Monitor** (SPEED 3 when stable, SPEED 1 when uncertain) — let beavers work on queued tasks
+3. **Unpause based on confidence** — only after physical work is queued and ready for beavers to execute
+   - **Speed 1** (low confidence): early game, risky builds, uncertain outcomes
+   - **Speed 2** (medium confidence): solid setup, monitoring work, some risk tolerance
+   - **Speed 3** (high confidence): stable, queued, rock-solid setup
+4. **Monitor** — let beavers work on queued tasks at the chosen speed
 5. **Reassess** (PAUSE again) — when you need to intervene or redirect
 
 **Why:** Paused time is FREE time to make changes. Building placement, path routing, and priority changes happen while paused. Unpaused beavers without queued objectives simply wander and consume resources (food/water) without producing. They starve needlessly. Only unpause after construction/work is actively queued and waiting. During your response time (analyzing), the game stays paused.
