@@ -297,12 +297,17 @@ namespace Timberbot
                 groupMaxPerBeaver[ns.NeedGroupId] = groupMaxPerBeaver.GetValueOrDefault(ns.NeedGroupId) + ns.FavorableWellbeing;
             }
             var wbGroupTotals = new Dictionary<string, float>();
+            // per-district wellbeing: [0]=totalWellbeing [1]=beaverCount [2]=miserable [3]=critical
+            var districtWb = new Dictionary<string, float[]>();
             foreach (var c in _cache.Beavers.Read)
             {
                 totalWellbeing += c.Wellbeing;
                 beaverCount++;
                 if (c.Wellbeing < 4) miserable++;
                 if (c.AnyCritical != 0) critical++;
+                var bDist = c.District ?? "_unknown";
+                if (!districtWb.TryGetValue(bDist, out var dw)) { dw = new float[4]; districtWb[bDist] = dw; }
+                dw[0] += c.Wellbeing; dw[1]++; if (c.Wellbeing < 4) dw[2]++; if (c.AnyCritical != 0) dw[3]++;
                 if (c.Needs != null)
                     foreach (var n in c.Needs)
                         if (needToGroup.ContainsKey(n.Id))
@@ -367,6 +372,13 @@ namespace Timberbot
                     jj.Obj("employment")
                         .Prop("assigned", dAssigned).Prop("vacancies", dVacancies)
                         .Prop("unemployed", System.Math.Max(0, dc.Adults - dAssigned))
+                        .CloseObj();
+                    var dwb = districtWb.GetValueOrDefault(dc.Name);
+                    float dAvgWb = dwb != null && dwb[1] > 0 ? dwb[0] / dwb[1] : 0;
+                    jj.Obj("wellbeing")
+                        .Prop("average", (float)System.Math.Round(dAvgWb, 1), "F1")
+                        .Prop("miserable", (int)(dwb != null ? dwb[2] : 0))
+                        .Prop("critical", (int)(dwb != null ? dwb[3] : 0))
                         .CloseObj();
                     if (districtDCs.TryGetValue(dc.Name, out var ddc))
                         jj.Obj("dc").Prop("x", ddc.x).Prop("y", ddc.y).Prop("z", ddc.z).Prop("orientation", ddc.orientation).Prop("entranceX", ddc.entranceX).Prop("entranceY", ddc.entranceY).CloseObj();
