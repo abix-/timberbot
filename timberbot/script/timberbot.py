@@ -675,6 +675,22 @@ class Timberbot:
         except Exception:
             tree_clusters = []
 
+        # nearby gatherables (berries, bushes): same z, within 40 tiles of DC
+        try:
+            all_gath = jbot.gatherables(limit=0)
+            gath_items = all_gath.get("items", all_gath) if isinstance(all_gath, dict) else all_gath
+            gath_items = gath_items if isinstance(gath_items, list) else []
+            nearby_gath = {}
+            for g in gath_items:
+                if g.get("z") != dc_z or g.get("alive") != 1:
+                    continue
+                if abs(g.get("x", 0) - dc_x) + abs(g.get("y", 0) - dc_y) > 40:
+                    continue
+                name = g.get("name", "")
+                nearby_gath[name] = nearby_gath.get(name, 0) + 1
+        except Exception:
+            nearby_gath = {}
+
         # preserve existing maps and tasks sections
         existing_maps = {}
         existing_tasks = []
@@ -696,6 +712,7 @@ class Timberbot:
             "summary": summary,
             "buildings": slim,
             "treeClusters": tree_clusters,
+            "nearbyGatherables": nearby_gath,
             "maps": existing_maps,
             "tasks": existing_tasks,
         }
