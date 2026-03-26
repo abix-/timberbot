@@ -78,9 +78,137 @@ All reads served on the listener thread from double-buffered read lists. Zero ma
 
 ## GC pressure
 
-See [zero-alloc.md](zero-alloc.md) for the full allocation audit with per-field analysis, grades, and remaining gaps.
+Every heap allocation in a Unity mod contributes to GC pressure. Unity uses a stop-the-world garbage collector -- when enough garbage accumulates, ALL threads pause (0.5-50ms). Our mod runs inside someone else's game. Every allocation we make adds to the pile that triggers the game's GC stutter.
 
-**Summary:** Hot path (RefreshCachedState) confirmed **zero-alloc** via 10K-iteration benchmark (0 GC0 collections across 760K+ game API calls). `GetNeeds()`, `GetNeed()`, `GetNeedWellbeing()` all return cached objects. All containers reused via Clear(). Structs for stack alloc. RefChanged to skip string derivation. Indexed for-loops to avoid enumerator boxing. One unavoidable ToString() per HTTP response. Webhooks zero-alloc when no subscribers. Only remaining micro-optimization: `Math.Round()` boxing (2400 calls/sec, ~96KB/sec).
+Goal: allocate once at game load, reuse forever. The only per-request allocation should be the final `ToString()` to produce the HTTP response.
+
+### Allocation architecture
+
+```
+Game loads
+  -> allocate TimberbotDoubleBuffer x3, TimberbotJw, Dictionaries, Lists
+  -> done allocating
+
+Every 1 second (main thread)
+  -> read building/beaver/tree properties into existing objects (zero alloc)
+  -> refresh district population + resources into CachedDistrict list
+  -> swap buffer pointers (zero alloc)
+
+Every HTTP request (background thread)
+  -> read from cached buffers (zero alloc)
+  -> write into existing StringBuilder via TimberbotJw (zero alloc)
+  -> ToString() to create response string (1 alloc, unavoidable)
+```
+
+### Hot path: RefreshCachedState (1Hz, main thread)
+
+**Zero-alloc (confirmed):**
+
+| What | Count/sec | How |
+|---|---|---|
+| Building property reads (Finished, Paused, Workers, Powered, etc) | 500 | Direct field reads from cached component refs |
+| Natural resource reads (Alive, Grown, Growth, Marked) | 3000 | Direct field reads |
+| Beaver reads (Wellbeing, Position, Carrying, Contaminated) | 80 | Direct field reads |
+| `CleanName()` for workplace/district | 80 | RefChanged skips unless reference changes. 99% of calls are a pointer compare returning false |
+| `Inventory.Clear()` + repopulate | 500 | Dict allocated once on first refresh, reused via Clear() |
+| `NutrientStock.Clear()` + repopulate | 5 | Same pattern, only breeding pods |
+| `Needs.Clear()` + repopulate | 80 | List allocated once, reused via Clear() |
+| `new CachedNeed{...}` struct | 2400 | Struct = stack alloc, not heap. Goes directly into the List |
+| Inventory for-loop (indexed) | 500 | `for (int ii = 0; ...)` -- no enumerator boxing |
+| `Swap()` x3 | 3 | Pointer swap, O(1), zero copy |
+| `Recipes = new List<string>()` | Rare | Guarded by null check -- allocates once per building, first refresh only |
+
+**Known allocations (accepted):**
+
+| What | Count/sec | Bytes/sec | Severity | Status |
+|---|---|---|---|---|
+| `Math.Round(need.Points, 2)` | 2400 | ~96KB | Medium | TODO -- replace with manual rounding |
+| `foreach GetNeeds()` enumerator | 80 | 0 | None | Confirmed zero-alloc (10K benchmark, 0 GC0) |
+| `GetNeed(id)` return value | 2400 | 0 | None | Confirmed zero-alloc (returns cached) |
+| `GetNeedWellbeing(id)` | 2400 | 0 | None | Confirmed zero-alloc (returns int) |
+| `foreach BreedingPod.Nutrients` | 5 | 0 | None | Confirmed zero-alloc (10K benchmark, 0 GC0) |
+
+**Previously fixed:**
+
+| What was allocating | Fix | Savings |
+|---|---|---|
+| `Priority.ToString()` per building per refresh | Static lookup array | ~500 string allocs/sec |
+| `CleanName()` per employed beaver per refresh | RefChanged pattern (ref compare) | ~50 string allocs/sec |
+| `GetComponent<EntityComponent>()` per beaver per refresh | Cached `Go` field at add-time | ~80 GetComponent calls/sec |
+| Building X/Y/Z/Orientation re-read per refresh | Moved to add-time (immutable) | ~2000 property reads/sec |
+| `foreach Inventories.AllInventories` | Indexed for-loop | Enumerator boxing eliminated |
+| `foreach inv.Stock` | Indexed for-loop | Enumerator boxing eliminated |
+| 60fps refresh rate | Cadenced to 1Hz (configurable) | 59 out of 60 refreshes eliminated |
+
+### HTTP response (per request, background thread)
+
+**Zero-alloc:**
+
+| What | How |
+|---|---|
+| `_jw.Reset()` | Clears existing 300KB StringBuilder, no new alloc |
+| `jw.Key().Int().Str().Bool()` | Appends to existing SB |
+| `jw.Float()` | Zero-alloc digit writing (no ToString) |
+| `jw.OpenObj().CloseObj()` | Appends `{` `}` to existing SB |
+| TimberbotJw auto-separator commas | `_hasValue` flag, no string alloc |
+
+**Accepted allocations:**
+
+| What | Count | Bytes | Why accepted |
+|---|---|---|---|
+| `jw.ToString()` | 1 per request | 100-500KB | Unavoidable -- HTTP needs the string as bytes |
+| `StreamWriter` internal buffer | 1 per request | ~1KB | .NET runtime, small |
+| `$"{interpolation}"` in summary alerts | ~5 per summary | ~200B total | Negligible |
+| `JsonConvert.SerializeObject` for non-Jw endpoints | 1 per debug/validate | Varies | Rare endpoints only |
+
+### Webhooks (main thread, only with subscribers)
+
+No subscribers (common case): every `[OnEvent]` handler checks `_webhooks.Count > 0` before doing anything. Zero allocations when nobody is listening.
+
+With subscribers:
+
+| What | Count | When | Why accepted |
+|---|---|---|---|
+| `TimberbotJw` payload string | 1 per event | PushEvent | ~200 byte string via `_jw.ToString()`. No Newtonsoft |
+| `_webhookSb.Clear()` per flush | 0 alloc | Every 200ms | Reuses field-level SB |
+| `sb.ToString()` per flush per webhook | 1 | Every 200ms | Unavoidable |
+| `new StringContent()` per flush | 1 | Every 200ms | On ThreadPool, off main thread |
+
+### Entity lifecycle (per add/remove)
+
+| What | When | Why accepted |
+|---|---|---|
+| `new CachedBuilding{...}` | Building placed | Once per entity lifetime |
+| `new CachedBeaver{...}` | Beaver born | Once per entity lifetime |
+| `new List<(int,int,int)>` OccupiedTiles | Building placed | Once, holds tile footprint |
+| `CleanName(go.name)` | Entity created | One string per entity |
+| Webhook `PushEvent("building.placed", ...)` | Entity created | Only with webhook subscribers |
+
+### Benchmark results (10K iterations, 76 beavers, 546 buildings)
+
+Measured via `/api/benchmark` with 10,000 iterations to ensure GC0 detection sensitivity.
+
+| Test | GC0 | ms/call | Total calls | Verdict |
+|---|---|---|---|---|
+| `NeedMgr.GetNeeds.foreach` | **0** | 0.110 | 760,000 | Zero-alloc. Returns cached collection |
+| `NeedMgr.FullNeedLoop` (GetNeeds + GetNeed + GetNeedWellbeing) | **0** | 0.319 | 760,000 | All three calls zero-alloc |
+| `BreedingPod.Nutrients` foreach | **0** | 0.006 | 60,000 | Zero-alloc. IEnumerable but no boxing |
+| `Inventories.foreach` (all buildings) | **0** | 0.056 | 522,000 | Zero-alloc |
+| `Inventories.forLoop` (all buildings) | **0** | 0.045 | 522,000 | Zero-alloc. 24% faster than foreach |
+| `Inventories.AllInventories.only` | **0** | 0.020 | 522,000 | Just accessing inventories, no stock |
+| `Inventories.FullRefreshSim` (forLoop + dict) | **0** | 0.058 | 522,000 | Full production loop with dict insert |
+
+All hot path game API calls confirmed zero-alloc across 760K+ invocations.
+
+### Overall allocation grade
+
+| Layer | Frequency | Allocs/sec (steady state) | Grade |
+|---|---|---|---|
+| RefreshCachedState | 1Hz | **0** (confirmed by 10K benchmark) | **A+** |
+| HTTP GET response | On demand | 1 (ToString) + ~5 small | **A-** |
+| Webhook (no subscribers) | N/A | 0 | **A+** |
+| Webhook (with subscribers) | 5Hz flush | ~5-20 (TimberbotJw strings only) | **A-** |
+| Entity lifecycle | Rare | N per entity | **A** (expected) |
 
 ## Remaining bottlenecks
 

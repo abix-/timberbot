@@ -64,9 +64,10 @@ nav:
   - API Reference: api-reference.md
   - Timberbot AI: timberbot.md
   - Features: features.md
+  - Webhooks: webhooks.md
+  - Architecture: architecture.md
+  - Performance: performance.md
   - Developing: developing.md
 
 copyright: Timberbot API &mdash; Play Timberborn with an AI
-
-
 

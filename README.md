@@ -41,7 +41,7 @@ curl -X POST http://localhost:8085/api/speed -d '{"speed": 3}'
 - [Timberbot AI](docs/timberbot.md). Single authoritative AI guide for agents playing Timberborn
 - [Developing](docs/developing.md). Build from source, add endpoints, Workshop publishing
 
-Claude Code entrypoint: `timberbot/skill/SKILL.md`
+Claude Code entrypoint: `skill/timberbot.md`
 
 ## Requirements
 

@@ -53,7 +53,7 @@ Works with any language that speaks HTTP. Python client is optional. Raw curl wo
 
 [h1]AI setup (Claude Code)[/h1]
 [code]
-cp timberbot/skill/SKILL.md ~/.claude/skills/timberbot/SKILL.md
+cp skill/timberbot.md ~/.claude/skills/timberbot/SKILL.md
 # run Claude from Documents/Timberborn/Mods/Timberbot so ./docs is available
 /loop 1m /timberbot
 [/code]

@@ -161,7 +161,7 @@ curl -X POST http://localhost:8085/api/building/place -d '{"prefab": "Path", "x"
 
 The mod ships a thin Claude skill plus docs for AI play:
 
-- `timberbot/skill/SKILL.md` is the distributable Claude Code entrypoint
+- `skill/timberbot.md` is the distributable Claude Code entrypoint
 - [timberbot.md](timberbot.md) is the single authoritative AI guide
 - [api-reference.md](api-reference.md) is the endpoint and response source of truth
 
@@ -170,7 +170,7 @@ The mod ships a thin Claude skill plus docs for AI play:
 ```bash
 # copy the thin skill entrypoint
 mkdir -p ~/.claude/skills/timberbot
-cp timberbot/skill/SKILL.md ~/.claude/skills/timberbot/SKILL.md
+cp skill/timberbot.md ~/.claude/skills/timberbot/SKILL.md
 
 # start Claude from the Steam Workshop mod folder root first, or from the Timberbot repo root
 # workshop docs live in %USERPROFILE%\Documents\Timberborn\Mods\Timberbot\docs
