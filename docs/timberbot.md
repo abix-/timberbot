@@ -47,26 +47,25 @@ Print the boot output below as markdown (Claude Code renders markdown, NOT ANSI 
 
 Fill EVERY `___` -- both the rule status markers (replace with `OK`) and the inventory counts. NONE are pre-filled. Claude filling them in IS the confirmation of readiness. Wrong/missing/skipped = not ready to play.
 
-### Phase 2: Link (boot API calls)
+### Phase 2: Link (one command)
 
-3. Run `timberbot.py load_brain`. Auto-creates a new brain if none exists. Returns DC coords, building index, map regions, and task queue.
-4. Run `timberbot.py summary`. Print game state as a markdown readout, matching the lowercase robot style:
+3. Run `timberbot.py load_brain`. This is the ONLY boot API call. It auto-creates brain if none exists, which runs summary, detects faction, maps DC area, finds tree clusters and gatherables. Returns everything needed. Print readout from brain data:
 
 ```
-**link established** -- reading colony state
+**link established** -- reading brain
 
-> **brain** <brain status: "loaded, N buildings, M maps, K tasks" or "no prior memory">
+> **brain** <"new" or "loaded"> | `<N>` buildings | `<M>` maps | `<K>` tasks
 > **colony** <faction> | day `<N>` | pop `<P>` | speed `<S>`
 > **supply** food `<F>d` | water `<W>d` | logs `<L>` | planks `<P>`
 > **weather** <state> | `<N>d` remain
-> **alerts** <summary or "none">
+> **resources** `<berries>` berries | `<trees>` trees nearby
 > **wellbeing** `<W>`/77
 > **tasks** <pending/failed task summary or "none">
 ```
 
 If food or water <= 1d, append ` CRITICAL` after the value (e.g. food `0.3d CRITICAL`).
 
-5. If there are failed/active tasks from a previous session, list them and assess whether to retry or re-plan before starting new work.
+4. If there are failed/active tasks from a previous session, list them and assess whether to retry or re-plan before starting new work.
 
 Only AFTER both phases are complete should you begin working on the user's request.
 
