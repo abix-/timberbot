@@ -1,16 +1,14 @@
-Breaking changes below optimize token usage for AI consumers (~50% reduction on tiles, ~26% across all endpoints):
-- [breaking] map command: x/y/radius replaced with x1/y1/x2/y2 (consistent with tiles, find_placement, place_path)
-- [breaking] all boolean fields return 0/1 instead of true/false -- stored as int at data layer (saves 3-4 bytes per bool per row)
-- [breaking] tiles toon output: uniform schema (all fields always present), occupants moved to last column
-- [breaking] tiles toon occupants: z-range format (DistrictCenter:z2-6 instead of repeating name 5 times)
-- [breaking] buildings full: uniform schema (all fields always present in both toon and json)
-- [breaking] beavers full: uniform schema (all fields always present)
-- [feature] brain: one command for full colony awareness. Always fresh from game, persists to memory/brain.toon. Includes: faction detection, DC coords + entrance, structured summary, building counts by role, treeClusters (top wood sources on DC z-level within 40 tiles), foodClusters (berries/bushes same filter), region-indexed maps, persistent task queue (add_task/update_task/list_tasks/clear_tasks). Auto-creates on first run with DC map. 43% smaller than JSON via toon persistence. Replaces summary/save_brain/load_brain
-- [feature] food_clusters server-side endpoint (/api/food_clusters): grid-clustered gatherable food excluding trees
-- [feature] map name param: map ... name:label saves ANSI map to memory/ and indexes in brain
-- [feature] map delta-encoded ANSI: 35KB -> 6KB output for same area
-- [feature] find_placement distance field: flow-field path cost from DC entrance (lower = closer = better hauling)
-- [feature] summary: speed field added to output
-- [internal] uniform schema rule: every object in an array has identical keys, both formats, all detail levels
-- [internal] 0/1 booleans at data layer: CachedBuilding/CachedBeaver/CachedNaturalResource/CachedNeed fields are int, converted from game bools with ? 1 : 0
-- [internal] architecture.md updated with uniform schema rule, 0/1 convention, spatial memory section
+Token optimization (~50% reduction on tiles, ~26% across all endpoints):
+- [breaking] map: x/y/radius -> x1/y1/x2/y2
+- [breaking] booleans: true/false -> 0/1 everywhere
+- [breaking] uniform schema: all list endpoints always emit all fields (enables toon CSV)
+- [breaking] tiles occupants: z-range format (DistrictCenter:z2-6), moved to last column
+
+- [feature] brain: full colony awareness in one command -- faction, DC, summary, building roles, tree/food clusters, maps, tasks. Persists to brain.toon. Auto-creates with DC map on first run
+- [feature] food_clusters endpoint: grid-clustered gatherable food near DC
+- [feature] map name param: saves ANSI map to memory and indexes in brain
+- [feature] map delta ANSI: 35KB -> 6KB
+- [feature] find_placement distance: path cost from DC via flow field
+- [feature] summary: speed field
+
+- [internal] uniform schema + 0/1 booleans documented in architecture.md
