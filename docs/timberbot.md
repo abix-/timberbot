@@ -152,7 +152,7 @@ Parse the prefix before `:` to switch on the code. Everything after `:` is human
 
 Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `currentPoints`) vary by endpoint.
 
-## Game Speed Levels
+## Game Speed
 
 Timberborn has 4 speed levels. Choose based on **your confidence in the current setup**:
 
@@ -160,26 +160,14 @@ Timberborn has 4 speed levels. Choose based on **your confidence in the current 
 |-------|------|----------|
 | 0 | **Paused** | Strategic planning: place buildings, route paths, set priorities, queue work. No time passes. FREE time for decisions. |
 | 1 | **Speed 1 (Normal)** | Low confidence: early game, uncertain situations, risky builds. Time progresses slowly, giving you time to react if problems escalate. |
-| 2 | **Speed 2 (Fast)** | Medium confidence: monitoring work when setup is solid but not bulletproof. Faster than Speed 1, slower than Speed 3. |
-| 3 | **Speed 3 (Fastest)** | High confidence: all objectives queued and stable, setup is rock-solid. Pass time quickly while beavers execute work. |
+| 2 | **Speed 2 (Fast)** | Medium confidence: monitoring work when setup is solid but not bulletproof. |
+| 3 | **Speed 3 (Fastest)** | High confidence: all objectives queued and stable, setup is rock-solid. Pass time quickly. |
 
-## HARD RULE: Strategic Game Speed Management
+**NEVER unpause without a plan.** Paused time is FREE -- placement, pathing, and priority changes all work while paused. Unpaused beavers without queued objectives wander and consume resources without producing.
 
-**NEVER unpause the game without a plan.** Game speed must be used strategically, not reactively.
+**Workflow:** PAUSE to assess and queue work -> unpause at confidence-appropriate speed (see table) -> monitor -> PAUSE to reassess.
 
-**Workflow:**
-1. **Assess state** (PAUSED) — read summary, buildings, beavers, alerts
-2. **Place buildings & queue actions** (PAUSED) — `place_building`, `place_path`, `set_priority`, `set_workers`, pause/unpause buildings
-3. **Unpause based on confidence** — only after physical work is queued and ready for beavers to execute
-   - **Speed 1** (low confidence): early game, risky builds, uncertain outcomes
-   - **Speed 2** (medium confidence): solid setup, monitoring work, some risk tolerance
-   - **Speed 3** (high confidence): stable, queued, rock-solid setup
-4. **Monitor** — let beavers work on queued tasks at the chosen speed
-5. **Reassess** (PAUSE again) — when you need to intervene or redirect
-
-**Why:** Paused time is FREE time to make changes. Building placement, path routing, and priority changes happen while paused. Unpaused beavers without queued objectives simply wander and consume resources (food/water) without producing. They starve needlessly. Only unpause after construction/work is actively queued and waiting. During your response time (analyzing), the game stays paused.
-
-**Emergency mode:** When water or food hits 0 (death spiral imminent): PAUSE → take corrective actions (unpause only critical production, pause leisure/manufacturing, queue water pump/farm) → UNPAUSE to execute (SPEED 1 if urgent) → monitor until stable → PAUSE to reassess.
+**Emergency mode:** When water or food hits 0: PAUSE -> unpause only critical production, pause leisure/manufacturing, queue water pump/farm -> SPEED 1 to execute -> monitor until stable -> PAUSE to reassess.
 
 ## API quick reference
 
@@ -242,7 +230,7 @@ Timberborn has 4 speed levels. Choose based on **your confidence in the current 
 | `set_floodgate building_id:X height:N` | Set floodgate water height |
 | `set_clutch building_id:X engaged:true` | Engage/disengage power clutch |
 | **Colony config** | |
-| `set_speed speed:3` | Game speed: 0=pause (plan), 1=normal (safe), 2=fast, 3=fastest (when stable). See Game Speed Levels |
+| `set_speed speed:3` | Game speed: 0=pause, 1=normal, 2=fast, 3=fastest. See Game Speed |
 | `set_workhours end_hours:20` | When work ends (1-24) |
 | `set_distribution district:X good:Water import_option:Forced` | Import/export per good per district |
 | `unlock_building building:Name.IronTeeth` | Unlock building with science points |
