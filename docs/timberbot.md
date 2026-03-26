@@ -31,7 +31,8 @@ Print the boot output below as markdown (Claude Code renders markdown, NOT ANSI 
 `[___]` priority: water > food > housing > wood > science
 `[___]` pause to plan, unpause with objectives
 `[___]` sequential mutating calls only
-
+`[___]` load_brain at session start, save_brain after changes
+`[___]` add_task before multi-step work, update on completion/failure
 `[___]` prefabs FT:___ IT:___
 `[___]` endpoints ___
 `[___]` crops FT:___ IT:___
@@ -46,22 +47,26 @@ Print the boot output below as markdown (Claude Code renders markdown, NOT ANSI 
 
 Fill EVERY `___` -- both the rule status markers (replace with `OK`) and the inventory counts. NONE are pre-filled. Claude filling them in IS the confirmation of readiness. Wrong/missing/skipped = not ready to play.
 
-### Phase 2: Summary (first and only boot API call)
+### Phase 2: Link (boot API calls)
 
-3. Run EXACTLY ONE command: `timberbot.py summary`. Returns everything: population, resources, weather, alerts, faction, wellbeing. NEVER run other commands during boot.
-4. Print game state as a markdown readout, matching the lowercase robot style:
+3. Run `timberbot.py load_brain` first. If brain.json exists, print DC coords and any pending/failed tasks. If no brain.json, note "no prior memory."
+4. Run `timberbot.py summary`. Print game state as a markdown readout, matching the lowercase robot style:
 
 ```
 **link established** -- reading colony state
 
+> **brain** <brain status: "loaded, N buildings, M maps, K tasks" or "no prior memory">
 > **colony** <faction> | day `<N>` | pop `<P>` | speed `<S>`
 > **supply** food `<F>d` | water `<W>d` | logs `<L>` | planks `<P>`
 > **weather** <state> | `<N>d` remain
 > **alerts** <summary or "none">
 > **wellbeing** `<W>`/77
+> **tasks** <pending/failed task summary or "none">
 ```
 
 If food or water <= 1d, append ` CRITICAL` after the value (e.g. food `0.3d CRITICAL`).
+
+5. If there are failed/active tasks from a previous session, list them and assess whether to retry or re-plan before starting new work.
 
 Only AFTER both phases are complete should you begin working on the user's request.
 
@@ -87,7 +92,7 @@ Roads (paths) are the circulatory system of the colony. They cost nothing (zero 
 
 **DC entrance (the root).** The entrance is on the side matching the DC's orientation. For a south-facing DC at (x, y), the entrance is at the middle tile of the south edge: `(x+1, y-1)` (DC is 3x3, entrance is center of the oriented side). The first path tiles radiate outward from this point.
 
-**Reachability.** The `reachable` field in `find_placement` means "path-connected to DC." A building with `reachable:0` cannot be built, staffed, or supplied -- haulers and workers have no route to it. The further a building is from the DC along the road tree, the longer haulers take to service it. Keep critical buildings (water pumps, food storage) close to the trunk.
+**Reachability.** The `reachable` field in `find_placement` means "path-connected to DC." The `distance` field is the path cost from the DC entrance via the game's flow field (-1 if unreachable). A building with `reachable:0` cannot be staffed or supplied. Lower distance = shorter hauler trips. Keep critical buildings (water pumps, food storage) close to the DC.
 
 **Build order:**
 1. Find DC location and orientation (`buildings | grep -i district`)
@@ -104,13 +109,15 @@ Roads (paths) are the circulatory system of the colony. They cost nothing (zero 
 
 **Find the district center first.** Never search at arbitrary coordinates like x1:0 y1:0. The DC can be anywhere on the map. Run `timberbot.py buildings | grep -i district` to get DC coords, then search within `x1:(dc_x-30) y1:(dc_y-30) x2:(dc_x+30) y2:(dc_y+30)`. Buildings far from DC are unreachable and useless.
 
+**Read the map BEFORE placement searches.** For water buildings (pumps, water wheels), run `map` around the DC first to see where water meets the DC's z-level. Water may only touch certain sides of the terrain. Use the map to identify WHERE water is, THEN narrow your `find_placement` search box to that area at the SAME z-level as the DC. Do NOT blindly search a huge area and accept results on a different z-level -- if all results are on a lower z, beavers cannot reach them without stairs (which need science). Look for water that touches z-level terrain the DC is on.
+
 **Building-first at edges.** Paths occupy tiles -- a path blocks building placement on that tile. Place edge buildings (water pumps, anything at terrain boundaries) FIRST with `find_placement`, then `place_path` to connect them. Workflow: find_placement -> place building (unreachable initially, that's OK) -> path to entrance. Critical for water pumps -- if you path to the water's edge first, the path tiles block pump placement.
 
 **Entrance must face a path.** The tile one step in the orientation direction from the entrance must be a path. A building whose entrance doesn't face a path is useless -- beavers can't access it, builders can't deliver materials. #1 most common mistake. `find_placement` returns `orientation` pointing the entrance toward the nearest path -- always use it.
 
 Entrance directions: **north** = +y (up), **south** = -y (down), **east** = +x (right), **west** = -x (left). Example: building at (10,10) with orientation south -> entrance faces -y -> tile (10,9) must be a path.
 
-**Response fields:** `entranceX`/`entranceY` (tile where a path must go), `flooded` (0/1, flooded sort to bottom), `waterDepth` (water buildings sort deepest first), `reachable` (connected to DC), `pathAccess`, `nearPower`. Sort: non-flooded > reachable > pathAccess > nearPower. Boolean fields are 0/1 integers.
+**Response fields:** `entranceX`/`entranceY` (tile where a path must go), `flooded` (0/1, flooded sort to bottom), `waterDepth` (water buildings sort deepest first), `reachable` (connected to DC), `pathAccess`, `nearPower`, `distance` (path cost from DC entrance via flow field, -1 if unreachable -- lower = closer). Sort: non-flooded > reachable > distance (closer) > pathAccess > nearPower. Boolean fields are 0/1 integers.
 
 **Z-level:** z must equal terrain height at the placement location. Wrong z = invisible/broken building. `map` shows terrain height via digit (z % 10) + background shading (dark=z0-9, medium=z10-19, bright=z20-22). Use `tiles` for raw data. Different map areas have different heights -- never assume z:2.
 
@@ -138,6 +145,71 @@ Timberborn has 4 speed levels. Choose based on **your confidence in the current 
 - **API reference:** `https://abix-.github.io/TimberbornMods/api-reference/` -- all endpoints, request/response formats, parameters
 - **Game wiki:** `https://timberborn.wiki.gg/wiki/<topic>` -- building stats, ranges, mechanics not covered here
 - **Prefab lookup:** `timberbot.py prefabs | grep -i <keyword>` -- valid building names for current faction
+
+## Brain (persistent memory)
+
+Everything the AI knows about the colony lives in `~/Documents/Timberborn/Mods/Timberbot/memory/`. Survives between sessions. This is the AI's long-term memory -- without it, every session starts from zero.
+
+### brain.json structure
+
+```
+{
+  "dc": {"x", "y", "z", "orientation", "entrance": [ex, ey]},
+  "buildings": [{"id", "name", "x", "y", "z"}, ...],        // slim index
+  "maps": {
+    "region-name": {
+      "x1", "y1", "x2", "y2",                                // area coords
+      "files": ["map-name-x1xy1y-x2xy2y.txt", ...]           // newest last
+    }
+  },
+  "tasks": [
+    {"id": 1, "status": "done", "action": "build roads to water"},
+    {"id": 2, "status": "failed", "action": "path to pump", "error": "stairs not unlocked"},
+    {"id": 3, "status": "pending", "action": "place FarmHouse"}
+  ]
+}
+```
+
+**Buildings** are a slim index -- just id/name/x/y/z. Enough to look up where things are and reference them by ID without re-querying the API.
+
+**Maps** are indexed by region name. Each region has bounding box coords and an array of map files (newest appended to bottom). The map files themselves are ANSI-encoded with full z-level, moisture, and building data.
+
+**Tasks** are an ordered work queue. When executing a multi-step plan, add each step as a task. Update status as you go. When something fails, the error is preserved so the next session knows exactly what went wrong and where to resume.
+
+### Task statuses
+
+| Status | Meaning |
+|---|---|
+| `pending` | Not started yet |
+| `active` | Currently being worked on |
+| `done` | Completed successfully |
+| `failed` | Failed -- `error` field explains why |
+
+### Workflows
+
+**Session start:**
+1. `load_brain` -- recall DC location, building index, map regions, and any pending/failed tasks
+2. Check tasks -- resume failed/active tasks before starting new work
+3. Read relevant map files if needed for spatial context
+
+**During work:**
+1. `add_task action:"description"` before starting each step
+2. `update_task id:N status:active` when starting a step
+3. `update_task id:N status:done` on success
+4. `update_task id:N status:failed error:"reason"` on failure -- then STOP and reassess
+
+**After placing buildings:** `save_brain` to update the building index.
+
+**After mapping a new area:** `map ... name:region` auto-updates brain.json maps index.
+
+**Cleanup:** `clear_tasks` removes done tasks. Keep failed tasks until resolved.
+
+### HARD RULE: Use the brain
+
+- **ALWAYS load_brain at session start.** Do not re-discover DC, buildings, or terrain from scratch.
+- **ALWAYS add_task before multi-step work.** If you place 5 buildings without tracking tasks, a failure at step 3 means steps 4-5 are lost context.
+- **ALWAYS save_brain after placing buildings.** The building index is only as fresh as the last save.
+- **NEVER ignore failed tasks.** They exist because something went wrong. Read the error, fix the root cause, then retry or mark done.
 
 ## Factions -- building names differ
 
@@ -270,8 +342,16 @@ Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `current
 | `place_path x1:X y1:Y x2:X2 y2:Y2` | Returns `{placed:{paths,stairs,platforms}, skipped, errors}`. Stairs on lower z, platforms stack at cliff edge |
 | `demolish_building building_id:X` | Remove a building |
 | **Map** | |
-| `map x:X y:Y radius:10` | ASCII map with terrain height shading |
+| `map x1:X y1:Y x2:X2 y2:Y2 [name:label]` | ANSI map. `name` saves to memory/ for persistent spatial reference |
 | `tiles x1:X y1:Y x2:X2 y2:Y2` | Per-tile terrain, water, badwater, occupants (z-stacking), moisture, contamination |
+| **Brain (memory)** | |
+| `save_brain` | Save DC + slim building index to `memory/brain.json`. Preserves maps and tasks |
+| `load_brain` | Load brain. ALWAYS run at session start |
+| `list_maps` | List saved map files |
+| `add_task action:"description"` | Add pending task to brain |
+| `update_task id:N status:done\|failed [error:"reason"]` | Update task status |
+| `list_tasks` | Show all tasks |
+| `clear_tasks [status:done]` | Remove tasks by status |
 | **Crops and trees** | |
 | `plant_crop x1:X y1:Y x2:X2 y2:Y2 z:Z crop:Kohlrabi` | Mark area for planting |
 | `clear_planting x1:X y1:Y x2:X2 y2:Y2 z:Z` | Clear planting marks |
