@@ -32,6 +32,32 @@ import requests
 _MEMORY_DIR = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Mods", "Timberbot", "memory")
 
 
+def _update_brain_maps(region, x1, y1, x2, y2, fname):
+    """Update the maps index in brain.json when a map is saved."""
+    bpath = os.path.join(_MEMORY_DIR, "brain.json")
+    brain = {}
+    if os.path.exists(bpath):
+        try:
+            with open(bpath) as f:
+                brain = json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            pass
+    maps = brain.get("maps", {})
+    entry = maps.get(region, {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "files": []})
+    # update coords to latest
+    entry["x1"] = x1
+    entry["y1"] = y1
+    entry["x2"] = x2
+    entry["y2"] = y2
+    # append file if not already present
+    if fname not in entry["files"]:
+        entry["files"].append(fname)
+    maps[region] = entry
+    brain["maps"] = maps
+    with open(bpath, "w") as f:
+        json.dump(brain, f, indent=2)
+
+
 # ---------------------------------------------------------------------------
 # API client
 # ---------------------------------------------------------------------------
@@ -578,6 +604,8 @@ class Timberbot:
             fpath = os.path.join(_MEMORY_DIR, fname)
             with open(fpath, "w") as f:
                 f.write("\n".join(lines) + "\n")
+            # update brain.json maps index
+            _update_brain_maps(name, x1, y1, x2, y2, fname)
             print(f"saved: {fpath}", file=sys.stderr)
             result["saved"] = fpath
         return result
@@ -587,19 +615,22 @@ class Timberbot:
     # ------------------------------------------------------------------
 
     def save_brain(self):
-        """Save colony state snapshot to memory/brain.json."""
+        """Save colony index to memory/brain.json. Slim: id/name/x/y/z per building. Preserves maps section."""
         summary = self.summary()
         buildings_data = self.buildings(limit=0)
         items = buildings_data.get("items", buildings_data) if isinstance(buildings_data, dict) else buildings_data
+        items = items if isinstance(items, list) else []
+
+        # slim buildings: just enough to look things up
+        slim = [{"id": b["id"], "name": b.get("name", ""), "x": b["x"], "y": b["y"], "z": b["z"]} for b in items]
 
         # find DC and compute entrance
         dc = None
-        for b in (items if isinstance(items, list) else []):
+        for b in items:
             if "DistrictCenter" in str(b.get("name", "")):
                 orient = b.get("orientation", "south")
                 bx, by, bz = b["x"], b["y"], b["z"]
-                # DC is 3x3, entrance at center of oriented side
-                ex, ey = bx + 1, by + 1  # default center
+                ex, ey = bx + 1, by + 1
                 if orient == "south":
                     ex, ey = bx + 1, by - 1
                 elif orient == "north":
@@ -611,18 +642,27 @@ class Timberbot:
                 dc = {"x": bx, "y": by, "z": bz, "orientation": orient, "entrance": [ex, ey]}
                 break
 
+        # preserve existing maps section
+        existing_maps = {}
+        bpath = os.path.join(_MEMORY_DIR, "brain.json")
+        if os.path.exists(bpath):
+            try:
+                with open(bpath) as f:
+                    existing_maps = json.load(f).get("maps", {})
+            except (json.JSONDecodeError, KeyError):
+                pass
+
         from datetime import datetime
         brain = {
             "timestamp": datetime.now().isoformat(),
             "dc": dc,
-            "buildings": items if isinstance(items, list) else [],
-            "summary": summary,
+            "buildings": slim,
+            "maps": existing_maps,
         }
         os.makedirs(_MEMORY_DIR, exist_ok=True)
-        fpath = os.path.join(_MEMORY_DIR, "brain.json")
-        with open(fpath, "w") as f:
+        with open(bpath, "w") as f:
             json.dump(brain, f, indent=2)
-        return {"saved": fpath, "buildings": len(brain["buildings"])}
+        return {"saved": bpath, "buildings": len(slim)}
 
     def load_brain(self):
         """Load last saved state from memory/brain.json."""
