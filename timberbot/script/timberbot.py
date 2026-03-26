@@ -716,12 +716,14 @@ class Timberbot:
 
     def list_maps(self):
         """List saved map files in memory/."""
+        self._ensure_settlement_dir()
         if not os.path.isdir(_MEMORY_DIR):
             return []
         return sorted(f for f in os.listdir(_MEMORY_DIR) if f.startswith("map-") and f.endswith(".txt"))
 
     def clear_brain(self):
         """Wipe memory for current settlement. Run brain again to start fresh."""
+        self._ensure_settlement_dir()
         import shutil
         if os.path.isdir(_MEMORY_DIR) and _MEMORY_DIR != _MEMORY_BASE:
             shutil.rmtree(_MEMORY_DIR)
@@ -732,8 +734,21 @@ class Timberbot:
     # Tasks
     # ------------------------------------------------------------------
 
+    def _ensure_settlement_dir(self):
+        """Set _MEMORY_DIR to the correct settlement folder. Call before any disk operation."""
+        global _MEMORY_DIR
+        if _MEMORY_DIR != _MEMORY_BASE:
+            return  # already set by brain()
+        try:
+            r = self.s.get(f"{self.url}/api/settlement", timeout=5)
+            name = _sanitize_name(r.json().get("name", "unknown"))
+            _MEMORY_DIR = os.path.join(_MEMORY_BASE, name)
+        except Exception:
+            pass
+
     def add_task(self, action):
         """Add a pending task to brain.toon. Returns the new task."""
+        self._ensure_settlement_dir()
         brain = _load_brain_file()
         tasks = brain.get("tasks", [])
         next_id = max((t["id"] for t in tasks), default=0) + 1
@@ -745,6 +760,7 @@ class Timberbot:
 
     def update_task(self, id, status, error=None):
         """Update task status. status: pending/active/done/failed. Optional error for failed."""
+        self._ensure_settlement_dir()
         brain = _load_brain_file()
         tasks = brain.get("tasks", [])
         for t in tasks:
@@ -761,11 +777,13 @@ class Timberbot:
 
     def list_tasks(self):
         """List all tasks from brain.toon."""
+        self._ensure_settlement_dir()
         brain = _load_brain_file()
         return brain.get("tasks", [])
 
     def clear_tasks(self, status="done"):
         """Remove tasks with given status (default: done). Returns count cleared."""
+        self._ensure_settlement_dir()
         brain = _load_brain_file()
         tasks = brain.get("tasks", [])
         before = len(tasks)

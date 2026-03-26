@@ -109,7 +109,7 @@ namespace Timberbot
             _notificationSaver = notificationSaver;
         }
 
-        private string GetSettlementName()
+        public string GetSettlementName()
         {
             try
             {

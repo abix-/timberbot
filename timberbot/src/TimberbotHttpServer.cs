@@ -135,6 +135,11 @@ namespace Timberbot
                     Respond(ctx, 200, "{\"status\":\"ok\",\"ready\":true}");
                     continue;
                 }
+                if (path == "/api/settlement")
+                {
+                    Respond(ctx, 200, "{\"name\":\"" + _service.Read.GetSettlementName().Replace("\"", "\\\"") + "\"}");
+                    continue;
+                }
 
                 // format: "toon" = flat key:value pairs (default, human-readable)
                 //         "json" = full nested JSON (machine-parseable)
