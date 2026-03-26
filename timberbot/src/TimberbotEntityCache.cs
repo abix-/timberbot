@@ -165,10 +165,10 @@ namespace Timberbot
                 try
                 {
                     if (c.BlockObject != null)
-                        c.Finished = c.BlockObject.IsFinished;
-                    c.Paused = c.Pausable != null && c.Pausable.Paused;
-                    c.Unreachable = c.Reachability != null && c.Reachability.IsAnyUnreachable();
-                    c.Powered = c.Mechanical != null && c.Mechanical.ActiveAndPowered;
+                        c.Finished = c.BlockObject.IsFinished ? 1 : 0;
+                    c.Paused = c.Pausable != null && c.Pausable.Paused ? 1 : 0;
+                    c.Unreachable = c.Reachability != null && c.Reachability.IsAnyUnreachable() ? 1 : 0;
+                    c.Powered = c.Mechanical != null && c.Mechanical.ActiveAndPowered ? 1 : 0;
                     if (c.Workplace != null)
                     {
                         c.AssignedWorkers = c.Workplace.NumberOfAssignedWorkers;
@@ -188,10 +188,10 @@ namespace Timberbot
                     {
                         c.BuildProgress = c.Site.BuildTimeProgress;
                         c.MaterialProgress = c.Site.MaterialProgress;
-                        c.HasMaterials = c.Site.HasMaterialsToResumeBuilding;
+                        c.HasMaterials = c.Site.HasMaterialsToResumeBuilding ? 1 : 0;
                     }
-                    if (c.Clutch != null) c.ClutchEngaged = c.Clutch.IsEngaged;
-                    if (c.Wonder != null) c.WonderActive = c.Wonder.IsActive;
+                    if (c.Clutch != null) c.ClutchEngaged = c.Clutch.IsEngaged ? 1 : 0;
+                    if (c.Wonder != null) c.WonderActive = c.Wonder.IsActive ? 1 : 0;
                     // Power network: each building can belong to one power graph.
                     // RuntimeHelpers.GetHashCode gives us a stable identity for the graph
                     // object so we can group buildings by network in the /api/power endpoint.
@@ -205,7 +205,7 @@ namespace Timberbot
                     {
                         c.CurrentRecipe = c.Manufactory.HasCurrentRecipe ? c.Manufactory.CurrentRecipe.Id : "";
                         c.ProductionProgress = c.Manufactory.ProductionProgress;
-                        c.ReadyToProduce = c.Manufactory.IsReadyToProduce;
+                        c.ReadyToProduce = c.Manufactory.IsReadyToProduce ? 1 : 0;
                         if (c.Recipes == null) // recipes don't change -- populate once
                         {
                             c.Recipes = new List<string>();
@@ -217,7 +217,7 @@ namespace Timberbot
                     // NutrientStock tracks what's currently in the pod.
                     if (c.BreedingPod != null)
                     {
-                        c.NeedsNutrients = c.BreedingPod.NeedsNutrients;
+                        c.NeedsNutrients = c.BreedingPod.NeedsNutrients ? 1 : 0;
                         try
                         {
                             if (c.NutrientStock == null) c.NutrientStock = new Dictionary<string, int>();
@@ -278,10 +278,10 @@ namespace Timberbot
                         var coords = c.BlockObject.Coordinates;
                         c.X = coords.x; c.Y = coords.y; c.Z = coords.z;
                         // TreeCuttingArea is a game singleton that tracks which tiles are marked
-                        c.Marked = c.Cuttable != null && _treeCuttingArea.IsInCuttingArea(coords);
+                        c.Marked = c.Cuttable != null && _treeCuttingArea.IsInCuttingArea(coords) ? 1 : 0;
                     }
-                    c.Alive = c.Living != null && !c.Living.IsDead;
-                    c.Grown = c.Growable != null && c.Growable.IsGrown;
+                    c.Alive = c.Living != null && !c.Living.IsDead ? 1 : 0;
+                    c.Grown = c.Growable != null && c.Growable.IsGrown ? 1 : 0;
                     c.Growth = c.Growable != null ? c.Growable.GrowthProgress : 0f;
                 }
                 catch (Exception _ex) { TimberbotLog.Error("cache.natural_resource", _ex); }
@@ -316,23 +316,23 @@ namespace Timberbot
                     var dc = c.Citizen?.AssignedDistrict;
                     if (RefChanged(ref c.LastDistrictRef, dc))
                         c.District = dc?.DistrictName;
-                    c.HasHome = c.Dweller != null && c.Dweller.HasHome;
-                    c.Contaminated = c.Contaminable != null && c.Contaminable.IsContaminated;
+                    c.HasHome = c.Dweller != null && c.Dweller.HasHome ? 1 : 0;
+                    c.Contaminated = c.Contaminable != null && c.Contaminable.IsContaminated ? 1 : 0;
                     if (c.Life != null) c.LifeProgress = c.Life.LifeProgress;
                     if (c.Deteriorable != null) c.DeteriorationProgress = (float)Math.Round(c.Deteriorable.DeteriorationProgress, 3);
                     if (c.Carrier != null)
                     {
                         c.LiftingCapacity = c.Carrier.LiftingCapacity;
-                        c.Overburdened = c.Carrier.IsMovementSlowed;
+                        c.Overburdened = c.Carrier.IsMovementSlowed ? 1 : 0;
                         if (c.Carrier.IsCarrying)
                         {
-                            c.IsCarrying = true;
+                            c.IsCarrying = 1;
                             var ga = c.Carrier.CarriedGoods;
                             c.CarryingGood = ga.GoodId;
                             c.CarryAmount = ga.Amount;
                         }
                         else
-                            c.IsCarrying = false;
+                            c.IsCarrying = 0;
                     }
                     // Needs: each beaver has ~30 needs (Hunger, Thirst, Sleep, etc).
                     // GetNeeds() returns a cached collection (confirmed zero-alloc via benchmark).
@@ -340,7 +340,7 @@ namespace Timberbot
                     // The List itself is allocated once and reused via Clear().
                     if (c.Needs == null) c.Needs = new List<CachedNeed>();
                     c.Needs.Clear();
-                    c.AnyCritical = false;
+                    c.AnyCritical = 0;
                     if (c.NeedMgr != null)
                     {
                         foreach (var ns in c.NeedMgr.GetNeeds())
@@ -351,12 +351,12 @@ namespace Timberbot
                                 Id = ns.Id,
                                 Points = (float)Math.Round(need.Points, 2),
                                 Wellbeing = c.NeedMgr.GetNeedWellbeing(ns.Id),
-                                Favorable = need.IsFavorable,
-                                Critical = need.IsCritical,
-                                Active = need.IsActive,
+                                Favorable = need.IsFavorable ? 1 : 0,
+                                Critical = need.IsCritical ? 1 : 0,
+                                Active = need.IsActive ? 1 : 0,
                                 Group = ns.NeedGroupId ?? "" // which category (SocialLife, Fun, etc)
                             });
-                            if (need.IsBelowWarningThreshold) c.AnyCritical = true;
+                            if (need.IsBelowWarningThreshold) c.AnyCritical = 1;
                         }
                     }
                 }
@@ -475,12 +475,12 @@ namespace Timberbot
                     Manufactory = ec.GetComponent<Manufactory>(),
                     BreedingPod = ec.GetComponent<BreedingPod>(),
                     RangedEffect = ec.GetComponent<RangedEffectBuildingSpec>(),
-                    HasFloodgate = ec.GetComponent<Floodgate>() != null,
+                    HasFloodgate = ec.GetComponent<Floodgate>() != null ? 1 : 0,
                     FloodgateMaxHeight = ec.GetComponent<Floodgate>()?.MaxHeight ?? 0f,
-                    HasClutch = ec.GetComponent<Clutch>() != null,
-                    HasWonder = ec.GetComponent<Wonder>() != null,
-                    IsGenerator = ec.GetComponent<MechanicalNode>()?.IsGenerator ?? false,
-                    IsConsumer = ec.GetComponent<MechanicalNode>()?.IsConsumer ?? false,
+                    HasClutch = ec.GetComponent<Clutch>() != null ? 1 : 0,
+                    HasWonder = ec.GetComponent<Wonder>() != null ? 1 : 0,
+                    IsGenerator = ec.GetComponent<MechanicalNode>()?.IsGenerator == true ? 1 : 0,
+                    IsConsumer = ec.GetComponent<MechanicalNode>()?.IsConsumer == true ? 1 : 0,
                     NominalPowerInput = ec.GetComponent<MechanicalNode>()?._nominalPowerInput ?? 0,
                     NominalPowerOutput = ec.GetComponent<MechanicalNode>()?._nominalPowerOutput ?? 0,
                     EffectRadius = ec.GetComponent<RangedEffectBuildingSpec>()?.EffectRadius ?? 0
@@ -514,7 +514,7 @@ namespace Timberbot
                         try
                         {
                             var ent = bo.PositionedEntrance.DoorstepCoordinates;
-                            cb.HasEntrance = true;
+                            cb.HasEntrance = 1;
                             cb.EntranceX = ent.x;
                             cb.EntranceY = ent.y;
                         }
@@ -555,7 +555,7 @@ namespace Timberbot
                 {
                     Id = ec.GameObject.GetInstanceID(),
                     Name = CleanName(ec.GameObject.name),
-                    IsBot = ec.GetComponent<Bot>() != null, // bots have Bot component, beavers don't
+                    IsBot = ec.GetComponent<Bot>() != null ? 1 : 0, // bots have Bot component, beavers don't
                     Go = ec.GameObject,
                     NeedMgr = ec.GetComponent<NeedManager>(),
                     WbTracker = ec.GetComponent<WellbeingTracker>(),
@@ -640,7 +640,7 @@ namespace Timberbot
             public Gatherable Gatherable;
             public Timberborn.Growing.Growable Growable;
             public int X, Y, Z;
-            public bool Alive, Grown, Marked;
+            public int Alive, Grown, Marked;
             public float Growth;
             public CachedNaturalResource Clone() => (CachedNaturalResource)MemberwiseClone();
         }
@@ -668,32 +668,32 @@ namespace Timberbot
             public Manufactory Manufactory;
             public BreedingPod BreedingPod;
             public RangedEffectBuildingSpec RangedEffect;
-            public bool Finished, Paused, Unreachable, Powered;
+            public int Finished, Paused, Unreachable, Powered;
             public int X, Y, Z;
             public string Orientation;
             public int AssignedWorkers, DesiredWorkers, MaxWorkers;
             public int Dwellers, MaxDwellers;
-            public bool HasFloodgate;
+            public int HasFloodgate;
             public float FloodgateHeight, FloodgateMaxHeight;
             public string ConstructionPriority, WorkplacePriorityStr;
             public float BuildProgress, MaterialProgress;
-            public bool HasMaterials;
-            public bool ClutchEngaged, HasClutch;
-            public bool WonderActive, HasWonder;
-            public bool IsGenerator, IsConsumer;
+            public int HasMaterials;
+            public int ClutchEngaged, HasClutch;
+            public int WonderActive, HasWonder;
+            public int IsGenerator, IsConsumer;
             public int NominalPowerInput, NominalPowerOutput;
             public int PowerDemand, PowerSupply, PowerNetworkId;
             public string CurrentRecipe;
             public List<string> Recipes;
             public float ProductionProgress;
-            public bool ReadyToProduce;
-            public bool NeedsNutrients;
+            public int ReadyToProduce;
+            public int NeedsNutrients;
             public Dictionary<string, int> NutrientStock;
             public Dictionary<string, int> Inventory;
             public int EffectRadius;
             public int Stock, Capacity;
             public List<(int x, int y, int z)> OccupiedTiles;
-            public bool HasEntrance;
+            public int HasEntrance;
             public int EntranceX, EntranceY;
             public CachedBuilding Clone()
             {
@@ -711,14 +711,14 @@ namespace Timberbot
             public string Id, Group;
             public float Points;
             public int Wellbeing;
-            public bool Favorable, Critical, Active;
+            public int Favorable, Critical, Active;
         }
 
         public class CachedBeaver
         {
             public int Id;
             public string Name;
-            public bool IsBot;
+            public int IsBot;
             public GameObject Go;
             public NeedManager NeedMgr;
             public WellbeingTracker WbTracker;
@@ -734,13 +734,13 @@ namespace Timberbot
             public string Workplace, District;
             public object LastWorkplaceRef;
             public object LastDistrictRef;
-            public bool HasHome, Contaminated;
+            public int HasHome, Contaminated;
             public float LifeProgress, DeteriorationProgress;
-            public bool IsCarrying;
+            public int IsCarrying;
             public string CarryingGood;
             public int CarryAmount, LiftingCapacity;
-            public bool Overburdened;
-            public bool AnyCritical;
+            public int Overburdened;
+            public int AnyCritical;
             public List<CachedNeed> Needs;
             public CachedBeaver Clone()
             {

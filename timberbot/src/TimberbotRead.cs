@@ -161,18 +161,18 @@ namespace Timberbot
             foreach (var c in _cache.NaturalResources.Read)
             {
                 if (c.Cuttable == null) continue; // skip non-cuttable resources
-                if (!c.Alive) continue;            // dead stumps don't count
+                if (c.Alive == 0) continue;            // dead stumps don't count
                 if (_cropNames.Contains(c.Name))
                 {
-                    if (c.Grown) cropReady++;      // harvestable now
+                    if (c.Grown != 0) cropReady++;      // harvestable now
                     else cropGrowing++;            // still growing
                 }
                 else
                 {
                     // trees: markedGrown = ready to chop, markedSeedling = marked but too young
-                    if (c.Marked && c.Grown) treeMarkedGrown++;
-                    else if (c.Marked && !c.Grown) treeMarkedSeedling++;
-                    else if (!c.Marked && c.Grown) treeUnmarkedGrown++;
+                    if (c.Marked != 0 && c.Grown != 0) treeMarkedGrown++;
+                    else if (c.Marked != 0 && c.Grown == 0) treeMarkedSeedling++;
+                    else if (c.Marked == 0 && c.Grown != 0) treeUnmarkedGrown++;
                 }
             }
 
@@ -195,9 +195,9 @@ namespace Timberbot
                         alertUnstaffed++;
                 }
                 // unpowered = consumes power but isn't getting any
-                if (c.IsConsumer && !c.Powered)
+                if (c.IsConsumer != 0 && c.Powered == 0)
                     alertUnpowered++;
-                if (c.Unreachable)
+                if (c.Unreachable != 0)
                     alertUnreachable++;
             }
 
@@ -209,7 +209,7 @@ namespace Timberbot
                 totalWellbeing += c.Wellbeing;
                 beaverCount++;
                 if (c.Wellbeing < 4) miserable++;
-                if (c.AnyCritical) critical++;
+                if (c.AnyCritical != 0) critical++;
             }
 
             // --- DERIVED STATS ---
@@ -386,7 +386,7 @@ namespace Timberbot
                         emitted++;
                     }
                 }
-                if (c.IsConsumer && !c.Powered)
+                if (c.IsConsumer != 0 && c.Powered == 0)
                 {
                     if (offset > 0 && skipped < offset) { skipped++; }
                     else if (!paginated || emitted < limit)
@@ -395,7 +395,7 @@ namespace Timberbot
                         emitted++;
                     }
                 }
-                if (c.Unreachable)
+                if (c.Unreachable != 0)
                 {
                     if (offset > 0 && skipped < offset) { skipped++; }
                     else if (!paginated || emitted < limit)
@@ -602,32 +602,32 @@ namespace Timberbot
                     .Prop("maxWorkers", c.Workplace != null ? c.MaxWorkers : 0)
                     .Prop("desiredWorkers", c.Workplace != null ? c.DesiredWorkers : 0)
                     .Prop("assignedWorkers", c.Workplace != null ? c.AssignedWorkers : 0)
-                    .Prop("reachable", c.Reachability != null && !c.Unreachable)
-                    .Prop("powered", c.Mechanical != null && c.Powered)
-                    .Prop("isGenerator", c.PowerNode != null && c.IsGenerator)
-                    .Prop("isConsumer", c.PowerNode != null && c.IsConsumer)
+                    .Prop("reachable", c.Reachability != null ? (c.Unreachable == 0 ? 1 : 0) : 0)
+                    .Prop("powered", c.Powered)
+                    .Prop("isGenerator", c.IsGenerator)
+                    .Prop("isConsumer", c.IsConsumer)
                     .Prop("nominalPowerInput", c.PowerNode != null ? c.NominalPowerInput : 0)
                     .Prop("nominalPowerOutput", c.PowerNode != null ? c.NominalPowerOutput : 0)
                     .Prop("powerDemand", c.PowerNode != null ? c.PowerDemand : 0)
                     .Prop("powerSupply", c.PowerNode != null ? c.PowerSupply : 0)
                     .Prop("buildProgress", c.Site != null ? c.BuildProgress : 0f)
                     .Prop("materialProgress", c.Site != null ? c.MaterialProgress : 0f)
-                    .Prop("hasMaterials", c.Site != null && c.HasMaterials)
+                    .Prop("hasMaterials", c.HasMaterials)
                     .Prop("stock", c.Capacity > 0 ? c.Stock : 0)
                     .Prop("capacity", c.Capacity)
                     .Prop("dwellers", c.Dwelling != null ? c.Dwellers : 0)
                     .Prop("maxDwellers", c.Dwelling != null ? c.MaxDwellers : 0)
                     .Prop("floodgate", c.HasFloodgate)
-                    .Prop("height", c.HasFloodgate ? c.FloodgateHeight : 0f, "F1")
-                    .Prop("maxHeight", c.HasFloodgate ? c.FloodgateMaxHeight : 0f, "F1")
+                    .Prop("height", c.HasFloodgate != 0 ? c.FloodgateHeight : 0f, "F1")
+                    .Prop("maxHeight", c.HasFloodgate != 0 ? c.FloodgateMaxHeight : 0f, "F1")
                     .Prop("isClutch", c.HasClutch)
-                    .Prop("clutchEngaged", c.HasClutch && c.ClutchEngaged)
+                    .Prop("clutchEngaged", c.ClutchEngaged)
                     .Prop("currentRecipe", c.Manufactory != null ? (c.CurrentRecipe ?? "") : "")
                     .Prop("productionProgress", c.Manufactory != null ? c.ProductionProgress : 0f)
-                    .Prop("readyToProduce", c.Manufactory != null && c.ReadyToProduce)
+                    .Prop("readyToProduce", c.ReadyToProduce)
                     .Prop("effectRadius", c.EffectRadius)
                     .Prop("isWonder", c.HasWonder)
-                    .Prop("wonderActive", c.HasWonder && c.WonderActive);
+                    .Prop("wonderActive", c.WonderActive);
 
                 // inventory: flat string for toon, object for json
                 if (format == "toon")
@@ -794,8 +794,8 @@ namespace Timberbot
                     {
                         foreach (var n in c.Needs)
                         {
-                            if (n.Critical) critical = critical.Length > 0 ? critical + "+" + n.Id : n.Id;
-                            else if (!n.Favorable && n.Active) unmet = unmet.Length > 0 ? unmet + "+" + n.Id : n.Id;
+                            if (n.Critical != 0) critical = critical.Length > 0 ? critical + "+" + n.Id : n.Id;
+                            else if (n.Favorable == 0 && n.Active != 0) unmet = unmet.Length > 0 ? unmet + "+" + n.Id : n.Id;
                         }
                     }
                     jw.Prop("critical", critical).Prop("unmet", unmet).CloseObj();
@@ -811,9 +811,9 @@ namespace Timberbot
                     .Prop("lifeProgress", c.Life != null ? c.LifeProgress : 0f)
                     .Prop("deterioration", c.Deteriorable != null ? c.DeteriorationProgress : 0f, "F3")
                     .Prop("liftingCapacity", c.Carrier != null ? c.LiftingCapacity : 0)
-                    .Prop("overburdened", c.Carrier != null && c.Overburdened)
-                    .Prop("carrying", c.IsCarrying ? c.CarryingGood : "")
-                    .Prop("carryAmount", c.IsCarrying ? c.CarryAmount : 0);
+                    .Prop("overburdened", c.Overburdened)
+                    .Prop("carrying", c.IsCarrying != 0 ? c.CarryingGood : "")
+                    .Prop("carryAmount", c.IsCarrying != 0 ? c.CarryAmount : 0);
 
                 // needs array
                 jw.Arr("needs");
@@ -821,7 +821,7 @@ namespace Timberbot
                 {
                     foreach (var n in c.Needs)
                     {
-                        if (!fullDetail && !c.IsBot && !n.Active) continue;
+                        if (!fullDetail && c.IsBot == 0 && n.Active == 0) continue;
                         jw.OpenObj()
                             .Prop("id", n.Id)
                             .Prop("points", n.Points)
@@ -1056,7 +1056,7 @@ namespace Timberbot
                         occupants[key].Add((c.Name, tile.z));
                     }
                 }
-                if (c.HasEntrance)
+                if (c.HasEntrance != 0)
                     entrances.Add((long)c.EntranceX * 100000 + c.EntranceY);
             }
 
@@ -1070,8 +1070,8 @@ namespace Timberbot
                     if (!occupants.ContainsKey(key))
                         occupants[key] = new List<(string, int)>();
                     occupants[key].Add((r.Name, r.Z));
-                    if (!r.Grown) seedlings.Add(key);
-                    if (!r.Alive) deadTiles.Add(key);
+                    if (r.Grown == 0) seedlings.Add(key);
+                    if (r.Alive == 0) deadTiles.Add(key);
                 }
             }
 
