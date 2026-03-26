@@ -367,7 +367,7 @@ Berries are a bridge to farming, not a long-term food plan.
 
 Birch is best early. Oak is strongest long-term.
 
-`tree_clusters` finds the densest grown tree clusters. `markedGrown` in `brain` is the immediately choppable supply.
+`tree_clusters` finds the densest grown tree clusters. `food_clusters` finds the densest gatherable food clusters (berries, bushes), excluding trees. `markedGrown` in `brain` is the immediately choppable supply.
 
 **Forester** plants trees and bushes on moist soil. One forester keeps up with about four lumberjacks.
 

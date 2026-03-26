@@ -62,5 +62,3 @@ Learned from these Timberborn modding projects:
 - [Timberborn-KyP-Mods/TimberPrint](https://github.com/Timberborn-KyP-Mods/TimberPrint) -- `PreviewFactory` + `BlockValidator` patterns for placement validation
 - [toon-format/toon](https://github.com/toon-format/toon) -- Token-Oriented Object Notation for compact AI output
 
-
-

@@ -90,7 +90,3 @@ Edit settings.json in your mod folder (Documents/Timberborn/Mods/Timberbot/):
 [url=https://github.com/abix-/TimberbornMods]Source Code[/url]
 
 
-
-
-
-

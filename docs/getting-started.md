@@ -221,7 +221,3 @@ The client reads `httpHost` and `httpPort` from settings.json when no CLI flags 
 - [Developing](developing.md) -- build from source
 
 
-
-
-
-
