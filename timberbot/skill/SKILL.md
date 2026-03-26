@@ -1,29 +1,45 @@
 ---
 name: timberbot
 description: Collaborate with a human player on Timberborn via timberbot.py. Help keep beavers alive, wellbeing high, and needs met.
-version: "0.8.0"
+version: "0.8.1"
 ---
 # Timberbot
 
-This is the distributable Claude Code entrypoint for playing Timberborn through `timberbot.py`.
+Play Timberborn through `timberbot.py`.
 
-This skill is intentionally thin. The authoritative knowledge lives in the mod docs that ship with the repo or Steam Workshop mod folder.
+ALWAYS prefer a local docs copy.
+NEVER invent rules when the docs are unavailable.
 
-Before acting:
+1. Check `docs/timberbot.md` in the current working directory.
+2. Otherwise check `%USERPROFILE%\Documents\Timberborn\Mods\Timberbot\docs\` (for example `C:\Users\Abix\Documents\Timberborn\Mods\Timberbot\docs\`).
+3. If neither exists, stop. Tell the user to reopen Claude from the Timberbot repo root or the Steam Workshop mod folder root. Tell them the GitHub repo contains the same docs.
 
-1. Prefer a local docs copy. First check whether the current working directory contains `docs/timberbot.md`.
-2. If not, check the Steam Workshop mod folder docs at `%USERPROFILE%\Documents\Timberborn\Mods\Timberbot\docs\` (for example `C:\Users\Abix\Documents\Timberborn\Mods\Timberbot\docs\`).
-3. If neither local docs location is available, stop and tell the user to reopen Claude from the Timberbot repo root or the Steam Workshop mod folder root. Also tell them the GitHub repo contains the same docs content.
-4. Use `timberbot.py` directly. In a local clone it lives at `timberbot/script/timberbot.py`; in the distributed mod folder it is shipped alongside the DLL and docs.
-5. Read `docs/timberbot.md` first. It is the single AI authority and contains both the operating workflow and the gameplay knowledge Timberbot needs.
-6. Read `docs/api-reference.md` only when you need exact endpoint, parameter, response, pagination, helper, or error details.
-7. Read `docs/getting-started.md` only for install, PATH, remote host, Steam Workshop path, or troubleshooting questions.
+ALWAYS use `timberbot.py` directly.
+NEVER assume the repo and Workshop layouts are identical.
 
-Runtime rules:
+- Local clone: `timberbot/script/timberbot.py`
+- Workshop install: `timberbot.py` sits beside the DLL and docs
 
-- Use `timberbot.py` directly.
-- On first invocation in a session, follow the boot/link flow from `docs/timberbot.md`.
-- On later invocations in the same session, skip boot unless the user explicitly wants to restart or clear memory.
-- Never run mutating game API calls in parallel.
-- Prefer `brain`, `find_placement`, and `find_planting` over ad hoc guessing.
-- Keep action batches bounded and re-read state after making changes.
+ALWAYS read `docs/timberbot.md` first.
+NEVER treat any other doc as the AI authority.
+
+ALWAYS use `docs/api-reference.md` only for exact commands, parameters, responses, helpers, and errors.
+NEVER rely on memory for API contract details.
+
+ALWAYS use `docs/getting-started.md` only for install, PATH, remote host, Workshop path, and troubleshooting.
+NEVER pull setup rules from the AI guide.
+
+ALWAYS follow the boot/link flow from `docs/timberbot.md` on the first invocation in a session.
+NEVER skip boot on the first invocation.
+
+ALWAYS skip boot later in the same session unless the user explicitly wants to restart or clear memory.
+NEVER re-run boot just because the task changed.
+
+ALWAYS run mutating game actions sequentially.
+NEVER run mutating game API calls in parallel.
+
+ALWAYS prefer `brain`, `find_placement`, and `find_planting`.
+NEVER guess state, coordinates, faction prefabs, or irrigated tiles.
+
+ALWAYS keep action batches bounded and re-read state after changes.
+NEVER assume earlier observations are still current after a mutation.
