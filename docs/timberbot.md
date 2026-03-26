@@ -1,45 +1,69 @@
 ---
 name: timberbot
 description: Collaborate with a human player on Timberborn via timberbot.py. Help keep beavers alive, wellbeing high, needs met.
-version: "5.7"
+version: "5.8"
 ---
 # Timberbot - Game Reference
 
 ## FIRST RUN: Boot Sequence
 
-On the FIRST invocation of /timberbot per session, you MUST:
+On the FIRST invocation of /timberbot per session, you MUST complete TWO phases in order. The boot report is NOT a game action -- it proves that YOU, Claude, have read and internalized the rules. No API calls until after the boot report is printed.
+
+### Phase 1: Boot (rules confirmation -- NO API calls)
 
 1. Read this ENTIRE skill file top to bottom (not just the first 30 lines -- ALL of it)
-2. Then print a boot report confirming what you loaded. Use this exact format with unicode box drawing:
+2. IMMEDIATELY print this boot report to prove you loaded the rules. Do NOT run any commands first. The boot report has two sections: RULES (hard rules you must follow) and INVENTORY (counts extracted from the skill file that prove you read the whole thing -- if you only read the top, you cannot fill these in). Fill in every count by scanning the skill file content you just read:
+
+Print the boot output below as markdown (Claude Code renders markdown, NOT ANSI escapes). Use lowercase throughout for robotic terminal feel. Format:
 
 ```
-+-------------------------------------------------------+
-|             TIMBERBOT v5.7 - SYSTEMS ONLINE            |
-+-------------------------------------------------------+
-| [ok] find_placement for ALL building placement         |
-|      NEVER search tiles/map manually                   |
-| [ok] find_planting for crop placement                  |
-| [ok] Building-first, then path to it                   |
-| [ok] Entrance must face path (use find_placement       |
-|      orientation)                                      |
-| [ok] Faction identified: <faction>                     |
-| [ok] Summary loaded: <pop> beavers, day <N>,           |
-|      <food>d food, <water>d water                      |
-| [ok] Weather: <temperate/drought>, <N> days remain     |
-| [ok] Alerts: <alert summary or "none">                 |
-| [ok] Priorities: water > food > housing > wood >       |
-|      science                                           |
-+-------------------------------------------------------+
-| HARD RULES LOADED:                                     |
-|  - find_placement for EVERYTHING. No exceptions.       |
-|  - Beavers die if food or water hits 0.                |
-|  - Paths are free. Buildings first at edges.            |
-|  - Never guess coordinates or orientation.              |
-|  - Co-op: human is also playing. Re-read state often.  |
-+-------------------------------------------------------+
+## TIMBERBOT v5.8
+
+`[___]` DC-first placement
+`[___]` road network before buildings (tree from DC entrance)
+`[___]` find_placement for ALL placement
+`[___]` find_planting for crops
+`[___]` building-first at edges
+`[___]` entrance must face path
+`[___]` beavers die at 0 food/water
+`[___]` never guess coords
+`[___]` co-op: re-read state often
+`[___]` priority: water > food > housing > wood > science
+`[___]` pause to plan, unpause with objectives
+`[___]` sequential mutating calls only
+
+`[___]` prefabs FT:___ IT:___
+`[___]` endpoints ___
+`[___]` crops FT:___ IT:___
+`[___]` trees ___ (___ shared)
+`[___]` wellbeing FT:___ IT:___ max
+`[___]` errors ___
+`[___]` skill ___ ln / ___ sec
+`[___]` last "___"
+
+**all systems nominal -- ready for link**
 ```
 
-Substitute real values from `summary` (one call gives you everything -- population, resources, weather, alerts, wellbeing). The [ok] markers confirm you actually read and internalized each rule. Only AFTER printing this boot report should you begin working on the user's request.
+Fill EVERY `___` -- both the rule status markers (replace with `OK`) and the inventory counts. NONE are pre-filled. Claude filling them in IS the confirmation of readiness. Wrong/missing/skipped = not ready to play.
+
+### Phase 2: Summary (first and only boot API call)
+
+3. Run EXACTLY ONE command: `timberbot.py summary`. Returns everything: population, resources, weather, alerts, faction, wellbeing. NEVER run other commands during boot.
+4. Print game state as a markdown readout, matching the lowercase robot style:
+
+```
+**link established** -- reading colony state
+
+> **colony** <faction> | day `<N>` | pop `<P>` | speed `<S>`
+> **supply** food `<F>d` | water `<W>d` | logs `<L>` | planks `<P>`
+> **weather** <state> | `<N>d` remain
+> **alerts** <summary or "none">
+> **wellbeing** `<W>`/77
+```
+
+If food or water <= 1d, append ` CRITICAL` after the value (e.g. food `0.3d CRITICAL`).
+
+Only AFTER both phases are complete should you begin working on the user's request.
 
 On subsequent invocations in the same session, skip the boot sequence and go straight to work.
 
@@ -50,6 +74,64 @@ This is a human-AI co-op game. The human player is also building, demolishing, a
 `timberbot.py` is on PATH. Call it directly (e.g. `timberbot.py summary`). See [getting-started](https://abix-.github.io/TimberbornMods/getting-started/) for setup details.
 
 Beavers die if food or water hits 0.
+
+## HARD RULE: Sequential execution
+
+**NEVER run game API calls in parallel.** Every placement, path, or config call changes the map state that the next call depends on. A failed placement invalidates every subsequent call that assumed it succeeded. Run each call sequentially, confirm it worked, then proceed. Read-only calls (`summary`, `buildings`, `find_placement`, `map`, `tiles`, `weather`, etc.) CAN run in parallel with each other since they don't mutate state. But any mutating call (`place_building`, `place_path`, `demolish_building`, `set_*`, `plant_crop`, `mark_trees`, etc.) must complete and succeed before the next action.
+
+## Roads
+
+Roads (paths) are the circulatory system of the colony. They cost nothing (zero logs, zero planks, zero science) and can be placed freely. Every building, workplace, and resource site must connect back to the district center via an unbroken chain of path tiles. Without roads, beavers are trapped at the DC -- they can't reach workplaces, haul materials, or access water.
+
+**Tree structure.** Think of the road network as a tree. The DC entrance is the root. Trunk roads extend outward from it. Branch roads fork off the trunk toward resources, water, and building sites. Buildings attach to branches via their entrance tile. Every path tile must trace back to the root through connected tiles.
+
+**DC entrance (the root).** The entrance is on the side matching the DC's orientation. For a south-facing DC at (x, y), the entrance is at the middle tile of the south edge: `(x+1, y-1)` (DC is 3x3, entrance is center of the oriented side). The first path tiles radiate outward from this point.
+
+**Reachability.** The `reachable` field in `find_placement` means "path-connected to DC." A building with `reachable:0` cannot be built, staffed, or supplied -- haulers and workers have no route to it. The further a building is from the DC along the road tree, the longer haulers take to service it. Keep critical buildings (water pumps, food storage) close to the trunk.
+
+**Build order:**
+1. Find DC location and orientation (`buildings | grep -i district`)
+2. Build a perimeter ring of paths around the DC (beavers must be able to exit and reach all sides)
+3. Extend trunk roads outward from the perimeter toward resources (water, trees, berries)
+4. Place buildings along existing roads (entrance must face a connected path tile)
+5. For edge buildings (water pumps): place building FIRST, then extend a road branch to its entrance
+
+**Common mistake:** Placing buildings before roads exist. A water pump placed 15 tiles from the DC with no path connection will sit unbuilt forever. Build roads to the area first, then place buildings along them. The only exception is edge buildings (water pumps at water's edge) which are placed first to avoid paths blocking their footprint -- but you still must immediately path to their entrance afterward.
+
+## Placement
+
+**Use `find_placement` for ALL building placement.** Never manually search tiles, grep for water, or scan the map. It checks terrain, water depth, flooding, orientation, path adjacency, and reachability -- all in one call. Use the x, y, z, and orientation it returns. No exceptions.
+
+**Find the district center first.** Never search at arbitrary coordinates like x1:0 y1:0. The DC can be anywhere on the map. Run `timberbot.py buildings | grep -i district` to get DC coords, then search within `x1:(dc_x-30) y1:(dc_y-30) x2:(dc_x+30) y2:(dc_y+30)`. Buildings far from DC are unreachable and useless.
+
+**Building-first at edges.** Paths occupy tiles -- a path blocks building placement on that tile. Place edge buildings (water pumps, anything at terrain boundaries) FIRST with `find_placement`, then `place_path` to connect them. Workflow: find_placement -> place building (unreachable initially, that's OK) -> path to entrance. Critical for water pumps -- if you path to the water's edge first, the path tiles block pump placement.
+
+**Entrance must face a path.** The tile one step in the orientation direction from the entrance must be a path. A building whose entrance doesn't face a path is useless -- beavers can't access it, builders can't deliver materials. #1 most common mistake. `find_placement` returns `orientation` pointing the entrance toward the nearest path -- always use it.
+
+Entrance directions: **north** = +y (up), **south** = -y (down), **east** = +x (right), **west** = -x (left). Example: building at (10,10) with orientation south -> entrance faces -y -> tile (10,9) must be a path.
+
+**Response fields:** `entranceX`/`entranceY` (tile where a path must go), `flooded` (0/1, flooded sort to bottom), `waterDepth` (water buildings sort deepest first), `reachable` (connected to DC), `pathAccess`, `nearPower`. Sort: non-flooded > reachable > pathAccess > nearPower. Boolean fields are 0/1 integers.
+
+**Z-level:** z must equal terrain height at the placement location. Wrong z = invisible/broken building. `map` shows terrain height via digit (z % 10) + background shading (dark=z0-9, medium=z10-19, bright=z20-22). Use `tiles` for raw data. Different map areas have different heights -- never assume z:2.
+
+**Early game bootstrap:** New game starts with only a district center and NO roads. You MUST build roads before anything else. Sequence: (1) find DC coords and orientation, (2) build perimeter paths around DC so beavers can exit, (3) extend trunk roads toward water and trees, (4) place edge buildings (water pumps) at resource boundaries, (5) path to their entrances, (6) place remaining buildings along existing roads. Paths are free. Stairs and platforms need science -- stay on same z-level until unlocked.
+
+## Game Speed
+
+Timberborn has 4 speed levels. Choose based on **your confidence in the current setup**:
+
+| Level | Name | Use Case |
+|-------|------|----------|
+| 0 | **Paused** | Strategic planning: place buildings, route paths, set priorities, queue work. No time passes. FREE time for decisions. |
+| 1 | **Speed 1 (Normal)** | Low confidence: early game, uncertain situations, risky builds. Time progresses slowly, giving you time to react if problems escalate. |
+| 2 | **Speed 2 (Fast)** | Medium confidence: monitoring work when setup is solid but not bulletproof. |
+| 3 | **Speed 3 (Fastest)** | High confidence: all objectives queued and stable, setup is rock-solid. Pass time quickly. |
+
+**NEVER unpause without a plan.** Paused time is FREE -- placement, pathing, and priority changes all work while paused. Unpaused beavers without queued objectives wander and consume resources without producing.
+
+**Workflow:** PAUSE to assess and queue work -> unpause at confidence-appropriate speed (see table) -> monitor -> PAUSE to reassess.
+
+**Emergency mode:** When water or food hits 0: PAUSE -> unpause only critical production, pause leisure/manufacturing, queue water pump/farm -> SPEED 1 to execute -> monitor until stable -> PAUSE to reassess.
 
 ## References
 
@@ -148,29 +230,12 @@ Parse the prefix before `:` to switch on the code. Everything after `:` is human
 
 Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `currentPoints`) vary by endpoint.
 
-## Game Speed
-
-Timberborn has 4 speed levels. Choose based on **your confidence in the current setup**:
-
-| Level | Name | Use Case |
-|-------|------|----------|
-| 0 | **Paused** | Strategic planning: place buildings, route paths, set priorities, queue work. No time passes. FREE time for decisions. |
-| 1 | **Speed 1 (Normal)** | Low confidence: early game, uncertain situations, risky builds. Time progresses slowly, giving you time to react if problems escalate. |
-| 2 | **Speed 2 (Fast)** | Medium confidence: monitoring work when setup is solid but not bulletproof. |
-| 3 | **Speed 3 (Fastest)** | High confidence: all objectives queued and stable, setup is rock-solid. Pass time quickly. |
-
-**NEVER unpause without a plan.** Paused time is FREE -- placement, pathing, and priority changes all work while paused. Unpaused beavers without queued objectives wander and consume resources without producing.
-
-**Workflow:** PAUSE to assess and queue work -> unpause at confidence-appropriate speed (see table) -> monitor -> PAUSE to reassess.
-
-**Emergency mode:** When water or food hits 0: PAUSE -> unpause only critical production, pause leisure/manufacturing, queue water pump/farm -> SPEED 1 to execute -> monitor until stable -> PAUSE to reassess.
-
 ## API quick reference
 
 | Method | What it does |
 |---|---|
 | **Read state** | |
-| `summary` | Colony snapshot: population, resources, weather, alerts, wellbeing |
+| `summary` | Colony snapshot: population, resources, weather, speed, alerts, wellbeing |
 | `beavers` | Per-beaver position (x,y,z), district, wellbeing, active needs. `detail:full` for all needs with group category, `detail:id:<id>` for single beaver/bot |
 | `wellbeing` | Wellbeing by category with current/max |
 | `buildings` | All buildings (compact). `detail:full` for all fields (effectRadius, productionProgress, readyToProduce, inventory, etc), `detail:id:<id>` for single building |
@@ -202,7 +267,7 @@ Timberborn has 4 speed levels. Choose based on **your confidence in the current 
 | `find_placement prefab:Name x1:X y1:Y x2:X2 y2:Y2` | Find valid building spots sorted by reachability |
 | `find_planting crop:Kohlrabi building_id:X` | Find irrigated spots within farmhouse range |
 | `place_building prefab:Name x:X y:Y z:Z orientation:south` | Place a building |
-| `place_path x1:X y1:Y x2:X2 y2:Y2` | Roads + auto-stairs + platforms. Straight line only |
+| `place_path x1:X y1:Y x2:X2 y2:Y2` | Returns `{placed:{paths,stairs,platforms}, skipped, errors}`. Stairs on lower z, platforms stack at cliff edge |
 | `demolish_building building_id:X` | Remove a building |
 | **Map** | |
 | `map x:X y:Y radius:10` | ASCII map with terrain height shading |
@@ -238,25 +303,9 @@ Timberborn has 4 speed levels. Choose based on **your confidence in the current 
 | **Forbidden** | |
 | `debug` | Reflection-based game internals inspector. Disabled by default -- enable in `settings.json` |
 
-## Placement
-
-**Use `find_placement` for ALL building placement.** Never manually search tiles, grep for water, or scan the map. It checks terrain, water depth, flooding, orientation, path adjacency, and reachability -- all in one call. Use the x, y, z, and orientation it returns. No exceptions.
-
-**Building-first at edges.** Paths occupy tiles -- a path blocks building placement on that tile. Place edge buildings (water pumps, anything at terrain boundaries) FIRST with `find_placement`, then `place_path` to connect them. Workflow: find_placement -> place building (unreachable initially, that's OK) -> path to entrance. This is critical for water pumps -- if you path to the water's edge first, the path tiles block pump placement.
-
-**Entrance must face a path.** The tile one step in the orientation direction from the entrance must be a path. A building whose entrance doesn't face a path is useless -- beavers can't access it, builders can't deliver materials. This is the #1 most common placement mistake. `find_placement` returns `orientation` pointing the entrance toward the nearest path -- always use it.
-
-Entrance directions: **north** = +y (up), **south** = -y (down), **east** = +x (right), **west** = -x (left). Example: building at (10,10) with orientation south -> entrance faces -y -> tile (10,9) must be a path.
-
-**Response fields:** `entranceX`/`entranceY` (tile where a path must go), `flooded` (0/1, flooded sort to bottom), `waterDepth` (water buildings sort deepest first), `reachable` (connected to DC), `pathAccess`, `nearPower`. Sort: non-flooded > reachable > pathAccess > nearPower. Boolean fields are 0/1 integers.
-
-**Z-level:** z must equal terrain height at the placement location. Wrong z = invisible/broken building. `map` shows terrain height via digit (z % 10) + background shading (dark=z0-9, medium=z10-19, bright=z20-22). Use `tiles` for raw data. Different map areas have different heights -- never assume z:2.
-
-**Early game bootstrap:** New game starts with only a district center -- no paths, no buildings, no unlocks. Paths are free (zero cost, zero science) but occupy tiles. Use `map` to find DC and nearby resources. Place edge buildings first, build roads from DC outward, then place remaining buildings along roads. Stairs and platforms need science -- stay on same z-level until unlocked.
-
 ## Paths
 
-`place_path` routes a straight-line path (axis-aligned: x1==x2 or y1==y2). Auto-detects terrain height, places stairs at z-level changes, builds platforms for multi-level jumps, skips occupied tiles. Returns `{placed, stairs, skipped, errors}`. Paths cost nothing -- place freely.
+`place_path` routes a straight-line path (axis-aligned: x1==x2 or y1==y2). Two-pass: plans the full route first, then places. Stairs go on the LOWER z tile; for 2-level jumps: platform + stairs stacked at cliff edge. Returns `{placed: {paths, stairs, platforms}, skipped, errors}`. Errors are structured: `{prefab, error}` with game validator reasons. Paths cost nothing -- place freely.
 
 Stairs and platforms require science unlocks. Without stairs unlocked, `place_path` only builds flat paths on the same z-level -- stops at z-changes and reports the error.
 
