@@ -310,8 +310,9 @@ Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `current
 
 | Method | What it does |
 |---|---|
+| **Brain** | |
+| `brain` | **USE THIS.** Full colony picture, always fresh. Faction, DC, summary, buildings by role, treeClusters, foodClusters, maps, tasks. Run at boot and whenever you need current state |
 | **Read state** | |
-| `summary` | DO NOT USE. Use `brain` instead -- it includes summary plus DC, faction, clusters, maps, tasks |
 | `beavers` | Per-beaver position (x,y,z), district, wellbeing, active needs. `detail:full` for all needs with group category, `detail:id:<id>` for single beaver/bot |
 | `wellbeing` | Wellbeing by category with current/max |
 | `buildings` | All buildings (compact). `detail:full` for all fields (effectRadius, productionProgress, readyToProduce, inventory, etc), `detail:id:<id>` for single building |
@@ -349,7 +350,6 @@ Context fields (`id`, `prefab`, `building`, `available`, `scienceCost`, `current
 | `map x1:X y1:Y x2:X2 y2:Y2 [name:label]` | ANSI map. `name` saves to memory/ for persistent spatial reference |
 | `tiles x1:X y1:Y x2:X2 y2:Y2` | Per-tile terrain, water, badwater, occupants (z-stacking), moisture, contamination |
 | **Brain (memory)** | |
-| `brain` | Full colony picture. Always fresh. Replaces summary. Run at boot and whenever you need current state |
 | `list_maps` | List saved map files |
 | `add_task action:"description"` | Add pending task to brain |
 | `update_task id:N status:done\|failed [error:"reason"]` | Update task status |
