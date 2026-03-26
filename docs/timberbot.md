@@ -51,10 +51,6 @@ This is a human-AI co-op game. The human player is also building, demolishing, a
 
 Beavers die if food or water hits 0.
 
-## HARD RULE: use find_placement for EVERYTHING
-
-**NEVER manually search tiles, grep for water, or scan the map to figure out where to place buildings.** `find_placement` exists for exactly this purpose. It finds valid spots, checks terrain, water depth, flooding, orientation, path adjacency, and reachability -- all in one call. Manually searching tiles for water or valid ground is ALWAYS wrong. Call `find_placement prefab:<Name> x1:X y1:Y x2:X2 y2:Y2` and use the coordinates it returns. This applies to water pumps, housing, farms, everything. No exceptions.
-
 ## References
 
 - **API reference:** `https://abix-.github.io/TimberbornMods/api-reference/` -- all endpoints, request/response formats, parameters
@@ -242,77 +238,37 @@ Timberborn has 4 speed levels. Choose based on **your confidence in the current 
 | **Forbidden** | |
 | `debug` | Reflection-based game internals inspector. Disabled by default -- enable in `settings.json` |
 
+## Placement
+
+**Use `find_placement` for ALL building placement.** Never manually search tiles, grep for water, or scan the map. It checks terrain, water depth, flooding, orientation, path adjacency, and reachability -- all in one call. Use the x, y, z, and orientation it returns. No exceptions.
+
+**Building-first at edges.** Paths occupy tiles -- a path blocks building placement on that tile. Place edge buildings (water pumps, anything at terrain boundaries) FIRST with `find_placement`, then `place_path` to connect them. Workflow: find_placement -> place building (unreachable initially, that's OK) -> path to entrance. This is critical for water pumps -- if you path to the water's edge first, the path tiles block pump placement.
+
+**Entrance must face a path.** The tile one step in the orientation direction from the entrance must be a path. A building whose entrance doesn't face a path is useless -- beavers can't access it, builders can't deliver materials. This is the #1 most common placement mistake. `find_placement` returns `orientation` pointing the entrance toward the nearest path -- always use it.
+
+Entrance directions: **north** = +y (up), **south** = -y (down), **east** = +x (right), **west** = -x (left). Example: building at (10,10) with orientation south -> entrance faces -y -> tile (10,9) must be a path.
+
+**Response fields:** `entranceX`/`entranceY` (tile where a path must go), `flooded` (0/1, flooded sort to bottom), `waterDepth` (water buildings sort deepest first), `reachable` (connected to DC), `pathAccess`, `nearPower`. Sort: non-flooded > reachable > pathAccess > nearPower. Boolean fields are 0/1 integers.
+
+**Z-level:** z must equal terrain height at the placement location. Wrong z = invisible/broken building. `map` shows terrain height via digit (z % 10) + background shading (dark=z0-9, medium=z10-19, bright=z20-22). Use `tiles` for raw data. Different map areas have different heights -- never assume z:2.
+
+**Early game bootstrap:** New game starts with only a district center -- no paths, no buildings, no unlocks. Paths are free (zero cost, zero science) but occupy tiles. Use `map` to find DC and nearby resources. Place edge buildings first, build roads from DC outward, then place remaining buildings along roads. Stairs and platforms need science -- stay on same z-level until unlocked.
+
+## Paths
+
+`place_path` routes a straight-line path (axis-aligned: x1==x2 or y1==y2). Auto-detects terrain height, places stairs at z-level changes, builds platforms for multi-level jumps, skips occupied tiles. Returns `{placed, stairs, skipped, errors}`. Paths cost nothing -- place freely.
+
+Stairs and platforms require science unlocks. Without stairs unlocked, `place_path` only builds flat paths on the same z-level -- stops at z-changes and reports the error.
+
 ## Flooding
 
 Buildings placed in water become **flooded** and completely non-functional. Beavers and bots cannot access them.
 
-- **Flooded on contact:** Most buildings flood when ANY water touches their footprint tile. This includes housing, production, storage, leisure, monuments, and farms
-- **Immune to flooding:** Paths, power shafts, landscaping, stream gauges. Also: Zipline/Tubeway Stations, Gravity Battery, Numbercruncher, Control Tower
+- **Flooded on contact:** Most buildings flood when ANY water touches their footprint tile -- housing, production, storage, leisure, monuments, farms
+- **Immune:** Paths, power shafts, landscaping, stream gauges, Zipline/Tubeway Stations, Gravity Battery, Numbercruncher, Control Tower
 - **Badwater:** Flooded tiles with badwater contamination also poison beavers who walk through them
-- **Not destroyed:** Flooded buildings resume working when water recedes. No permanent damage
-
-### Placement near water
-- `find_placement` includes a `flooded` field (0/1). Results with `flooded: 1` sort to the bottom
-- Any z-level can flood. Terrain height is not a reliable flood indicator
-- `flooded: 0` from `find_placement` is the only reliable safety check. Flood check only applies to ground-required tiles -- water intake tiles are expected wet
-
-### Early game -- building your first road network
-A new game starts with NOTHING: no paths, no buildings, no unlocks. The district center exists but beavers can't reach anything without roads.
-
-**Paths are free.** They cost zero materials and zero science. You can place as many as you want from the very first second. But **paths occupy tiles** -- a tile with a path cannot hold a building. This is how you bootstrap a colony:
-
-1. **Look at the map** (`map`) to find the district center and nearby resources (water, trees, farmable land)
-2. **Place edge buildings first** -- water pumps and other buildings that must go at terrain edges. Use `find_placement` before pathing to the area, place the building, then path to it
-3. **Build a road network** using `place_path` from the DC outward to key areas and building entrances
-4. **Then place remaining buildings** along the roads
-5. **Paths are flat-only at game start.** Stairs and platforms require science unlocks. Stay on the same z-level until you research them
-
-### Placement workflow
-**Paths occupy tiles.** A path on a tile prevents placing a building there. This means building paths first can block the best building spots. On the same z-level, prefer this order:
-
-1. Run `find_placement` to find the best spot BEFORE pathing to the area
-2. **Use the x, y, z, and orientation from `find_placement` results** -- do NOT invent your own coordinates or orientation
-3. Place the building (it will be unreachable initially -- that's OK)
-4. Build paths to connect the building's entrance to the road network
-
-This "building-first" approach is critical for **water pumps** and other buildings that must go at terrain edges. If you path to the water's edge first, the path tiles block the pump placement. Place the pump first, then path to it.
-
-**When to use the old path-first approach:** Only when you need stairs or platforms (which cost science and materials). For same-z-level placement, always prefer building-first since paths are free and can be placed after.
-
-**NEVER skip `find_placement`.** Do not guess placement coordinates. `find_placement` accounts for entrance-to-path adjacency, z-level, flooding, and reachability. Using its output prevents broken placements.
-
-## Building placement
-
-`find_placement` validates terrain height, occupancy, orientation, path connectivity, and flooding. Results include `entranceX`/`entranceY` (the tile in front of the entrance where a path must be placed). Water buildings sort by `waterDepth` first (deepest water preferred). Others sort by: non-flooded > reachable > pathAccess > nearPower. Boolean fields are 0/1 integers. A result with `reachable: 1` is connected to the district center via paths.
-
-## Path and stair placement
-
-**Paths cost nothing** -- place them freely to extend your road network. Stairs and platforms cost science and must be unlocked first.
-
-`place_path` routes a straight-line path (axis-aligned: x1==x2 or y1==y2). It handles everything: auto-detects terrain height, places stairs at z-level changes, builds platforms for multi-level jumps, and skips occupied tiles. One call replaces dozens of individual `place_building` calls. Returns `{placed, stairs, skipped, errors}`. Checks science unlocks: stairs must be unlocked for any z-change, platforms for multi-level jumps. Reports errors if required buildings aren't unlocked.
-
-**Early game limitation:** without stairs unlocked, `place_path` can only build flat paths on the same z-level. If the terrain changes height, the path stops at the z-change and reports the error. Unlock stairs first, then retry.
-
-## Z-level rules
-
-- `map` shows terrain height: empty ground shows z % 10 digit, background shading encodes height (dark=z0-9, medium=z10-19, bright=z20-22). Height legend at bottom shows exact z values. Use `tiles` for raw data when needed
-- z must equal the terrain height at the placement location. Wrong z causes underground clipping (building invisible/broken)
-- Different areas of the map have different terrain heights -- never assume z:2
-
-## Orientation and entrance placement (CRITICAL)
-
-Entrance directions on the map: **north** = +y (up), **south** = -y (down), **east** = +x (right), **west** = -x (left).
-
-**HARD RULE: The entrance must FACE a path tile.** The tile directly in front of the entrance (one step in the entrance direction) must be a path. A building whose entrance does not face a path is useless -- beavers cannot access it, builders cannot deliver materials, and it wastes resources. This is the #1 most common placement mistake.
-
-Example: a building at (10,10) with orientation **south** has its entrance facing -y. The tile at (10,9) -- one step south -- MUST be a path.
-
-Before calling `place_building`, ALWAYS verify:
-1. Determine the entrance tile (the tile one step in the orientation direction from the building edge)
-2. Confirm that tile contains a path or another connected building
-3. If no path exists there yet, build one with `place_path` FIRST
-
-`find_placement` results include `orientation` -- this is the orientation that points the entrance toward the nearest path. **Always use the orientation from `find_placement`** rather than guessing. If placing manually, use `tiles` to verify a path exists in front of the entrance.
+- **Not destroyed:** Flooded buildings resume when water recedes. No permanent damage
+- **Detection:** `find_placement` includes `flooded` field. Any z-level can flood -- terrain height is not a reliable indicator
 
 ## Building priorities
 
