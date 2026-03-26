@@ -1,7 +1,7 @@
 ---
 title: Timberbot AI
 description: Single authoritative AI guide for Claude and other LLMs playing Timberborn via timberbot.py.
-version: "0.8.3"
+version: "0.8.4"
 ---
 # Timberbot AI
 
@@ -29,16 +29,16 @@ On the first invocation of `/timberbot` per session, complete `Boot`, then `Brai
 > **api doc** `<full path | MISSING>`
 > **setup doc** `<full path | MISSING>`
 
-- **boot rule** `<once per session unless restart or clear>`
-- **first read** `<brain>`
-- **placement** `<find_placement>`
-- **crops** `<find_planting>`
-- **mutations** `<sequential only>`
-- **path root** `<dc entrance>`
-- **prefabs** `<faction suffix rule>`
-- **power** `<paths do not conduct power>`
-- **errors** `<code: detail>`
-- **remote** `<--host/--port or settings.json>`
+- **boot rule** `<when boot runs>`
+- **first read** `<first command to read colony state>`
+- **placement** `<required building placement method>`
+- **crops** `<required crop planning method>`
+- **mutations** `<mutation execution rule>`
+- **path root** `<what path distance is measured from>`
+- **prefabs** `<prefab naming rule>`
+- **power** `<power routing rule>`
+- **errors** `<error format rule>`
+- **remote** `<remote connection rule>`
 
 > **boot result** `<PASSED | FAILED>`
 ```
