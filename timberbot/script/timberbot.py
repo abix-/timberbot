@@ -669,12 +669,6 @@ class Timberbot:
         settlement = _sanitize_name(summary.get("settlement", summary.get("settlementName", "unknown")) if isinstance(summary, dict) else "unknown")
         _MEMORY_DIR = os.path.join(_MEMORY_BASE, settlement)
 
-        # slim buildings index (separate call -- summary doesn't include per-building data)
-        buildings_data = self.buildings(limit=0)
-        items = buildings_data.get("items", buildings_data) if isinstance(buildings_data, dict) else buildings_data
-        items = items if isinstance(items, list) else []
-        slim = [{"id": b["id"], "name": b.get("name", ""), "x": b["x"], "y": b["y"], "z": b["z"]} for b in items]
-
         # preserve maps and tasks from existing brain
         existing_maps = {}
         existing_tasks = []
@@ -702,9 +696,6 @@ class Timberbot:
         import toons as _t
         with open(bpath, "w") as f:
             _t.dump(result, f)
-        with open(os.path.join(_MEMORY_DIR, "buildings.toon"), "w") as f:
-            _t.dump(slim, f)
-
         # auto-map DC area on first run
         # DC is now per-district; use first district's DC for auto-map
         districts = summary.get("districts", []) if isinstance(summary, dict) else []
