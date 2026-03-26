@@ -32,30 +32,39 @@ import requests
 _MEMORY_DIR = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Mods", "Timberbot", "memory")
 
 
-def _update_brain_maps(region, x1, y1, x2, y2, fname):
-    """Update the maps index in brain.json when a map is saved."""
+def _load_brain_file():
+    """Load brain.json or return empty dict."""
     bpath = os.path.join(_MEMORY_DIR, "brain.json")
-    brain = {}
     if os.path.exists(bpath):
         try:
             with open(bpath) as f:
-                brain = json.load(f)
+                return json.load(f)
         except (json.JSONDecodeError, ValueError):
             pass
+    return {}
+
+
+def _save_brain_file(brain):
+    """Write brain.json."""
+    os.makedirs(_MEMORY_DIR, exist_ok=True)
+    with open(os.path.join(_MEMORY_DIR, "brain.json"), "w") as f:
+        json.dump(brain, f, indent=2)
+
+
+def _update_brain_maps(region, x1, y1, x2, y2, fname):
+    """Update the maps index in brain.json when a map is saved."""
+    brain = _load_brain_file()
     maps = brain.get("maps", {})
     entry = maps.get(region, {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "files": []})
-    # update coords to latest
     entry["x1"] = x1
     entry["y1"] = y1
     entry["x2"] = x2
     entry["y2"] = y2
-    # append file if not already present
     if fname not in entry["files"]:
         entry["files"].append(fname)
     maps[region] = entry
     brain["maps"] = maps
-    with open(bpath, "w") as f:
-        json.dump(brain, f, indent=2)
+    _save_brain_file(brain)
 
 
 # ---------------------------------------------------------------------------
@@ -642,13 +651,16 @@ class Timberbot:
                 dc = {"x": bx, "y": by, "z": bz, "orientation": orient, "entrance": [ex, ey]}
                 break
 
-        # preserve existing maps section
+        # preserve existing maps and tasks sections
         existing_maps = {}
+        existing_tasks = []
         bpath = os.path.join(_MEMORY_DIR, "brain.json")
         if os.path.exists(bpath):
             try:
                 with open(bpath) as f:
-                    existing_maps = json.load(f).get("maps", {})
+                    old = json.load(f)
+                    existing_maps = old.get("maps", {})
+                    existing_tasks = old.get("tasks", [])
             except (json.JSONDecodeError, KeyError):
                 pass
 
@@ -658,6 +670,7 @@ class Timberbot:
             "dc": dc,
             "buildings": slim,
             "maps": existing_maps,
+            "tasks": existing_tasks,
         }
         os.makedirs(_MEMORY_DIR, exist_ok=True)
         with open(bpath, "w") as f:
@@ -677,6 +690,51 @@ class Timberbot:
         if not os.path.isdir(_MEMORY_DIR):
             return []
         return sorted(f for f in os.listdir(_MEMORY_DIR) if f.startswith("map-") and f.endswith(".txt"))
+
+    # ------------------------------------------------------------------
+    # Tasks
+    # ------------------------------------------------------------------
+
+    def add_task(self, action):
+        """Add a pending task to brain.json. Returns the new task."""
+        brain = _load_brain_file()
+        tasks = brain.get("tasks", [])
+        next_id = max((t["id"] for t in tasks), default=0) + 1
+        task = {"id": next_id, "status": "pending", "action": action}
+        tasks.append(task)
+        brain["tasks"] = tasks
+        _save_brain_file(brain)
+        return task
+
+    def update_task(self, id, status, error=None):
+        """Update task status. status: pending/active/done/failed. Optional error for failed."""
+        brain = _load_brain_file()
+        tasks = brain.get("tasks", [])
+        for t in tasks:
+            if t["id"] == id:
+                t["status"] = status
+                if error:
+                    t["error"] = error
+                elif "error" in t and status != "failed":
+                    del t["error"]
+                brain["tasks"] = tasks
+                _save_brain_file(brain)
+                return t
+        return {"error": f"task {id} not found"}
+
+    def list_tasks(self):
+        """List all tasks from brain.json."""
+        brain = _load_brain_file()
+        return brain.get("tasks", [])
+
+    def clear_tasks(self, status="done"):
+        """Remove tasks with given status (default: done). Returns count cleared."""
+        brain = _load_brain_file()
+        tasks = brain.get("tasks", [])
+        before = len(tasks)
+        brain["tasks"] = [t for t in tasks if t["status"] != status]
+        _save_brain_file(brain)
+        return {"cleared": before - len(brain["tasks"]), "remaining": len(brain["tasks"])}
 
     def find(self, source, name=None, x=None, y=None, radius=20, limit=0):
         """Find entities from a source (buildings/trees/gatherables/beavers). Filters server-side."""
