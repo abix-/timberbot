@@ -15,8 +15,10 @@ All endpoints support two output formats via `?format=` query param or `"format"
 
 | Format | Description |
 |--------|-------------|
-| `toon` | Default. Flat tabular data for [TOON format](https://github.com/toon-format/toon) output. Requires `pip install toons` |
+| `toon` | Default. Compact CSV tables via [TOON format](https://github.com/toon-format/toon). Requires `pip install toons` |
 | `json` | Full nested data for programmatic access |
+
+**Uniform schema:** every object in an array has identical keys in both formats. Missing values get defaults (`""`, `0`). **Booleans are 0/1 integers**, not true/false.
 
 ### Error Format
 
@@ -1162,15 +1164,16 @@ Find valid placements for a building within a rectangular area. Returns at most 
 | placements[].nearPower | int | 1 if adjacent to power building, 0 otherwise |
 | placements[].flooded | int | 1 if water on ground tiles. Flooded buildings are non-functional |
 | placements[].waterDepth | float | Water depth at intake tile (water buildings only) |
+| placements[].distance | float | Path distance from DC entrance via flow field (-1 if unreachable, lower = closer) |
 
-Water buildings (pumps) sort by: waterDepth (deepest first). Others sort by: non-flooded > reachable > pathAccess > nearPower.
+Water buildings (pumps) sort by: waterDepth (deepest first). Others sort by: non-flooded > reachable > distance (closer first) > pathAccess > nearPower.
 
 ```json
 {
   "prefab": "LumberjackFlag.IronTeeth",
   "sizeX": 2, "sizeY": 2,
   "placements": [
-    {"x": 120, "y": 130, "z": 2, "orientation": "south", "entranceX": 120, "entranceY": 129, "pathAccess": 1, "reachable": 1, "nearPower": 0, "flooded": 0}
+    {"x": 120, "y": 130, "z": 2, "orientation": "south", "entranceX": 120, "entranceY": 129, "pathAccess": 1, "reachable": 1, "distance": 12.0, "nearPower": 0, "flooded": 0}
   ]
 }
 ```
@@ -1746,7 +1749,8 @@ These are convenience methods in `timberbot.py` that have no direct HTTP equival
 Colored ASCII grid with terrain height display. Background shading encodes z-level, foreground characters represent entities.
 
 ```bash
-timberbot.py map x:122 y:136 radius:10
+timberbot.py map x1:112 y1:126 x2:132 y2:146
+timberbot.py map x1:112 y1:126 x2:132 y2:146 name:districtcenter  # saves to memory/
 ```
 
 | Char | Color | Meaning |
@@ -1831,6 +1835,18 @@ Live colony dashboard. Population, resources, weather, drought countdown, wellbe
 ```bash
 timberbot.py top
 ```
+
+### Spatial memory (CLI-only)
+
+Persistent colony knowledge saved to `Documents/Timberborn/Mods/Timberbot/memory/`.
+
+```bash
+timberbot.py save_brain       # save DC, buildings, summary to memory/brain.json
+timberbot.py load_brain       # load last saved state
+timberbot.py list_maps        # list saved map files
+```
+
+`save_brain` snapshots the district center (with computed entrance coordinates), all buildings with IDs and coordinates, and the colony summary. `load_brain` reads it back. Map files are saved via the `name` parameter on the `map` command.
 
 ---
 

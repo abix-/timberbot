@@ -21,6 +21,8 @@ Or use it as a scripting API for your own tools, dashboards, and external automa
 
 [b]One-call snapshot:[/b] entire colony in a single request. Resources, weather, drought countdown, alerts, and projected days of food, water, logs, planks, and gears.
 
+[b]Spatial memory:[/b] AI saves colony snapshots and named maps to disk. Remembers DC location, building IDs, and terrain layout across sessions. No re-discovery needed.
+
 [b]Webhooks:[/b] 68 push notification events -- drought start/end, beaver death, construction complete, game over, and more. Your scripts react instantly instead of polling.
 
 [b]Server-side pagination & filtering:[/b] list endpoints default to 100 items per page. Filter by name or proximity without downloading everything. Works with any faction automatically.
@@ -42,7 +44,8 @@ timberbot.py summary                              # full colony snapshot
 timberbot.py top                                  # live colony dashboard
 timberbot.py beavers detail:full                  # every need on every beaver
 timberbot.py power                                # power networks with supply vs demand
-timberbot.py map x:120 y:140 radius:10             # ASCII map
+timberbot.py map x1:110 y1:130 x2:130 y2:150       # ANSI map with height shading
+timberbot.py save_brain                             # save colony state to memory
 timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2 orientation:south
 timberbot.py crops                                  # crops in the ground with growth status
 timberbot.py register_webhook url:http://localhost:9000/events events:drought.start,beaver.died
