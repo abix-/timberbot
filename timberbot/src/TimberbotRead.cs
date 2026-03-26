@@ -209,8 +209,7 @@ namespace Timberbot
 
             // --- BUILDINGS ---
             // Aggregate housing, employment, alerts, DC location, and role counts -- PER DISTRICT.
-            int dcX = 0, dcY = 0, dcZ = 0, entranceX = 0, entranceY = 0;
-            string dcOrientation = "south";
+            int dcX = 0, dcY = 0, dcZ = 0;
             bool foundDC = false;
             var roleCounts = new Dictionary<string, int>();
             // per-district accumulators: [0]=occupiedBeds [1]=totalBeds [2]=assigned [3]=vacancies [4]=unstaffed [5]=unpowered [6]=unreachable
@@ -263,7 +262,7 @@ namespace Timberbot
                     else if (dcOri == "east") { eX = c.X + 3; eY = c.Y + 1; }
                     else if (dcOri == "west") { eX = c.X - 1; eY = c.Y + 1; }
                     districtDCs[dname] = (c.X, c.Y, c.Z, dcOri, eX, eY);
-                    if (!foundDC) { foundDC = true; dcX = c.X; dcY = c.Y; dcZ = c.Z; dcOrientation = dcOri; entranceX = eX; entranceY = eY; }
+                    if (!foundDC) { foundDC = true; dcX = c.X; dcY = c.Y; dcZ = c.Z; }
                 }
 
                 // role counting
@@ -524,7 +523,6 @@ namespace Timberbot
 
             // brain fields
             jw.Prop("faction", faction);
-            jw.Obj("dc").Prop("x", dcX).Prop("y", dcY).Prop("z", dcZ).Prop("orientation", dcOrientation).Prop("entranceX", entranceX).Prop("entranceY", entranceY).CloseObj();
             jw.Obj("buildings");
             foreach (var kv in roleCounts) jw.Prop(kv.Key, kv.Value);
             jw.CloseObj();
