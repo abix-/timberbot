@@ -361,7 +361,7 @@ class Timberbot:
         low = name.lower()
         return [i for i in items if low in i.get("name", "").lower()]
 
-    def map(self, x, y, radius=10):
+    def map(self, x1, y1, x2, y2):
         """Colored ASCII map with terrain height shading, buildings, water, trees."""
         R = "\033[0m"
         DIM = "\033[2m"
@@ -479,16 +479,16 @@ class Timberbot:
                 shade = 254 + min(z - 20, 1)
             return f"\033[48;5;{min(shade, 255)}m"
 
-        data = self._post_json("/api/tiles", {"x1": x - radius, "y1": y - radius, "x2": x + radius, "y2": y + radius})
+        data = self._post_json("/api/tiles", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
         tiles = {(t["x"], t["y"]): t for t in data.get("tiles", [])}
         legend = {}
         z_levels = set()
 
         lines = []
-        for ty in range(y + radius, y - radius - 1, -1):
+        for ty in range(y2, y1 - 1, -1):
             row = f"{DIM}{ty:3d}{R} "
             pbg = pco = ""
-            for tx in range(x - radius, x + radius + 1):
+            for tx in range(x1, x2 + 1):
                 t = tiles.get((tx, ty))
                 if not t:
                     if pbg or pco:
@@ -551,7 +551,7 @@ class Timberbot:
                 row += R
             lines.append(row)
 
-        axis = f"    {DIM}" + "".join(str(i % 10) for i in range(x - radius, x + radius + 1)) + R
+        axis = f"    {DIM}" + "".join(str(i % 10) for i in range(x1, x2 + 1)) + R
         lines.append(axis)
 
         leg = "  "
