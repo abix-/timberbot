@@ -489,24 +489,35 @@ namespace Timberbot
         }
 
         // Build a flat cost grid for A* over the region (minX,minY) with dimensions (w,h).
-        // Pure cost math -- A* sums tile costs and picks the cheapest total route.
-        //   open terrain = 1, existing paths = 1, buildings/trees = 255, no terrain = 255.
-        //   Any detour under 255 tiles is cheaper than crossing one building.
+        // Costs: 0=existing path (free), 2=open ground, 8=shallow water, 50=deep water, 255=impassable.
+        // A* skips tiles with cost >= 255 (hard wall), so buildings/trees are truly impassable.
         private ushort[] BuildCostGrid(int minX, int minY, int w, int h)
         {
             var grid = new ushort[w * h];
 
-            // terrain: open ground = 1, no terrain = 255
+            // terrain: open ground = 2, no terrain = 255 (impassable)
             for (int ly = 0; ly < h; ly++)
             {
                 for (int lx = 0; lx < w; lx++)
                 {
                     int tz = GetTerrainHeight(minX + lx, minY + ly);
-                    grid[ly * w + lx] = tz > 0 ? (ushort)1 : (ushort)255;
+                    grid[ly * w + lx] = tz > 0 ? (ushort)2 : (ushort)255;
                 }
             }
 
-            // buildings: paths/stairs/platforms stay at 1, everything else = 255
+            // water: shallow (depth <= 0.5) = 8, deep (depth > 0.5) = 50
+            for (int ly = 0; ly < h; ly++)
+            {
+                for (int lx = 0; lx < w; lx++)
+                {
+                    if (grid[ly * w + lx] >= 255) continue; // skip impassable
+                    float depth = GetWaterDepth(minX + lx, minY + ly);
+                    if (depth > 0.5f) grid[ly * w + lx] = 50;
+                    else if (depth > 0f) grid[ly * w + lx] = 8;
+                }
+            }
+
+            // buildings: existing paths/stairs/platforms = 0 (free), everything else = 255
             foreach (var cb in _cache.Buildings.Read)
             {
                 if (cb.OccupiedTiles == null) continue;
@@ -515,11 +526,11 @@ namespace Timberbot
                 {
                     int lx = t.x - minX, ly = t.y - minY;
                     if (lx < 0 || lx >= w || ly < 0 || ly >= h) continue;
-                    if (!isPath) grid[ly * w + lx] = 255;
+                    grid[ly * w + lx] = isPath ? (ushort)0 : (ushort)255;
                 }
             }
 
-            // natural resources (trees, bushes) = 255
+            // natural resources (trees, bushes) = 255 (impassable)
             foreach (var nr in _cache.NaturalResources.Read)
             {
                 int lx = nr.X - minX, ly = nr.Y - minY;
@@ -599,6 +610,7 @@ namespace Timberbot
                     int ny = cy2 + ddy[d];
                     if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
                     int nidx = ny * w + nx;
+                    if (grid[nidx] >= 255) continue; // impassable wall
                     int tentG = cg + grid[nidx];
                     int prevG = gScore.ContainsKey(nidx) ? gScore[nidx] : int.MaxValue;
                     if (tentG < prevG)

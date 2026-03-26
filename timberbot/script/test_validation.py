@@ -966,11 +966,11 @@ class TestRunner:
                    json.dumps(result)[:100])
 
     def test_path_astar_diagonal(self):
-        """A* can route between diagonal endpoints (was rejected by old straight-line logic)."""
+        """A* routes from gear workshop (147,135) 200 tiles north-east."""
         print("\n=== path routing: A* diagonal ===\n")
-        # isolated area -- z=3 area
-        x1, y1, x2, y2 = 110, 95, 160, 145
-        self._path_demolish_range(x1 - 12, y1 - 12, x2 + 12, y2 + 12)
+        # near gear workshop (147,135), offset south 10 east 5
+        x1, y1 = 152, 125
+        x2, y2 = 255, 255
         result = self.bot.place_path(x1, y1, x2, y2)
         placed = result.get("placed", {}) if isinstance(result, dict) else {}
         self.check("diagonal: paths placed via A*",
