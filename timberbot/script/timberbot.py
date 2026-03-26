@@ -662,10 +662,12 @@ class Timberbot:
         except Exception:
             faction = "unknown"
 
-        # best tree clusters
+        # best tree clusters on DC z-level (different z = unreachable without stairs)
+        dc_z = dc["z"] if dc else 0
         try:
-            tree_clusters = jbot.tree_clusters()
-            tree_clusters = tree_clusters if isinstance(tree_clusters, list) else []
+            all_clusters = jbot.tree_clusters()
+            all_clusters = all_clusters if isinstance(all_clusters, list) else []
+            tree_clusters = [c for c in all_clusters if c.get("z") == dc_z]
         except Exception:
             tree_clusters = []
 
