@@ -431,7 +431,12 @@ namespace Timberbot
                     {
                         int cx = System.Convert.ToInt32(c["x"]), cy = System.Convert.ToInt32(c["y"]), cz = System.Convert.ToInt32(c["z"]);
                         if (cz == dcZ && System.Math.Abs(cx - dcX) + System.Math.Abs(cy - dcY) <= 40)
-                            jj.OpenObj().Prop("x", cx).Prop("y", cy).Prop("z", cz).Prop("grown", System.Convert.ToInt32(c["grown"])).Prop("total", System.Convert.ToInt32(c["total"])).CloseObj();
+                        {
+                            jj.OpenObj().Prop("x", cx).Prop("y", cy).Prop("z", cz).Prop("grown", System.Convert.ToInt32(c["grown"])).Prop("total", System.Convert.ToInt32(c["total"]));
+                            if (c.TryGetValue("species", out var spObj) && spObj is Newtonsoft.Json.Linq.JObject sp)
+                            { jj.Obj("species"); foreach (var kv in sp) jj.Prop(kv.Key, (int)kv.Value); jj.CloseObj(); }
+                            jj.CloseObj();
+                        }
                     }
                     jj.CloseArr();
                 }
@@ -590,36 +595,40 @@ namespace Timberbot
         // trees is the best place to mark for cutting (high yield per lumberjack trip).
         public object CollectTreeClusters(string format = "toon", int cellSize = 10, int top = 5)
         {
-            // key = cell center encoded as long, value = [grownCount, totalCount, centerX, centerY, z]
             var cells = new Dictionary<long, int[]>();
+            var cellSpecies = new Dictionary<long, Dictionary<string, int>>();
             foreach (var nr in _cache.NaturalResources.Read)
             {
-                if (nr.Cuttable == null) continue;       // not a tree/cuttable
-                if (nr.Living == null || nr.Living.IsDead) continue;  // dead stump
+                if (nr.Cuttable == null) continue;
+                if (nr.Living == null || nr.Living.IsDead) continue;
                 if (nr.BlockObject == null) continue;
 
                 var c = nr.BlockObject.Coordinates;
-                // snap to grid cell center: (127, 143) with cellSize=10 -> center=(125, 145)
                 int cx = c.x / cellSize * cellSize + cellSize / 2;
                 int cy = c.y / cellSize * cellSize + cellSize / 2;
                 long key = (long)cx * 100000 + cy;
 
                 if (!cells.ContainsKey(key))
-                    cells[key] = new int[] { 0, 0, cx, cy, c.z };
+                { cells[key] = new int[] { 0, 0, cx, cy, c.z }; cellSpecies[key] = new Dictionary<string, int>(); }
 
-                cells[key][1]++;  // total
+                cells[key][1]++;
+                cellSpecies[key][nr.Name] = cellSpecies[key].GetValueOrDefault(nr.Name) + 1;
                 if (nr.Growable != null && nr.Growable.IsGrown)
-                    cells[key][0]++;  // grown (ready to chop)
+                    cells[key][0]++;
             }
 
-            // sort by grown count descending -- densest harvestable clusters first
-            var sorted = new List<int[]>(cells.Values);
-            sorted.Sort((a, b) => b[0].CompareTo(a[0]));
+            var sorted = new List<long>(cells.Keys);
+            sorted.Sort((a, b) => cells[b][0].CompareTo(cells[a][0]));
             var jw = _cache.Jw.BeginArr();
             for (int i = 0; i < System.Math.Min(top, sorted.Count); i++)
             {
-                var s = sorted[i];
-                jw.OpenObj().Prop("x", s[2]).Prop("y", s[3]).Prop("z", s[4]).Prop("grown", s[0]).Prop("total", s[1]).CloseObj();
+                var s = cells[sorted[i]];
+                jw.OpenObj().Prop("x", s[2]).Prop("y", s[3]).Prop("z", s[4]).Prop("grown", s[0]).Prop("total", s[1]);
+                // top species by count
+                var sp = cellSpecies[sorted[i]];
+                jw.Obj("species");
+                foreach (var kv in sp) jw.Prop(kv.Key, kv.Value);
+                jw.CloseObj().CloseObj();
             }
             return jw.End();
         }
@@ -627,6 +636,7 @@ namespace Timberbot
         public object CollectFoodClusters(string format = "toon", int cellSize = 10, int top = 5)
         {
             var cells = new Dictionary<long, int[]>();
+            var cellSpecies = new Dictionary<long, Dictionary<string, int>>();
             foreach (var nr in _cache.NaturalResources.Read)
             {
                 if (nr.Gatherable == null) continue;
@@ -640,20 +650,25 @@ namespace Timberbot
                 long key = (long)cx * 100000 + cy;
 
                 if (!cells.ContainsKey(key))
-                    cells[key] = new int[] { 0, 0, cx, cy, c.z };
+                { cells[key] = new int[] { 0, 0, cx, cy, c.z }; cellSpecies[key] = new Dictionary<string, int>(); }
 
                 cells[key][1]++;
+                cellSpecies[key][nr.Name] = cellSpecies[key].GetValueOrDefault(nr.Name) + 1;
                 if (nr.Growable != null && nr.Growable.IsGrown)
                     cells[key][0]++;
             }
 
-            var sorted = new List<int[]>(cells.Values);
-            sorted.Sort((a, b) => b[0].CompareTo(a[0]));
+            var sorted = new List<long>(cells.Keys);
+            sorted.Sort((a, b) => cells[b][0].CompareTo(cells[a][0]));
             var jw = _cache.Jw.BeginArr();
             for (int i = 0; i < System.Math.Min(top, sorted.Count); i++)
             {
-                var s = sorted[i];
-                jw.OpenObj().Prop("x", s[2]).Prop("y", s[3]).Prop("z", s[4]).Prop("grown", s[0]).Prop("total", s[1]).CloseObj();
+                var s = cells[sorted[i]];
+                jw.OpenObj().Prop("x", s[2]).Prop("y", s[3]).Prop("z", s[4]).Prop("grown", s[0]).Prop("total", s[1]);
+                var sp = cellSpecies[sorted[i]];
+                jw.Obj("species");
+                foreach (var kv in sp) jw.Prop(kv.Key, kv.Value);
+                jw.CloseObj().CloseObj();
             }
             return jw.End();
         }
