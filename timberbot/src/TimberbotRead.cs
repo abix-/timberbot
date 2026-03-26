@@ -221,6 +221,8 @@ namespace Timberbot
             // unemployed = adults not assigned to any workplace (available for hauling)
             int unemployed = System.Math.Max(0, totalAdults - assignedWorkers);
             float avgWellbeing = beaverCount > 0 ? totalWellbeing / beaverCount : 0;
+            int currentSpeed = System.Array.IndexOf(SpeedScale, _speedManager.CurrentSpeed);
+            if (currentSpeed < 0) currentSpeed = 0;
 
             if (format == "json")
             {
@@ -231,6 +233,7 @@ namespace Timberbot
                     .Prop("dayNumber", _dayNightCycle.DayNumber)
                     .Prop("dayProgress", (float)_dayNightCycle.DayProgress)
                     .Prop("partialDayNumber", (float)_dayNightCycle.PartialDayNumber)
+                    .Prop("speed", currentSpeed)
                     .CloseObj();
                 jj.Obj("weather")
                     .Prop("cycle", _gameCycleService.Cycle)
@@ -280,6 +283,7 @@ namespace Timberbot
             // time
             jw.Prop("day", _dayNightCycle.DayNumber);
             jw.Prop("dayProgress", (float)_dayNightCycle.DayProgress);
+            jw.Prop("speed", currentSpeed);
 
             // weather
             jw.Prop("cycle", _gameCycleService.Cycle);

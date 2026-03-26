@@ -125,7 +125,7 @@ Health check. Answered on listener thread (works even when game is paused/loadin
 
 ### GET /api/summary
 
-Full game state snapshot: time, weather, population, resources, trees, housing, employment, wellbeing, science, and alerts.
+Full game state snapshot: time, weather, speed, population, resources, trees, housing, employment, wellbeing, science, and alerts.
 
 **CLI:** `timberbot.py summary` | `timberbot.py --json summary`
 
@@ -133,7 +133,7 @@ Full game state snapshot: time, weather, population, resources, trees, housing, 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| time | object | See [GET /api/time](#get-apitime) |
+| time | object | See [GET /api/time](#get-apitime). Includes `speed` (0-3) |
 | weather | object | See [GET /api/weather](#get-apiweather) |
 | districts | array | See [GET /api/districts](#get-apidistricts) |
 | trees | object | `{markedGrown, markedSeedling, unmarkedGrown}` |
@@ -147,7 +147,7 @@ Full game state snapshot: time, weather, population, resources, trees, housing, 
 
     ```json
     {
-      "time": {"dayNumber": 42, "dayProgress": 0.65, "partialDayNumber": 42.65},
+      "time": {"dayNumber": 42, "dayProgress": 0.65, "partialDayNumber": 42.65, "speed": 2},
       "weather": {"cycle": 3, "cycleDay": 5, "isHazardous": false, "temperateWeatherDuration": 12, "hazardousWeatherDuration": 6, "cycleLengthInDays": 18},
       "districts": [{"name": "District 1", "population": {"adults": 20, "children": 5, "bots": 2}, "resources": {"Water": {"available": 150, "all": 200}, "Log": {"available": 80, "all": 80}}}],
       "trees": {"markedGrown": 5, "markedSeedling": 2, "unmarkedGrown": 120},
@@ -161,7 +161,7 @@ Full game state snapshot: time, weather, population, resources, trees, housing, 
 
 #### Response (format=toon)
 
-Flat key-value pairs including `day`, `dayProgress`, `cycle`, `cycleDay`, `isHazardous`, `tempDays`, `hazardDays`, `markedGrown`, `markedSeedling`, `unmarkedGrown`, `adults`, `children`, `bots`, resource stocks (e.g. `Water`, `Log`), `foodDays`, `waterDays`, `logDays`, `plankDays`, `gearDays`, `beds`, `homeless`, `workers`, `unemployed`, `wellbeing`, `miserable`, `critical`, `science`, `alerts`.
+Flat key-value pairs including `day`, `dayProgress`, `speed`, `cycle`, `cycleDay`, `isHazardous`, `tempDays`, `hazardDays`, `markedGrown`, `markedSeedling`, `unmarkedGrown`, `adults`, `children`, `bots`, resource stocks (e.g. `Water`, `Log`), `foodDays`, `waterDays`, `logDays`, `plankDays`, `gearDays`, `beds`, `homeless`, `workers`, `unemployed`, `wellbeing`, `miserable`, `critical`, `science`, `alerts`.
 
 ---
 

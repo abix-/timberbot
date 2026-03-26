@@ -2268,7 +2268,7 @@ class TestRunner:
         # --- format=json schemas ---
         summary = jbot.summary()
         errs = validate(summary, {
-            "time": {"dayNumber": int, "dayProgress": float, "partialDayNumber": float},
+            "time": {"dayNumber": int, "dayProgress": float, "partialDayNumber": float, "speed": int},
             "weather": {"cycle": int, "cycleDay": int, "isHazardous": bool},
             "districts": [{"name": str, "population": {"adults": int, "children": int, "bots": int}, "resources": dict}],
             "trees": {"markedGrown": int, "markedSeedling": int, "unmarkedGrown": int},
@@ -2418,7 +2418,7 @@ class TestRunner:
         tbot = Timberbot(json_mode=False)
 
         ts = tbot.summary()
-        errs = validate(ts, {"day": int, "dayProgress": float, "cycle": int, "cycleDay": int,
+        errs = validate(ts, {"day": int, "dayProgress": float, "speed": int, "cycle": int, "cycleDay": int,
                              "isHazardous": bool, "adults": int, "beds": str, "workers": str,
                              "wellbeing": float, "science": int, "alerts": str})
         self.check("schema: summary (toon)", len(errs) == 0, "; ".join(errs[:5]))
