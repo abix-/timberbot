@@ -40,8 +40,6 @@ Print the boot output below as markdown (Claude Code renders markdown, NOT ANSI 
 `[___]` errors ___
 `[___]` skill ___ ln / ___ sec
 `[___]` last "___"
-
-**ready**
 ```
 
 Fill EVERY `___` -- both the rule status markers (replace with `OK`) and the inventory counts. NONE are pre-filled. Claude filling them in IS the confirmation of readiness. Wrong/missing/skipped = not ready to play.
