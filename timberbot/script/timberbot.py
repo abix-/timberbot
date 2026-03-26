@@ -23,9 +23,13 @@ As a library:
     bot.summary()
 """
 import json
+import os
+import re
 import sys
 import time
 import requests
+
+_MEMORY_DIR = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Mods", "Timberbot", "memory")
 
 
 # ---------------------------------------------------------------------------
@@ -361,8 +365,8 @@ class Timberbot:
         low = name.lower()
         return [i for i in items if low in i.get("name", "").lower()]
 
-    def map(self, x1, y1, x2, y2):
-        """Colored ASCII map with terrain height shading, buildings, water, trees."""
+    def map(self, x1, y1, x2, y2, name=None):
+        """Colored ASCII map with terrain height shading, buildings, water, trees. name: save to memory/."""
         R = "\033[0m"
         DIM = "\033[2m"
         RED = "\033[31m"
@@ -567,7 +571,72 @@ class Timberbot:
 
         # print directly to terminal instead of returning as JSON
         print("\n".join(lines))
-        return {"rendered": True, "tiles": len(tiles)}
+        result = {"rendered": True, "tiles": len(tiles)}
+        if name:
+            os.makedirs(_MEMORY_DIR, exist_ok=True)
+            fname = f"map-{name}-{x1}x{y1}y-{x2}x{y2}y.txt"
+            fpath = os.path.join(_MEMORY_DIR, fname)
+            with open(fpath, "w") as f:
+                f.write("\n".join(lines) + "\n")
+            print(f"saved: {fpath}", file=sys.stderr)
+            result["saved"] = fpath
+        return result
+
+    # ------------------------------------------------------------------
+    # Spatial memory
+    # ------------------------------------------------------------------
+
+    def save_brain(self):
+        """Save colony state snapshot to memory/brain.json."""
+        summary = self.summary()
+        buildings_data = self.buildings(limit=0)
+        items = buildings_data.get("items", buildings_data) if isinstance(buildings_data, dict) else buildings_data
+
+        # find DC and compute entrance
+        dc = None
+        for b in (items if isinstance(items, list) else []):
+            if "DistrictCenter" in str(b.get("name", "")):
+                orient = b.get("orientation", "south")
+                bx, by, bz = b["x"], b["y"], b["z"]
+                # DC is 3x3, entrance at center of oriented side
+                ex, ey = bx + 1, by + 1  # default center
+                if orient == "south":
+                    ex, ey = bx + 1, by - 1
+                elif orient == "north":
+                    ex, ey = bx + 1, by + 3
+                elif orient == "east":
+                    ex, ey = bx + 3, by + 1
+                elif orient == "west":
+                    ex, ey = bx - 1, by + 1
+                dc = {"x": bx, "y": by, "z": bz, "orientation": orient, "entrance": [ex, ey]}
+                break
+
+        from datetime import datetime
+        brain = {
+            "timestamp": datetime.now().isoformat(),
+            "dc": dc,
+            "buildings": items if isinstance(items, list) else [],
+            "summary": summary,
+        }
+        os.makedirs(_MEMORY_DIR, exist_ok=True)
+        fpath = os.path.join(_MEMORY_DIR, "brain.json")
+        with open(fpath, "w") as f:
+            json.dump(brain, f, indent=2)
+        return {"saved": fpath, "buildings": len(brain["buildings"])}
+
+    def load_brain(self):
+        """Load last saved state from memory/brain.json."""
+        fpath = os.path.join(_MEMORY_DIR, "brain.json")
+        if not os.path.exists(fpath):
+            return {"error": "no brain.json found"}
+        with open(fpath) as f:
+            return json.load(f)
+
+    def list_maps(self):
+        """List saved map files in memory/."""
+        if not os.path.isdir(_MEMORY_DIR):
+            return []
+        return sorted(f for f in os.listdir(_MEMORY_DIR) if f.startswith("map-") and f.endswith(".txt"))
 
     def find(self, source, name=None, x=None, y=None, radius=20, limit=0):
         """Find entities from a source (buildings/trees/gatherables/beavers). Filters server-side."""
