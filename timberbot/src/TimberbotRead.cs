@@ -291,8 +291,10 @@ namespace Timberbot
 
             if (format == "json")
             {
-                // capture districts BEFORE using _cache.Jw -- CollectDistricts uses the same JwWriter
+                // capture sub-collections BEFORE using _cache.Jw -- they share the same JwWriter
                 var districtsJson = CollectDistricts("json") as string;
+                var treeClustersJson = CollectTreeClusters("json") as string;
+                var foodClustersJson = CollectFoodClusters("json") as string;
                 var jj = _cache.Jw.BeginObj();
                 jj.Prop("settlementName", GetSettlementName());
                 jj.Obj("time")
@@ -345,30 +347,21 @@ namespace Timberbot
                 jj.Obj("buildings");
                 foreach (var kv in roleCounts) jj.Prop(kv.Key, kv.Value);
                 jj.CloseObj();
-                // nearby clusters (same z, within 40 tiles of DC)
+                // nearby clusters -- pre-captured before BeginObj, parse and filter to DC z + 40 tiles
+                void writeFilteredClusters(string key, string rawJson)
                 {
-                    var tcAll = CollectTreeClusters("json") as string;
-                    var fcAll = CollectFoodClusters("json") as string;
-                    // parse and filter -- reuse JwWriter for output
-                    var tcList = Newtonsoft.Json.JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(tcAll ?? "[]");
-                    var fcList = Newtonsoft.Json.JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(fcAll ?? "[]");
-                    jj.Arr("treeClusters");
-                    if (tcList != null) foreach (var tc in tcList)
+                    var list = Newtonsoft.Json.JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(rawJson ?? "[]");
+                    jj.Arr(key);
+                    if (list != null) foreach (var c in list)
                     {
-                        int cx = System.Convert.ToInt32(tc["x"]), cy = System.Convert.ToInt32(tc["y"]), cz = System.Convert.ToInt32(tc["z"]);
+                        int cx = System.Convert.ToInt32(c["x"]), cy = System.Convert.ToInt32(c["y"]), cz = System.Convert.ToInt32(c["z"]);
                         if (cz == dcZ && System.Math.Abs(cx - dcX) + System.Math.Abs(cy - dcY) <= 40)
-                            jj.OpenObj().Prop("x", cx).Prop("y", cy).Prop("z", cz).Prop("grown", System.Convert.ToInt32(tc["grown"])).Prop("total", System.Convert.ToInt32(tc["total"])).CloseObj();
-                    }
-                    jj.CloseArr();
-                    jj.Arr("foodClusters");
-                    if (fcList != null) foreach (var fc in fcList)
-                    {
-                        int cx = System.Convert.ToInt32(fc["x"]), cy = System.Convert.ToInt32(fc["y"]), cz = System.Convert.ToInt32(fc["z"]);
-                        if (cz == dcZ && System.Math.Abs(cx - dcX) + System.Math.Abs(cy - dcY) <= 40)
-                            jj.OpenObj().Prop("x", cx).Prop("y", cy).Prop("z", cz).Prop("grown", System.Convert.ToInt32(fc["grown"])).Prop("total", System.Convert.ToInt32(fc["total"])).CloseObj();
+                            jj.OpenObj().Prop("x", cx).Prop("y", cy).Prop("z", cz).Prop("grown", System.Convert.ToInt32(c["grown"])).Prop("total", System.Convert.ToInt32(c["total"])).CloseObj();
                     }
                     jj.CloseArr();
                 }
+                writeFilteredClusters("treeClusters", treeClustersJson);
+                writeFilteredClusters("foodClusters", foodClustersJson);
                 return jj.End();
             }
 
