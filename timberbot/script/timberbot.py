@@ -624,8 +624,10 @@ class Timberbot:
     # ------------------------------------------------------------------
 
     def save_brain(self):
-        """Save colony index to memory/brain.json. Slim: id/name/x/y/z per building. Preserves maps section."""
-        summary = self.summary()
+        """Save colony index to memory/brain.json. Slim buildings, full summary, faction detection."""
+        # use json mode for structured summary
+        jbot = Timberbot(json_mode=True)
+        summary = jbot.summary()
         buildings_data = self.buildings(limit=0)
         items = buildings_data.get("items", buildings_data) if isinstance(buildings_data, dict) else buildings_data
         items = items if isinstance(items, list) else []
@@ -651,6 +653,15 @@ class Timberbot:
                 dc = {"x": bx, "y": by, "z": bz, "orientation": orient, "entrance": [ex, ey]}
                 break
 
+        # detect faction from prefabs
+        try:
+            prefabs = jbot.prefabs()
+            plist = prefabs if isinstance(prefabs, list) else []
+            ft = sum(1 for p in plist if "Folktails" in p.get("name", ""))
+            faction = "Folktails" if ft > 0 else "IronTeeth"
+        except Exception:
+            faction = "unknown"
+
         # preserve existing maps and tasks sections
         existing_maps = {}
         existing_tasks = []
@@ -667,7 +678,9 @@ class Timberbot:
         from datetime import datetime
         brain = {
             "timestamp": datetime.now().isoformat(),
+            "faction": faction,
             "dc": dc,
+            "summary": summary,
             "buildings": slim,
             "maps": existing_maps,
             "tasks": existing_tasks,
@@ -675,7 +688,7 @@ class Timberbot:
         os.makedirs(_MEMORY_DIR, exist_ok=True)
         with open(bpath, "w") as f:
             json.dump(brain, f, indent=2)
-        return {"saved": bpath, "buildings": len(slim)}
+        return {"saved": bpath, "faction": faction, "buildings": len(slim)}
 
     def load_brain(self):
         """Load brain.json. Creates a new brain if none exists."""
