@@ -455,7 +455,7 @@ namespace Timberbot
             // Use reflection to access the game's NavMesh internals. These APIs are
             // private because they're not meant for mods, but we need them to determine
             // if a building site is connected to the district center via paths.
-            var reachableRoadCoords = new HashSet<Vector3Int>();
+            var reachableRoadCoords = new Dictionary<Vector3Int, float>();
             try
             {
                 var reflFlags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
@@ -481,9 +481,15 @@ namespace Timberbot
 
                     foreach (var wc in nodesInRange)
                     {
-                        var coordsProp = wc.GetType().GetProperty("Coordinates");
+                        var wcType = wc.GetType();
+                        var coordsProp = wcType.GetProperty("Coordinates");
+                        var distProp = wcType.GetProperty("Distance");
                         if (coordsProp != null)
-                            reachableRoadCoords.Add((Vector3Int)coordsProp.GetValue(wc));
+                        {
+                            var coords = (Vector3Int)coordsProp.GetValue(wc);
+                            float dist = distProp != null ? (float)distProp.GetValue(wc) : -1f;
+                            reachableRoadCoords[coords] = dist;
+                        }
                     }
                     break;
                 }
@@ -519,7 +525,7 @@ namespace Timberbot
             }
 
             var orientNames = new[] { "south", "west", "north", "east" };
-            var results = new List<(int x, int y, int z, int orient, bool pathAccess, bool reachable, bool nearPower, bool flooded, float waterDepth, int entranceX, int entranceY)>();
+            var results = new List<(int x, int y, int z, int orient, bool pathAccess, bool reachable, float distance, bool nearPower, bool flooded, float waterDepth, int entranceX, int entranceY)>();
 
             // PERF: create ONE preview entity, reuse it for every candidate position.
             // Preview is a Unity GameObject with validation components attached.
@@ -606,10 +612,15 @@ namespace Timberbot
 
                             // check reachability: doorstep tile in reachable road network
                             bool reachable = false;
+                            float distance = -1f;
                             if (bestHasPath && cachedPreview.BlockObject.HasEntrance)
                             {
                                 var ds = cachedPreview.BlockObject.PositionedEntrance.Coordinates;
-                                reachable = reachableRoadCoords.Contains(ds);
+                                if (reachableRoadCoords.TryGetValue(ds, out float dist))
+                                {
+                                    reachable = true;
+                                    distance = dist;
+                                }
                             }
 
                             // check power adjacency on all 4 sides of footprint
@@ -640,7 +651,7 @@ namespace Timberbot
                                 }
                             }
 
-                            results.Add((tx, ty, tz, bestOrient, bestHasPath, reachable, nearPower, flooded, waterDepth, entranceX, entranceY));
+                            results.Add((tx, ty, tz, bestOrient, bestHasPath, reachable, distance, nearPower, flooded, waterDepth, entranceX, entranceY));
                         }
                     }
                 }
@@ -654,6 +665,13 @@ namespace Timberbot
                     }
                     if (a.flooded != b.flooded) return a.flooded ? 1 : -1;
                     if (a.reachable != b.reachable) return b.reachable ? 1 : -1;
+                    if (a.distance != b.distance)
+                    {
+                        // both unreachable (-1) are equal; otherwise closer to DC wins
+                        if (a.distance < 0) return 1;
+                        if (b.distance < 0) return -1;
+                        return a.distance.CompareTo(b.distance);
+                    }
                     if (a.pathAccess != b.pathAccess) return b.pathAccess ? 1 : -1;
                     if (a.nearPower != b.nearPower) return b.nearPower ? 1 : -1;
                     return 0;
@@ -681,6 +699,7 @@ namespace Timberbot
                     .Prop("entranceX", r.entranceX).Prop("entranceY", r.entranceY)
                     .Prop("pathAccess", r.pathAccess ? 1 : 0)
                     .Prop("reachable", r.reachable ? 1 : 0)
+                    .Prop("distance", r.distance, "F1")
                     .Prop("nearPower", r.nearPower ? 1 : 0)
                     .Prop("flooded", r.flooded ? 1 : 0);
                 if (waterInputLocal.HasValue)
