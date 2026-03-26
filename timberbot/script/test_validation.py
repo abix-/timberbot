@@ -280,6 +280,7 @@ class TestRunner:
         self.test_data_accuracy()
         self.test_json_schema()
         self.test_performance()
+        self.test_brain_perf()
 
     def test_read_endpoints(self):
         print("\n=== read endpoints ===\n")
@@ -648,7 +649,7 @@ class TestRunner:
 
         # check result fields
         p0 = placements[0]
-        for field in ["x", "y", "z", "orientation", "entranceX", "entranceY", "pathAccess", "reachable", "nearPower", "flooded"]:
+        for field in ["x", "y", "z", "orientation", "entranceX", "entranceY", "pathAccess", "reachable", "distance", "nearPower", "flooded"]:
             self.check(f"result has {field}", field in p0, f"keys: {list(p0.keys())}")
 
         # reachable spots
@@ -661,6 +662,8 @@ class TestRunner:
         if reachable:
             p = reachable[0]
             self.check("reachable has pathAccess", p.get("pathAccess") == 1)
+            self.check("reachable has distance >= 0", p.get("distance", -1) >= 0,
+                       f"distance={p.get('distance')}")
 
             placed = self.bot.place_building(self.prefab("Inventor"),
                 p["x"], p["y"], p["z"], orientation=p["orientation"])
@@ -675,6 +678,12 @@ class TestRunner:
                 self.bot.demolish_building(placed["id"])
             else:
                 self.check("place at reachable spot", False, json.dumps(placed)[:100])
+
+        # verify unreachable spots have distance -1
+        if unreachable:
+            p = unreachable[0]
+            self.check("unreachable has distance -1", p.get("distance") == -1,
+                       f"distance={p.get('distance')}")
 
         # verify unreachable spot is actually disconnected (if we have one with pathAccess)
         unreachable_with_path = [p for p in unreachable if p.get("pathAccess", 0)]
@@ -2406,8 +2415,9 @@ class TestRunner:
         if isinstance(fp, dict) and fp.get("placements"):
             errs = validate(fp["placements"], [{"x": int, "y": int, "z": int, "orientation": str,
                                                  "pathAccess": int, "reachable": int,
-                                                 "nearPower": int, "flooded": int,
-                                                 "entranceX": int, "entranceY": int}])
+                                                 "distance": float, "nearPower": int,
+                                                 "flooded": int, "entranceX": int,
+                                                 "entranceY": int}])
             # waterDepth is optional (only on water buildings)
             self.check("schema: placement[] (json)", len(errs) == 0, "; ".join(errs[:5]))
 
@@ -2677,6 +2687,54 @@ class TestRunner:
         self.check("burst < 3s total", burst_ms < 3000,
                    f"burst took {burst_ms:.0f}ms")
 
+    def test_brain_perf(self):
+        print("\n=== brain perf ===\n")
+        import io as _io
+        import timberbot as _tb
+        iterations = getattr(self, 'perf_iterations', 100)
+
+        # summary x iterations
+        summary_times = []
+        for _ in range(iterations):
+            t0 = time.perf_counter()
+            try: self.bot.summary()
+            except Exception: pass
+            summary_times.append((time.perf_counter() - t0) * 1000)
+
+        # brain cached x iterations
+        toon_bot = Timberbot()
+        old_out = sys.stdout
+        sys.stdout = _io.StringIO()
+        toon_bot.brain()  # ensure brain exists
+        sys.stdout = old_out
+        cached_times = []
+        for _ in range(iterations):
+            t0 = time.perf_counter()
+            try: toon_bot.brain()
+            except Exception: pass
+            cached_times.append((time.perf_counter() - t0) * 1000)
+
+        # brain fresh x5 (creates map each time)
+        fresh_times = []
+        for _ in range(5):
+            if os.path.isdir(_tb._MEMORY_DIR):
+                for f in os.listdir(_tb._MEMORY_DIR):
+                    os.remove(os.path.join(_tb._MEMORY_DIR, f))
+            sys.stdout = _io.StringIO()
+            t0 = time.perf_counter()
+            try: toon_bot.brain()
+            except Exception: pass
+            fresh_times.append((time.perf_counter() - t0) * 1000)
+            sys.stdout = old_out
+
+        print(f"  {'method':<25} {'avg ms':>8} {'min ms':>8} {'max ms':>8} {'n':>4}")
+        print(f"  {'-'*25} {'-'*8} {'-'*8} {'-'*8} {'-'*4}")
+        for name, times in [("summary", summary_times), ("brain (cached)", cached_times), ("brain (fresh)", fresh_times)]:
+            print(f"  {name:<25} {sum(times)/len(times):>8.1f} {min(times):>8.1f} {max(times):>8.1f} {len(times):>4}")
+        overhead = sum(cached_times)/len(cached_times) - sum(summary_times)/len(summary_times)
+        print(f"\n  brain overhead vs summary: {overhead:+.1f}ms avg")
+        self.check("brain overhead < 500ms", overhead < 500, f"{overhead:.0f}ms")
+
 
 class TeeWriter:
     """Write to both terminal and a log file."""
@@ -2725,7 +2783,9 @@ def main():
     test_names = "-".join(args.tests) if args.tests else "all"
     logpath = os.path.join(results_dir, f"{timestamp}-{test_names}.txt")
     logfile = open(logpath, "w")
+    print(f"results: {logpath}")
     sys.stdout = TeeWriter(sys.__stdout__, logfile)
+    sys.stderr = TeeWriter(sys.__stderr__, logfile)
 
     if args.benchmark:
         # call the in-game benchmark endpoint directly

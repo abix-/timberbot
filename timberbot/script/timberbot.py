@@ -128,6 +128,15 @@ class Timberbot:
         r = self.s.post(f"{self.url}{path}", json=data, timeout=5)
         return self._check(r.json())
 
+    def _get_json(self, path, params=None):
+        """Force JSON format for internal programmatic use."""
+        p = {"format": "json"}
+        if params:
+            p.update(params)
+        r = self.s.get(f"{self.url}{path}", params=p, timeout=5)
+        r.raise_for_status()
+        return self._check(r.json())
+
     # -- connection --
 
     def ping(self):
@@ -640,13 +649,18 @@ class Timberbot:
     def brain(self):
         """Full colony picture. Always fresh from game. Preserves maps + tasks. Replaces summary/save_brain/load_brain."""
         global _MEMORY_DIR
-        jbot = Timberbot(json_mode=True)
-        summary = jbot.summary()
+        _t0 = time.perf_counter()
+        _timings = {}
+        def _mark(label): _timings[label] = (time.perf_counter() - _t0) * 1000
+
+        summary = self._get_json("/api/summary")
+        _mark("summary")
 
         # set per-settlement memory dir
         settlement = _sanitize_name(summary.get("settlementName", "unknown") if isinstance(summary, dict) else "unknown")
         _MEMORY_DIR = os.path.join(_MEMORY_BASE, settlement)
         buildings_data = self.buildings(limit=0)
+        _mark("buildings")
         items = buildings_data.get("items", buildings_data) if isinstance(buildings_data, dict) else buildings_data
         items = items if isinstance(items, list) else []
 
@@ -708,12 +722,13 @@ class Timberbot:
 
         # detect faction
         try:
-            prefabs = jbot.prefabs()
+            prefabs = self._get_json("/api/prefabs")
             plist = prefabs if isinstance(prefabs, list) else []
             ft = sum(1 for p in plist if "Folktails" in p.get("name", ""))
             faction = "Folktails" if ft > 0 else "IronTeeth"
         except Exception:
             faction = "unknown"
+        _mark("prefabs")
 
         # nearby resource clusters: same z-level as DC, within 40 tiles
         dc_z = dc["z"] if dc else 0
@@ -726,13 +741,15 @@ class Timberbot:
                     and abs(c.get("x", 0) - dc_x) + abs(c.get("y", 0) - dc_y) <= 40]
 
         try:
-            tree_clusters = _nearby(jbot.tree_clusters())
+            tree_clusters = _nearby(self._get_json("/api/tree_clusters"))
         except Exception:
             tree_clusters = []
+        _mark("tree_clusters")
         try:
-            food_clusters = _nearby(jbot.food_clusters())
+            food_clusters = _nearby(self._get_json("/api/food_clusters"))
         except Exception:
             food_clusters = []
+        _mark("food_clusters")
 
         # preserve maps and tasks from existing brain
         existing_maps = {}
@@ -769,6 +786,13 @@ class Timberbot:
             _t.dump(result, f)
         with open(os.path.join(_MEMORY_DIR, "buildings.json"), "w") as f:
             json.dump(slim, f, indent=2)
+        _mark("persist")
+
+        # print timings to stderr
+        prev = 0
+        for label, ms in _timings.items():
+            print(f"  brain: {label:<20} {ms - prev:>6.0f}ms (cumulative {ms:.0f}ms)", file=sys.stderr)
+            prev = ms
 
         # auto-map DC area on first run
         if dc and not existing_maps:
