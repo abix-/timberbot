@@ -710,7 +710,7 @@ class Timberbot:
             "faction": faction,
             "dc": dc,
             "summary": summary,
-            "buildings": slim,
+            "buildingCount": len(slim),
             "treeClusters": tree_clusters,
             "nearbyGatherables": nearby_gath,
             "maps": existing_maps,
@@ -719,6 +719,10 @@ class Timberbot:
         os.makedirs(_MEMORY_DIR, exist_ok=True)
         with open(bpath, "w") as f:
             json.dump(brain, f, indent=2)
+        # buildings to separate file
+        bldg_path = os.path.join(_MEMORY_DIR, "buildings.json")
+        with open(bldg_path, "w") as f:
+            json.dump(slim, f, indent=2)
         return {"saved": bpath, "faction": faction, "buildings": len(slim)}
 
     def load_brain(self):
