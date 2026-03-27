@@ -381,6 +381,85 @@ Compared to current `buildings full`:
 - no material latency regression in the endpoint
 - code complexity is reduced by removing published live refs and clone-driven buffer semantics from the read path
 
+## Current spike results
+
+The buildings spike has been implemented and measured against the live game.
+
+### Functional status
+
+- `GET /api/buildings_v2` exists and is live
+- `buildings_v2` basic matches legacy `buildings`
+- `buildings_v2` full matches legacy `buildings`
+- sampled `detail=id:<id>` parity checks passed
+
+Dedicated parity test:
+
+```powershell
+python timberbot/script/test_validation.py buildings_v2_parity
+```
+
+Latest passing parity result file:
+
+- [20260327-093637-buildings_v2_parity.txt](/C:/code/timberborn/timberbot/test-results/20260327-093637-buildings_v2_parity.txt)
+
+### Performance status
+
+There are now two relevant perf entry points:
+
+- broad perf suite: `performance`
+- building-only benchmark: `building_endpoint_perf`
+
+Recommended command for this spike:
+
+```powershell
+python timberbot/script/test_validation.py building_endpoint_perf -n 200
+```
+
+Latest stable 200-iteration result:
+
+- [20260327-095537-building_endpoint_perf.txt](/C:/code/timberborn/timberbot/test-results/20260327-095537-building_endpoint_perf.txt)
+
+| Endpoint | Avg | Min | Max | Success |
+|---|---:|---:|---:|---:|
+| `buildings` | 274 ms | 237 ms | 1267 ms | 200 / 200 |
+| `buildings full` | 298 ms | 257 ms | 1269 ms | 200 / 200 |
+| `buildings_v2` | 284 ms | 238 ms | 1291 ms | 200 / 200 |
+| `buildings_v2 full` | 299 ms | 260 ms | 1248 ms | 200 / 200 |
+
+Legacy vs v2 from that run:
+
+| Scenario | Legacy | V2 | Delta | Ratio |
+|---|---:|---:|---:|---:|
+| basic | 274 ms | 284 ms | +10 ms | 1.04x |
+| full | 298 ms | 299 ms | +1 ms | 1.00x |
+
+Interpretation:
+
+- request latency is effectively at parity
+- the fresh-on-request model is not showing a meaningful regression for buildings
+- the main architectural advantage is now freshness and idle-cost reduction, not raw speedup
+
+### Earlier unstable run
+
+One earlier 50-iteration run showed transient instability in `buildings_v2` basic:
+
+- [20260327-094047-buildings_v2_performance.txt](/C:/code/timberborn/timberbot/test-results/20260327-094047-buildings_v2_performance.txt)
+
+That run reported:
+
+- `buildings_v2`: 42 / 50 successful, 635 ms avg, 3771 ms max
+- `buildings_v2 full`: 50 / 50 successful, 252 ms avg
+
+That specific failure mode has not reproduced in later isolated `building_endpoint_perf` runs:
+
+- 50 iterations: [20260327-094915-building_endpoint_perf.txt](/C:/code/timberborn/timberbot/test-results/20260327-094915-building_endpoint_perf.txt)
+- 200 iterations: [20260327-095537-building_endpoint_perf.txt](/C:/code/timberborn/timberbot/test-results/20260327-095537-building_endpoint_perf.txt)
+
+Current conclusion:
+
+- the spike currently looks viable
+- there was at least one transient bad run, so burst/concurrency behavior still deserves investigation before declaring the architecture finished
+
 ## Follow-on order if the spike succeeds
 
 If `buildings_v2` proves the model:
