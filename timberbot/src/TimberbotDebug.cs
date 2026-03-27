@@ -375,6 +375,69 @@ namespace Timberbot
             results.Add(BenchCall("CollectTiles.20x20", nHeavy, () => Service.Read.CollectTiles("toon", 120, 130, 140, 150), 400));
             results.Add(BenchCall("FindPlacement", nHeavy, () => Service.Placement.FindPlacement("Path", 120, 135, 130, 145)));
 
+            // --- Low issue micro-benchmarks (#12-20) ---
+            // #12-14: string interpolation alloc ($"{a}/{b}" per building)
+            {
+                int a = 3, b = 5;
+                for (int w = 0; w < 10; w++) { var _ = $"{a}/{b}"; }
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                long gcBefore = GC.CollectionCount(0);
+                for (int iter = 0; iter < n; iter++)
+                    for (int bi = 0; bi < nb; bi++) { var _ = $"{a}/{b}"; }
+                sw.Stop();
+                long gcInterp = GC.CollectionCount(0) - gcBefore;
+                double interpMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                results.Add(new { test = "StringInterpolation", count = nb, iterations = n,
+                    totalMs = interpMs, perCallMs = interpMs / n, gc0 = gcInterp,
+                    note = "#12-14: string interp per building" });
+            }
+
+            // #15: string concat (critical + "+" + n.Id per beaver)
+            if (beaversWithNeeds.Count > 0)
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                long gcBefore = GC.CollectionCount(0);
+                for (int iter = 0; iter < n; iter++)
+                    for (int bi = 0; bi < beaversWithNeeds.Count; bi++)
+                    {
+                        string crit = "";
+                        foreach (var ns in beaversWithNeeds[bi].NeedMgr.GetNeeds())
+                            crit = crit.Length > 0 ? crit + "+" + ns.Id : ns.Id;
+                    }
+                sw.Stop();
+                long gcConcat = GC.CollectionCount(0) - gcBefore;
+                double concatMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                results.Add(new { test = "StringConcat.Needs", count = beaversWithNeeds.Count, iterations = n,
+                    totalMs = concatMs, perCallMs = concatMs / n, gc0 = gcConcat,
+                    note = "#15: concat per beaver per need" });
+            }
+
+            // #20: GetBeaverNeeds alloc check
+            {
+                var fns = Service.Read._factionNeedService;
+                if (fns != null)
+                {
+                    for (int w = 0; w < 3; w++) { var _ = fns.GetBeaverNeeds(); }
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    long gcBefore = GC.CollectionCount(0);
+                    for (int iter = 0; iter < n; iter++) { var _ = fns.GetBeaverNeeds(); }
+                    sw.Stop();
+                    long gcNeeds = GC.CollectionCount(0) - gcBefore;
+                    double needsMs = sw.ElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                    results.Add(new { test = "GetBeaverNeeds", count = 1, iterations = n,
+                        totalMs = needsMs, perCallMs = needsMs / n, gc0 = gcNeeds,
+                        note = "#20: thread-safety + alloc check" });
+                }
+            }
+
+            // toon variants: catch toon-specific allocs (interpolation, List<string>, string.Join)
+            results.Add(BenchCall("CollectSummary.toon", n, () => Service.Read.CollectSummary("toon")));
+            results.Add(BenchCall("CollectBuildings.toon", n, () => Service.Read.CollectBuildings("toon", "basic"), nb));
+            results.Add(BenchCall("CollectBuildings.full.toon", nHeavy, () => Service.Read.CollectBuildings("toon", "full"), nb));
+            results.Add(BenchCall("CollectBeavers.toon", n, () => Service.Read.CollectBeavers("toon", "basic"), nv));
+            results.Add(BenchCall("CollectAlerts.toon", n, () => Service.Read.CollectAlerts("toon")));
+            results.Add(BenchCall("CollectTiles.toon.20x20", nHeavy, () => Service.Read.CollectTiles("toon", 120, 130, 140, 150), 400));
+
             // metadata
             results.Insert(0, new
             {
@@ -388,20 +451,11 @@ namespace Timberbot
         }
 
         // ================================================================
-        // DEBUG -- reflection-based game state inspector
+        // DEBUG -- reflection-based game state inspector and validator
         // ================================================================
         // Walk any game object graph at runtime using .NET reflection.
-        // This is the "god mode" inspector -- it can read/write any field, call any
-        // method, and chain results using $ (last result). Gated behind settings.json
-        // because it can crash the game if you call the wrong method.
-        //
-        // Targets:
-        //   help    -- list available root objects and examples
-        //   get     -- resolve a dot-path and return the value (e.g. "_scienceService.SciencePoints")
-        //   fields  -- list all fields/properties/methods on an object (with optional filter)
-        //   call    -- call a method with typed arguments (auto-parses int, float, Vector3Int, etc.)
-        //   validate     -- compare cached vs live state for one entity
-        //   validate_all -- compare cached vs live for ALL entities
+        // This is the main development probe surface for Timberbot: inspect values,
+        // list members, call methods, compare live values, and assert assumptions.
         //
         // $ chaining: the result of any get/call is stored in _debugLastResult.
         // Next call can use "$.PropertyName" to continue from where the last call left off.
@@ -417,36 +471,86 @@ namespace Timberbot
 
             string Arg(string key, string def = "") => args.ContainsKey(key) ? args[key] : def;
 
-            // Parse a string argument into a typed .NET object.
-            // Supports primitives (int, float, bool, string) and Unity types (Vector3Int, Vector3, Vector2Int).
-            // $ = reference to _debugLastResult for chaining calls.
-            object ParseArg(string argStr, System.Type pType)
+            object ParseLooseValue(string raw)
             {
-                if (argStr == "$") return _debugLastResult;
-                if (pType == typeof(string)) return argStr;
-                if (pType == typeof(int)) return int.Parse(argStr);
-                if (pType == typeof(float)) return float.Parse(argStr);
-                if (pType == typeof(double)) return double.Parse(argStr);
-                if (pType == typeof(bool)) return bool.Parse(argStr);
-                if (pType == typeof(long)) return long.Parse(argStr);
-                if (pType == typeof(Vector3Int))
+                if (raw == "$") return _debugLastResult;
+                if (string.Equals(raw, "null", System.StringComparison.OrdinalIgnoreCase)) return null;
+                if (bool.TryParse(raw, out var boolVal)) return boolVal;
+                if (int.TryParse(raw, out var intVal)) return intVal;
+                if (long.TryParse(raw, out var longVal)) return longVal;
+                if (double.TryParse(raw, out var dblVal)) return dblVal;
+                return raw;
+            }
+
+            // Parse a string argument into a typed .NET object.
+            // Supports primitives, enums, nullable types, object, and common Unity vectors.
+            bool TryParseArg(string argStr, System.Type pType, out object value)
+            {
+                value = null;
+                if (argStr == "$")
                 {
-                    var c = argStr.Split(',');
-                    return new Vector3Int(int.Parse(c[0]), int.Parse(c[1]), int.Parse(c[2]));
+                    value = _debugLastResult;
+                    return true;
                 }
-                if (pType == typeof(Vector3))
+                if (pType == typeof(string))
                 {
-                    var c = argStr.Split(',');
-                    return new Vector3(float.Parse(c[0]), float.Parse(c[1]), float.Parse(c[2]));
+                    value = argStr;
+                    return true;
                 }
-                if (pType == typeof(Vector2Int))
+                if (pType == typeof(object))
                 {
-                    var c = argStr.Split(',');
-                    return new Vector2Int(int.Parse(c[0]), int.Parse(c[1]));
+                    value = ParseLooseValue(argStr);
+                    return true;
                 }
-                // try Convert.ChangeType as fallback
-                try { return System.Convert.ChangeType(argStr, pType); } catch (System.Exception _ex) { TimberbotLog.Error("debug", _ex); }
-                return null;
+                var nullable = System.Nullable.GetUnderlyingType(pType);
+                if (nullable != null)
+                {
+                    if (string.Equals(argStr, "null", System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        value = null;
+                        return true;
+                    }
+                    pType = nullable;
+                }
+                if (pType.IsEnum)
+                {
+                    try
+                    {
+                        value = System.Enum.Parse(pType, argStr, true);
+                        return true;
+                    }
+                    catch { return false; }
+                }
+                try
+                {
+                    if (pType == typeof(int)) value = int.Parse(argStr);
+                    else if (pType == typeof(float)) value = float.Parse(argStr);
+                    else if (pType == typeof(double)) value = double.Parse(argStr);
+                    else if (pType == typeof(bool)) value = bool.Parse(argStr);
+                    else if (pType == typeof(long)) value = long.Parse(argStr);
+                    else if (pType == typeof(Vector3Int))
+                    {
+                        var c = argStr.Split(',');
+                        value = new Vector3Int(int.Parse(c[0]), int.Parse(c[1]), int.Parse(c[2]));
+                    }
+                    else if (pType == typeof(Vector3))
+                    {
+                        var c = argStr.Split(',');
+                        value = new Vector3(float.Parse(c[0]), float.Parse(c[1]), float.Parse(c[2]));
+                    }
+                    else if (pType == typeof(Vector2Int))
+                    {
+                        var c = argStr.Split(',');
+                        value = new Vector2Int(int.Parse(c[0]), int.Parse(c[1]));
+                    }
+                    else
+                        value = System.Convert.ChangeType(argStr, pType);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
             }
 
             // Resolve a dot-separated path from TimberbotService to any nested object.
@@ -530,26 +634,266 @@ namespace Timberbot
                 return current;
             }
 
-            // dump an object's fields and properties
-            void DumpObject(object obj, Dictionary<string, object> into, int maxItems = 5)
+            bool TryGetNumeric(object value, out double numeric)
             {
-                if (obj == null) { into["value"] = "null"; return; }
-                into["type"] = obj.GetType().FullName;
-                if (obj is string s) { into["value"] = s; return; }
+                numeric = 0;
+                if (value == null) return false;
+                try
+                {
+                    if (value is bool b)
+                    {
+                        numeric = b ? 1 : 0;
+                        return true;
+                    }
+                    if (value is System.IConvertible)
+                    {
+                        numeric = System.Convert.ToDouble(value);
+                        return true;
+                    }
+                }
+                catch { }
+                return false;
+            }
+
+            bool ValuesEqual(object left, object right)
+            {
+                if (left == null || right == null) return left == right;
+                if (TryGetNumeric(left, out var leftNum) && TryGetNumeric(right, out var rightNum))
+                    return System.Math.Abs(leftNum - rightNum) < 0.0001;
+                return Equals(left, right);
+            }
+
+            int CompareValues(object left, object right, out bool comparable)
+            {
+                comparable = false;
+                if (TryGetNumeric(left, out var leftNum) && TryGetNumeric(right, out var rightNum))
+                {
+                    comparable = true;
+                    return leftNum.CompareTo(rightNum);
+                }
+                if (left is string leftStr && right is string rightStr)
+                {
+                    comparable = true;
+                    return string.Compare(leftStr, rightStr, System.StringComparison.Ordinal);
+                }
+                return 0;
+            }
+
+            string DescribeKind(object obj)
+            {
+                if (obj == null) return "null";
+                var type = obj.GetType();
+                if (obj is string) return "string";
+                if (type.IsPrimitive || obj is decimal || type.IsEnum) return "scalar";
+                if (obj is System.Collections.IDictionary) return "dictionary";
+                if (obj is System.Collections.IEnumerable) return "enumerable";
+                return "object";
+            }
+
+            Dictionary<string, object> DescribeValue(object obj, int depth, int maxDepth, int maxItems)
+            {
+                var result = new Dictionary<string, object>
+                {
+                    ["kind"] = DescribeKind(obj)
+                };
+                if (obj == null)
+                {
+                    result["type"] = "null";
+                    result["value"] = null;
+                    return result;
+                }
+
+                var type = obj.GetType();
+                result["type"] = type.FullName;
+
+                if (obj is string || type.IsPrimitive || obj is decimal || type.IsEnum)
+                {
+                    result["value"] = obj;
+                    return result;
+                }
+
+                if (obj is System.Collections.IDictionary dict)
+                {
+                    var sample = new List<object>();
+                    var count = 0;
+                    foreach (System.Collections.DictionaryEntry entry in dict)
+                    {
+                        count++;
+                        if (sample.Count < maxItems)
+                        {
+                            sample.Add(new Dictionary<string, object>
+                            {
+                                ["key"] = entry.Key?.ToString(),
+                                ["value"] = depth < maxDepth ? DescribeValue(entry.Value, depth + 1, maxDepth, maxItems) : (object)(entry.Value?.ToString())
+                            });
+                        }
+                    }
+                    result["count"] = count;
+                    result["sample"] = sample;
+                    return result;
+                }
+
                 if (obj is System.Collections.IEnumerable enumerable)
                 {
-                    int count = 0;
-                    var samples = new List<string>();
+                    var sample = new List<object>();
+                    var count = 0;
                     foreach (var item in enumerable)
                     {
                         count++;
-                        if (samples.Count < maxItems) samples.Add(item?.ToString() ?? "null");
+                        if (sample.Count < maxItems)
+                            sample.Add(depth < maxDepth ? (object)DescribeValue(item, depth + 1, maxDepth, maxItems) : item?.ToString());
                     }
-                    into["count"] = count;
-                    into["samples"] = samples;
-                    return;
+                    result["count"] = count;
+                    result["sample"] = sample;
+                    return result;
                 }
-                into["value"] = obj.ToString();
+
+                result["value"] = obj.ToString();
+                return result;
+            }
+
+            Dictionary<string, object> DescribeMembers(object obj, string filter)
+            {
+                var members = new Dictionary<string, object>
+                {
+                    ["fields"] = new List<string>(),
+                    ["properties"] = new List<string>(),
+                    ["methods"] = new List<string>()
+                };
+                if (obj == null) return members;
+
+                var fieldList = (List<string>)members["fields"];
+                foreach (var f in obj.GetType().GetFields(flags))
+                    if (string.IsNullOrEmpty(filter) || f.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        fieldList.Add($"{f.Name}:{f.FieldType.Name}");
+
+                var propList = (List<string>)members["properties"];
+                foreach (var p in obj.GetType().GetProperties(flags))
+                    if (string.IsNullOrEmpty(filter) || p.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        propList.Add($"{p.Name}:{p.PropertyType.Name}");
+
+                var methodList = (List<string>)members["methods"];
+                foreach (var m in obj.GetType().GetMethods(flags))
+                {
+                    if (m.DeclaringType == typeof(object) || m.IsSpecialName) continue;
+                    if (!string.IsNullOrEmpty(filter) && m.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    var parms = m.GetParameters();
+                    methodList.Add($"{m.Name}({string.Join(",", System.Linq.Enumerable.Select(parms, p => p.ParameterType.Name))})->{m.ReturnType.Name}");
+                }
+                return members;
+            }
+
+            void StoreAndDescribe(object obj, string path = null, int maxDepth = 1, int maxItems = 5)
+            {
+                _debugLastResult = obj;
+                if (!string.IsNullOrEmpty(path)) info["path"] = path;
+                info["result"] = DescribeValue(obj, 0, maxDepth, maxItems);
+                info["stored"] = "result stored in $ for chaining";
+            }
+
+            bool EvaluateAssertion(object left, string op, object right, out string detail)
+            {
+                detail = "";
+                op = (op ?? "eq").ToLowerInvariant();
+                switch (op)
+                {
+                    case "eq":
+                        return ValuesEqual(left, right);
+                    case "ne":
+                        return !ValuesEqual(left, right);
+                    case "null":
+                        return left == null;
+                    case "not_null":
+                        return left != null;
+                    case "true":
+                        return left is bool leftBool && leftBool;
+                    case "false":
+                        return left is bool leftBool2 && !leftBool2;
+                    case "contains":
+                        if (left is string leftStr && right != null) return leftStr.IndexOf(right.ToString(), System.StringComparison.OrdinalIgnoreCase) >= 0;
+                        if (left is System.Collections.IEnumerable seq)
+                        {
+                            foreach (var item in seq)
+                                if (ValuesEqual(item, right)) return true;
+                            return false;
+                        }
+                        detail = "left is not searchable";
+                        return false;
+                    case "not_contains":
+                        if (left is string leftStr2 && right != null) return leftStr2.IndexOf(right.ToString(), System.StringComparison.OrdinalIgnoreCase) < 0;
+                        if (left is System.Collections.IEnumerable seq2)
+                        {
+                            foreach (var item in seq2)
+                                if (ValuesEqual(item, right)) return false;
+                            return true;
+                        }
+                        detail = "left is not searchable";
+                        return false;
+                    case "gt":
+                    case "gte":
+                    case "lt":
+                    case "lte":
+                        {
+                            var cmp = CompareValues(left, right, out var comparable);
+                            if (!comparable)
+                            {
+                                detail = "values are not comparable";
+                                return false;
+                            }
+                            if (op == "gt") return cmp > 0;
+                            if (op == "gte") return cmp >= 0;
+                            if (op == "lt") return cmp < 0;
+                            return cmp <= 0;
+                        }
+                    default:
+                        detail = $"unknown op '{op}'";
+                        return false;
+                }
+            }
+
+            (System.Reflection.MethodInfo method, object[] callArgs, string error) ResolveMethodCall(object obj, string methodName)
+            {
+                var candidates = obj.GetType().GetMethods(flags)
+                    .Where(m => m.Name == methodName && !m.IsSpecialName)
+                    .OrderBy(m => m.GetParameters().Length)
+                    .ToList();
+                if (candidates.Count == 0)
+                    return (null, null, $"not_found: method {methodName} not found on {obj.GetType().Name}");
+
+                foreach (var method in candidates)
+                {
+                    var methodParams = method.GetParameters();
+                    var callArgs = new object[methodParams.Length];
+                    var ok = true;
+                    for (int i = 0; i < methodParams.Length; i++)
+                    {
+                        if (!args.ContainsKey($"arg{i}"))
+                        {
+                            if (methodParams[i].HasDefaultValue)
+                                callArgs[i] = methodParams[i].DefaultValue;
+                            else
+                            {
+                                ok = false;
+                                break;
+                            }
+                        }
+                        else if (!TryParseArg(Arg($"arg{i}", ""), methodParams[i].ParameterType, out callArgs[i]))
+                        {
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if (!ok) continue;
+
+                    var extraArg = false;
+                    for (int i = methodParams.Length; args.ContainsKey($"arg{i}"); i++)
+                        extraArg = true;
+                    if (extraArg) continue;
+
+                    return (method, callArgs, null);
+                }
+
+                return (null, null, $"invalid_param: no overload of {methodName} matched supplied args");
             }
 
             try
@@ -562,21 +906,38 @@ namespace Timberbot
                             "help -- this message",
                             "get -- navigate object chain. args: path (dot-separated from TimberbotService)",
                             "fields -- list members. args: path, filter",
-                            "call -- call method. args: path (to object), method, arg0..argN (string args, Vector3Int as x,y,z)",
+                            "describe -- structured type + value + members. args: path, filter, depth, sample",
+                            "call -- call a method. args: path (to object), method, arg0..argN (typed args)",
+                            "compare -- compare left/right paths or left path vs value. args: left, right|value",
+                            "assert -- assert a condition on a path. args: path, op, right|value",
+                            "roots -- list top-level TimberbotService fields",
                         };
-                        info["roots"] = new[]
-                        {
-                            "_buildingService", "_entityRegistry", "_districtCenterRegistry",
-                            "_navMeshService", "_soilMoistureService", "_toolButtonService",
-                            "_blockObjectPlacerService", "_scienceService", "_buildingUnlockingService",
-                            "_districtPathNavRegistrar", "_toolUnlockingService"
-                        };
+                        info["roots"] = Service.GetType().GetFields(flags)
+                            .Where(f => !f.IsStatic)
+                            .Select(f => $"{f.Name}:{f.FieldType.Name}")
+                            .OrderBy(n => n)
+                            .ToArray();
                         info["examples"] = new[]
                         {
-                            "debug target:fields path:_navMeshService filter:Road",
+                            "debug target:fields path:Read filter:Collect",
+                            "debug target:describe path:Cache.Buildings depth:2 sample:3",
                             "debug target:get path:_scienceService.SciencePoints",
                             "debug target:call path:_navMeshService method:AreConnectedRoadInstant arg0:120,142,2 arg1:130,142,2",
+                            "debug target:compare left:Cache.Buildings.Read.[0].Id right:Cache.Buildings.Write.[0].Id",
+                            "debug target:assert path:_debugEnabled op:false",
                         };
+                        break;
+
+                    case "roots":
+                        info["roots"] = Service.GetType().GetFields(flags)
+                            .Where(f => !f.IsStatic)
+                            .Select(f => new Dictionary<string, object>
+                            {
+                                ["name"] = f.Name,
+                                ["type"] = f.FieldType.FullName
+                            })
+                            .OrderBy(f => (string)f["name"])
+                            .ToList();
                         break;
 
                     case "get":
@@ -584,9 +945,9 @@ namespace Timberbot
                             var path = Arg("path", "");
                             if (string.IsNullOrEmpty(path)) return _jw.Error("invalid_param: pass path:_fieldName.nested.field");
                             var obj = Resolve(path);
-                            _debugLastResult = obj;
-                            info["path"] = path;
-                            DumpObject(obj, info);
+                            StoreAndDescribe(obj, path,
+                                int.TryParse(Arg("depth", "1"), out var getDepth) ? getDepth : 1,
+                                int.TryParse(Arg("sample", "5"), out var getSample) ? getSample : 5);
                             break;
                         }
 
@@ -595,23 +956,24 @@ namespace Timberbot
                             var path = Arg("path", "");
                             object obj = string.IsNullOrEmpty(path) ? (object)Service : Resolve(path);
                             if (obj == null) return _jw.Error($"not_found: could not resolve '{path}'");
+                            info["path"] = path;
                             info["type"] = obj.GetType().FullName;
                             var filter = Arg("filter", "");
-                            var members = new List<string>();
-                            foreach (var f in obj.GetType().GetFields(flags))
-                                if (string.IsNullOrEmpty(filter) || f.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) >= 0)
-                                    members.Add($"F {f.Name}:{f.FieldType.Name}");
-                            foreach (var p in obj.GetType().GetProperties(flags))
-                                if (string.IsNullOrEmpty(filter) || p.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) >= 0)
-                                    members.Add($"P {p.Name}:{p.PropertyType.Name}");
-                            foreach (var m in obj.GetType().GetMethods(flags))
-                            {
-                                if (m.DeclaringType == typeof(object) || m.IsSpecialName) continue;
-                                if (!string.IsNullOrEmpty(filter) && m.Name.IndexOf(filter, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
-                                var parms = m.GetParameters();
-                                members.Add($"M {m.Name}({string.Join(",", System.Linq.Enumerable.Select(parms, p => p.ParameterType.Name))})->{m.ReturnType.Name}");
-                            }
-                            info["members"] = members;
+                            info["members"] = DescribeMembers(obj, filter);
+                            break;
+                        }
+
+                    case "describe":
+                        {
+                            var path = Arg("path", "");
+                            object obj = string.IsNullOrEmpty(path) ? (object)Service : Resolve(path);
+                            if (obj == null) return _jw.Error($"not_found: could not resolve '{path}'");
+                            var filter = Arg("filter", "");
+                            var depth = int.TryParse(Arg("depth", "1"), out var describeDepth) ? describeDepth : 1;
+                            var sample = int.TryParse(Arg("sample", "5"), out var describeSample) ? describeSample : 5;
+                            info["path"] = path;
+                            info["result"] = DescribeValue(obj, 0, depth, sample);
+                            info["members"] = DescribeMembers(obj, filter);
                             break;
                         }
 
@@ -622,24 +984,52 @@ namespace Timberbot
                             if (string.IsNullOrEmpty(methodName)) return _jw.Error("invalid_param: pass method:MethodName");
                             object obj = string.IsNullOrEmpty(path) ? (object)Service : Resolve(path);
                             if (obj == null) return _jw.Error($"not_found: could not resolve '{path}'");
-                            // find all overloads
-                            var methods = obj.GetType().GetMethods(flags);
-                            System.Reflection.MethodInfo bestMethod = null;
-                            foreach (var m in methods)
-                                if (m.Name == methodName) { bestMethod = m; break; }
-                            if (bestMethod == null) return _jw.Error($"not_found: method {methodName} not found on {obj.GetType().Name}");
-                            // build args from arg0, arg1, etc
-                            var methodParams = bestMethod.GetParameters();
-                            var callArgs = new object[methodParams.Length];
-                            for (int i = 0; i < methodParams.Length; i++)
-                            {
-                                var argStr = Arg($"arg{i}", "");
-                                callArgs[i] = ParseArg(argStr, methodParams[i].ParameterType);
-                            }
-                            var result = bestMethod.Invoke(obj, callArgs);
-                            _debugLastResult = result;
-                            DumpObject(result, info);
-                            info["stored"] = "result stored in $ for chaining";
+                            var resolved = ResolveMethodCall(obj, methodName);
+                            if (resolved.error != null) return _jw.Error(resolved.error);
+                            var result = resolved.method.Invoke(obj, resolved.callArgs);
+                            info["path"] = path;
+                            info["method"] = $"{resolved.method.Name}({string.Join(",", System.Linq.Enumerable.Select(resolved.method.GetParameters(), p => p.ParameterType.Name))})";
+                            StoreAndDescribe(result, null,
+                                int.TryParse(Arg("depth", "1"), out var callDepth) ? callDepth : 1,
+                                int.TryParse(Arg("sample", "5"), out var callSample) ? callSample : 5);
+                            break;
+                        }
+
+                    case "compare":
+                        {
+                            var leftPath = Arg("left", Arg("path", ""));
+                            if (string.IsNullOrEmpty(leftPath)) return _jw.Error("invalid_param: pass left:path.to.value");
+                            var rightPath = Arg("right", "");
+                            var hasValue = args.ContainsKey("value");
+                            if (string.IsNullOrEmpty(rightPath) && !hasValue) return _jw.Error("invalid_param: pass right:path.to.value or value:literal");
+                            var left = Resolve(leftPath);
+                            object right = hasValue ? ParseLooseValue(Arg("value", "")) : Resolve(rightPath);
+                            info["leftPath"] = leftPath;
+                            if (!string.IsNullOrEmpty(rightPath)) info["rightPath"] = rightPath;
+                            info["equal"] = ValuesEqual(left, right);
+                            info["left"] = DescribeValue(left, 0, 1, 5);
+                            info["right"] = DescribeValue(right, 0, 1, 5);
+                            break;
+                        }
+
+                    case "assert":
+                        {
+                            var path = Arg("path", "");
+                            if (string.IsNullOrEmpty(path)) return _jw.Error("invalid_param: pass path:path.to.value");
+                            var op = Arg("op", "eq");
+                            var left = Resolve(path);
+                            object right = null;
+                            if (args.ContainsKey("right"))
+                                right = Resolve(Arg("right", ""));
+                            else if (args.ContainsKey("value"))
+                                right = ParseLooseValue(Arg("value", ""));
+                            var passed = EvaluateAssertion(left, op, right, out var detail);
+                            info["path"] = path;
+                            info["op"] = op;
+                            info["ok"] = passed;
+                            info["left"] = DescribeValue(left, 0, 1, 5);
+                            info["right"] = DescribeValue(right, 0, 1, 5);
+                            if (!string.IsNullOrEmpty(detail)) info["detail"] = detail;
                             break;
                         }
 
@@ -655,7 +1045,7 @@ namespace Timberbot
                         }
 
                     default:
-                        return _jw.Error($"invalid_param: unknown target '{target}'. use: help, get, fields, call, validate, validate_all");
+                        return _jw.Error($"invalid_param: unknown target '{target}'. use: help, roots, get, fields, describe, call, compare, assert, validate, validate_all");
                 }
             }
             catch (System.Exception ex)

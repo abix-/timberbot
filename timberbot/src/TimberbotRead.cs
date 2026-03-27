@@ -56,7 +56,7 @@ namespace Timberbot
         private readonly WorkingHoursManager _workingHoursManager;
         private readonly BuildingService _buildingService;
         private readonly BuildingUnlockingService _buildingUnlockingService;
-        private readonly FactionNeedService _factionNeedService;
+        internal readonly FactionNeedService _factionNeedService;
         private readonly NotificationSaver _notificationSaver;
         private readonly TimberbotEntityCache _cache;
         // terrain/water services for CollectTiles (thread-safe by design)
