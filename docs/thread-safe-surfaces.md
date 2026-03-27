@@ -133,6 +133,236 @@ Treat these as main-thread only unless there is specific contrary evidence for a
 - live district/building/beaver registries and lists
 - any normal `List<T>` or `ReadOnlyList<T>` exposed by gameplay services
 
+## Building-specific finding
+
+There is no generic thread-safe building surface currently known in Timberborn.
+
+Live runtime inspection and managed-assembly reflection found:
+
+- `BuildingService`
+  - `_buildings: List<>`
+  - `Buildings: ReadOnlyList<>`
+- `DistrictBuildingRegistry`
+  - `_finishedBuildings: EntityComponentRegistry`
+  - `_instantFinishedBuildings: EntityComponentRegistry`
+  - `GetEnabledBuildings() -> IEnumerable<>`
+  - `GetEnabledBuildingsInstant() -> IEnumerable<>`
+
+These are live registries or read-only wrappers over mutable collections. They are not thread-safe building snapshots.
+
+### Important exception: water sources
+
+Timberborn does have one narrow building-adjacent snapshot pattern:
+
+- `WaterSourceRegistry`
+  - `_waterSources: List<>`
+  - `_threadSafeWaterSources: List<>`
+  - `ThreadSafeWaterSources: ReadOnlyList<>`
+  - `UpdateThreadSafeRegistry()`
+- `ThreadSafeWaterSource`
+  - specialized snapshot wrapper over `IWaterSource`
+
+This is the clearest example of how Timberborn handles off-thread access for building-like systems:
+
+- not a universal thread-safe building API,
+- but a specialized thread-safe projection for the exact subsystem that needs it.
+
+### Implication
+
+If Timberbot wants leaner off-thread building reads, the closest game-native pattern is:
+
+- keep using explicit thread-safe map services directly,
+- keep using Timberbot snapshots for general building/beaver/entity data,
+- consider specialized building projections for narrow cases instead of assuming a hidden generic building snapshot API exists.
+
+### Suggested Timberbot building projection split
+
+The current `CachedBuilding` mixes three different concerns:
+
+- static building identity/geometry,
+- periodic mutable building state,
+- heavy nested detail payloads used only by full-detail endpoints.
+
+The leaner split is:
+
+#### `BuildingDefinition`
+
+Static or event-driven data:
+
+- `Id`, `Name`
+- `X`, `Y`, `Z`
+- `Orientation`
+- `HasFloodgate`, `FloodgateMaxHeight`
+- `HasClutch`, `HasWonder`
+- `IsGenerator`, `IsConsumer`
+- `NominalPowerInput`, `NominalPowerOutput`
+- `EffectRadius`
+- `OccupiedTiles`
+- `HasEntrance`, `EntranceX`, `EntranceY`
+
+#### `BuildingState`
+
+Periodic snapshot data:
+
+- `Finished`, `Paused`, `Unreachable`, `Powered`
+- `District`
+- `AssignedWorkers`, `DesiredWorkers`, `MaxWorkers`
+- `Dwellers`, `MaxDwellers`
+- `FloodgateHeight`
+- `ConstructionPriority`, `WorkplacePriorityStr`
+- `BuildProgress`, `MaterialProgress`, `HasMaterials`
+- `ClutchEngaged`, `WonderActive`
+- `PowerDemand`, `PowerSupply`, `PowerNetworkId`
+- `CurrentRecipe`, `ProductionProgress`, `ReadyToProduce`
+- `NeedsNutrients`
+- `Stock`, `Capacity`
+
+#### `BuildingDetailState`
+
+Nested payloads used only by full-detail reads:
+
+- `Inventory`
+- `Recipes`
+- `NutrientStock`
+
+#### Fields that should stay out of the published read model
+
+These are main-thread cache maintenance fields, not off-thread API data:
+
+- `Entity`
+- `BlockObject`
+- `Pausable`
+- `Floodgate`
+- `BuilderPrio`
+- `Workplace`
+- `WorkplacePriority`
+- `Reachability`
+- `Mechanical`
+- `Status`
+- `PowerNode`
+- `Site`
+- `Inventories`
+- `Wonder`
+- `Dwelling`
+- `Clutch`
+- `Manufactory`
+- `BreedingPod`
+- `RangedEffect`
+- `DistrictBuilding`
+- `LastDistrictRef`
+
+This projection split is closer to Timberborn's own apparent pattern:
+
+- static/template-like data stays stable,
+- narrow runtime state is snapshotted,
+- special subsystems get specialized thread-safe projections when needed.
+
+### Suggested Timberbot beaver projection split
+
+`CachedBeaver` is an even cleaner candidate for a projection split than `CachedBuilding`.
+
+#### `BeaverDefinition`
+
+Stable identity data:
+
+- `Id`
+- `Name`
+- `IsBot`
+
+#### `BeaverState`
+
+Periodic snapshot data:
+
+- `Wellbeing`
+- `X`, `Y`, `Z`
+- `Workplace`
+- `District`
+- `HasHome`
+- `Contaminated`
+- `LifeProgress`
+- `DeteriorationProgress`
+- `IsCarrying`
+- `CarryingGood`
+- `CarryAmount`
+- `LiftingCapacity`
+- `Overburdened`
+- `AnyCritical`
+
+#### `BeaverDetailState`
+
+Nested payload used by full-detail reads and wellbeing summaries:
+
+- `Needs`
+
+Where each `CachedNeed` contains:
+
+- `Id`
+- `Group`
+- `Points`
+- `Wellbeing`
+- `Favorable`
+- `Critical`
+- `Active`
+
+#### Fields that should stay out of the published read model
+
+These are main-thread cache maintenance fields:
+
+- `Go`
+- `NeedMgr`
+- `WbTracker`
+- `Worker`
+- `Life`
+- `Carrier`
+- `Deteriorable`
+- `Contaminable`
+- `Dweller`
+- `Citizen`
+- `LastWorkplaceRef`
+- `LastDistrictRef`
+
+This split keeps almost the entire beaver read model as a flat snapshot record. The only heavy nested payload is `Needs`, which makes beavers a strong candidate for a leaner projection-based design.
+
+### Suggested Timberbot natural-resource projection split
+
+`CachedNaturalResource` is already close to the desired projection shape.
+
+#### `NaturalResourceDefinition`
+
+Stable identity/classification data:
+
+- `Id`
+- `Name`
+- `Cuttable`
+- `Gatherable`
+
+If classification should be fully detached from live component refs, these can become flat booleans such as:
+
+- `IsCuttable`
+- `IsGatherable`
+
+#### `NaturalResourceState`
+
+Periodic snapshot data:
+
+- `X`, `Y`, `Z`
+- `Alive`
+- `Grown`
+- `Growth`
+- `Marked`
+
+#### Fields that should stay out of the published read model
+
+These are main-thread cache maintenance fields:
+
+- `BlockObject`
+- `Living`
+- `Cuttable`
+- `Gatherable`
+- `Growable`
+
+Unlike buildings and beavers, natural resources do not need a separate heavy detail payload. Their public read model can be almost entirely a flat snapshot record with a very small identity/classification layer.
+
 ## Working rule
 
 - If the type is explicitly `ThreadSafe*`, it is the primary candidate for off-thread reads.
