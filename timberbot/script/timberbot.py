@@ -340,7 +340,7 @@ class Timberbot:
         return self._post("/api/building/floodgate", {"id": building_id, "height": height})
 
     def debug(self, target="help", **kwargs):
-        """Debug inspect game internals. Targets: help, fields, inspect, preview, entity. Pass extra key:value args."""
+        """Generic live debug surface. Targets include help, roots, get, fields, describe, call, compare, assert, validate, validate_all."""
         body = {"target": target}
         body.update(kwargs)
         return self._post("/api/debug", body)
