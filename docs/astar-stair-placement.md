@@ -118,10 +118,10 @@ That is an overestimate. Once `h` overestimates, the search is no longer guarant
 
 ### Why `path = 1` fixes it
 
-If the minimum traversable edge cost is `1`, then Manhattan distance times `1` is a valid lower bound:
+If the minimum traversable edge cost is `1`, then plain Manhattan distance is a valid lower bound:
 
 - every remaining move to the goal costs at least `1`
-- therefore `h = Manhattan * 1` can never overestimate
+- therefore `h = abs(gx - x) + abs(gy - y)` can never overestimate
 
 That restores true A* optimality while still making existing paths cheaper than fresh ground.
 
@@ -132,10 +132,40 @@ We want real A*, not Dijkstra.
 Therefore:
 
 - existing path reuse should cost `1`, not `0`
-- the heuristic should use the true minimum edge cost: `h = Manhattan * 1`
-- any style bias should remain only a tie-breaker and must not outweigh real `g + h`
+- the heuristic should be plain Manhattan distance: `h = abs(gx - x) + abs(gy - y)`
+- the score should be exactly `f = g + h`
+- style bias must NOT be added into `f`
+- if we keep any path-shaping preference, it may only be used as a secondary ordering key when two nodes have equal `f`
 
 With that change, the stair-edge graph design remains sound.
+
+### Implementation details for real safe A*
+
+In `AStarPath()` the safe implementation should look like this conceptually:
+
+- start heuristic: `h0 = abs(gx - sx) + abs(gy - sy)`
+- per-neighbor heuristic: `h = abs(gx - nx) + abs(gy - ny)`
+- final score: `nf = tentG + h`
+
+That means:
+
+- remove the current `* 2` heuristic scaling
+- do not replace it with `* 1`; just use plain Manhattan
+- remove `bias` from the numeric `f` score
+- keep `edgeCost >= 255` as the impassable sentinel check
+
+Safe pseudocode:
+
+```csharp
+int h0 = Math.Abs(gx - sx) + Math.Abs(gy - sy);
+fScore[startIdx] = h0;
+open.Add((h0, startIdx));
+...
+int h = Math.Abs(gx - nx) + Math.Abs(gy - ny);
+int nf = tentG + h;
+```
+
+If path shape still matters (`direct` vs `straight`), do not encode that preference by changing `nf`. Instead, keep the optimality-preserving score untouched and use shape preference only as a secondary tie-break among equal-`f` candidates.
 
 ## Key files
 
@@ -191,13 +221,26 @@ For each tile (lx,ly) and each neighbor direction d:
 
 1. **Change existing path cost from `0` to `1`**: true A* needs a positive minimum edge cost so Manhattan can be an admissible heuristic.
 
-2. **Set the heuristic to `Manhattan * 1`**: once existing path cost is `1`, the minimum traversable edge cost is `1`, so this becomes a valid lower bound.
+2. **Use plain Manhattan for the heuristic**: once existing path cost is `1`, the minimum traversable edge cost is `1`, so `h = abs(gx - x) + abs(gy - y)` is admissible.
 
-3. **stoppedAt position**: When `sections > 0` and we stop after N stair crossings, `stoppedAt` must report the stair EXIT tile (higher z), not the entrance. The next invocation starts from stoppedAt.
+3. **Set the score to exactly `f = g + h`**: remove style bias from the numeric `f` score so the algorithm remains mathematically safe A*.
 
-4. **Multi-level stairs**: Currently marked impassable. Need to check if platforms are unlocked, then model multi-level ramps as a sequence of stair+platform placements with higher cost.
+4. **If needed, keep style only as a secondary tie-breaker**: `direct` vs `straight` should affect ordering only when two nodes have equal `f`, not by changing the score itself.
 
-5. **Edge direction consistency**: The ndx/ndy (neighbor offset) vs ddx/ddy (travel direction) confusion caused multiple bugs. The grid uses ndx/ndy convention. The A* uses ddx/ddy. The `opposite` array bridges them. This mapping is fragile and needs careful documentation or unification.
+5. **stoppedAt position**: When `sections > 0` and we stop after N stair crossings, `stoppedAt` must report the stair EXIT tile (higher z), not the entrance. The next invocation starts from stoppedAt.
+
+6. **Multi-level stairs**: Currently marked impassable. Need to check if platforms are unlocked, then model multi-level ramps as a sequence of stair+platform placements with higher cost.
+
+7. **Edge direction consistency**: The ndx/ndy (neighbor offset) vs ddx/ddy (travel direction) confusion caused multiple bugs. The grid uses ndx/ndy convention. The A* uses ddx/ddy. The `opposite` array bridges them. This mapping is fragile and needs careful documentation or unification.
+
+## Implementation checklist
+
+- In `AStarPath()`, change the start heuristic from `Manhattan * 2` to plain Manhattan
+- In `AStarPath()`, change neighbor scoring from `tentG + baseH * 2 + bias` to `tentG + baseH`
+- Remove `bias` from the numeric `f` score
+- If needed, keep style preference only as a secondary ordering key among equal-`f` nodes
+- Keep `if (edgeCost >= 255) continue;` exactly as the impassable-edge check
+- Update comments to say the algorithm is only true A* when `f = g + h` and `h` is admissible
 
 ## Commits so far
 
