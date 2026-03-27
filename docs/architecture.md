@@ -1,30 +1,54 @@
 # Architecture
 
-How Timberbot's HTTP API works under the hood.
+How Timberbot works after the native `ReadV2` cutover.
+
+This document describes the current live architecture, not the historical double-buffer design. For the migration rationale and validation history, see [`fresh-on-request-snapshots.md`](fresh-on-request-snapshots.md).
+
+## Current state
+
+Timberbot now has one live read stack:
+
+- canonical read surface: `/api/*`
+- read implementation: [`TimberbotReadV2`](../timberbot/src/TimberbotReadV2.cs)
+- write implementation: [`TimberbotWrite`](../timberbot/src/TimberbotWrite.cs)
+- entity lookup / compatibility layer: [`TimberbotEntityRegistry`](../timberbot/src/TimberbotEntityRegistry.cs)
+
+Removed:
+
+- `TimberbotRead`
+- `/api/v1/*`
+- the old public split between legacy and v2 routes
+
+Still present:
+
+- `TimberbotEntityRegistry` still keeps some older cache/index state for support code
+- `RefreshCachedState()` still runs on cadence for registry-backed data used by writes, placement, debug, and some aggregate reads
+
+So the important distinction is:
+
+- **the public read API is no longer served by the old read class**
+- **the registry still contains transitional cache/index responsibilities**
 
 ## Thread model
 
 ```
-MAIN THREAD (Unity)                    BACKGROUND THREAD (HttpListener)
-========================               ================================
-UpdateSingleton() [every frame]        ListenLoop() [blocking accept]
-  |                                      |
-  +-- RefreshCachedState() [1s cadence]  +-- GET request arrives
-  |     |                                |     |
-  |     +-- update _*Write buffers       |     +-- RouteRequest() reads _*Read
-  |     +-- refresh districts in place   |     +-- TimberbotJw serialization
-  |     +-- swap refs (atomic)           |     +-- Respond() sends JSON
-  |     |   _*Read <-> _*Write           |
-  |     |                                +-- POST request arrives
-  +-- RefreshMainThreadData() [1s]             |
-  |     |                                      +-- queue to _pending
-  |     +-- pre-build science JSON             |
-  |     +-- pre-build distribution JSON        (main thread processes next frame)
-  |     |
-  +-- DrainRequests() [POST only]
-  |     |
-  |     +-- RouteRequest() mutates game
-  |     +-- Respond() sends JSON
+MAIN THREAD (Unity)                         BACKGROUND THREAD (HttpListener)
+========================                    ================================
+UpdateSingleton() [every frame]             ListenLoop() [blocking accept]
+  |                                           |
+  +-- DrainRequests() [POST only]             +-- GET request arrives
+  |     |                                     |     |
+  |     +-- RouteRequest() mutates game       |     +-- RouteRequest()
+  |     +-- Respond() sends JSON              |     +-- ReadV2 serves from:
+  |                                           |           - published snapshots, or
+  +-- ReadV2.ProcessPendingRefresh()          |           - explicit thread-safe services
+  |     |                                     |     +-- TimberbotJw serialization
+  |     +-- satisfy waiting fresh reads       |     +-- Respond() sends JSON
+  |     +-- publish immutable snapshots       |
+  |                                           +-- POST request arrives
+  +-- Registry.RefreshCachedState() [1s]            |
+  |     |                                           +-- queue to _pending
+  |     +-- refresh registry-backed support data
   |
   +-- FlushWebhooks() [every frame]
         |
@@ -33,217 +57,329 @@ UpdateSingleton() [every frame]        ListenLoop() [blocking accept]
 
 | Location | Thread | Blocks game? |
 |---|---|---|
-| HTTP listener (accept + queue) | background | no |
-| All GET requests (reads) | background (listener thread) | **no** |
-| All POST requests (writes) | main thread via `DrainRequests` | yes, for duration |
-| JSON serialization (`Respond`) | same thread as request | no for GETs |
-| `RefreshCachedState` | main thread, 1s cadence | <1ms for 3500 entities |
-| `RefreshMainThreadData` | main thread, 1s cadence | <1ms (science + distribution) |
-| Double buffer swap | main thread, after refresh | ~0ms (pending changes + ref swap) |
+| HTTP listener accept/GET response | background | no |
+| Canonical GET endpoints | background | no |
+| POST endpoints | main thread via `DrainRequests()` | yes, for duration |
+| `ReadV2.ProcessPendingRefresh()` | main thread | yes, bounded by snapshot build work |
+| `Registry.RefreshCachedState()` | main thread, cadence | yes, small ongoing cost |
+| Webhook flush scheduling | main thread | negligible |
 
-## Double buffer
+## High-level pieces
 
-`TimberbotDoubleBuffer<T>` generic class manages two pre-allocated lists per entity type. Main thread writes to `.Write`, background reads from `.Read`. Ref swap publishes updates.
+### `TimberbotService`
+
+[`TimberbotService`](../timberbot/src/TimberbotService.cs) is the singleton orchestrator.
+
+It owns:
+
+- settings load
+- HTTP server lifetime
+- event bus registration
+- `Registry.BuildAllIndexes()`
+- `ReadV2.BuildAll()`
+- per-frame:
+  - `DrainRequests()`
+  - `ReadV2.ProcessPendingRefresh(now)`
+  - `Registry.RefreshCachedState()`
+  - `WebhookMgr.FlushWebhooks(now)`
+
+### `TimberbotReadV2`
+
+[`TimberbotReadV2`](../timberbot/src/TimberbotReadV2.cs) is now the only read service.
+
+It owns:
+
+- fresh-on-request building snapshots
+- value stores for singleton/aggregate endpoints
+- collection/value/paged route helpers
+- native serialization for `/api/*`
+- some direct use of explicit Timberborn thread-safe services:
+  - terrain
+  - water
+  - soil moisture / contamination safety-wrapped reads
+
+Important rule:
+
+- listener-thread reads must come from published DTO snapshots or explicitly thread-safe game services
+- listener-thread code must not walk live Timberborn entity/component graphs
+
+### `TimberbotEntityRegistry`
+
+[`TimberbotEntityRegistry`](../timberbot/src/TimberbotEntityRegistry.cs) is the compatibility and lookup layer.
+
+It currently owns:
+
+- entity lifecycle tracking via Timberborn events
+- legacy numeric ID compatibility
+- GUID-backed identity mapping over Timberborn `EntityRegistry`
+- `FindEntity(...)` for writes and placement
+- registry-backed cached/indexed data still used by support paths
+
+Internal identity model:
+
+- canonical internal entity key: Timberborn `EntityComponent.EntityId` (`Guid`)
+- public API entity key: legacy numeric `id`
+
+That split exists because:
+
+- Timberborn’s real registry is GUID-based
+- the public API is still intentionally human-usable with short numeric IDs
+
+### `TimberbotWrite`
+
+[`TimberbotWrite`](../timberbot/src/TimberbotWrite.cs) handles all mutations on the main thread.
+
+Write flow:
+
+- HTTP listener parses request
+- request is queued
+- `DrainRequests()` executes on Unity thread
+- write resolves numeric `id` through `TimberbotEntityRegistry`
+- mutation runs against live game services/components
+
+### `TimberbotPlacement`
+
+[`TimberbotPlacement`](../timberbot/src/TimberbotPlacement.cs) handles:
+
+- `find_placement`
+- `place_building`
+- `demolish_building`
+- path routing helpers
+
+It still uses registry/state helpers and explicit thread-safe terrain/water services where appropriate.
+
+### `TimberbotWebhook`
+
+[`TimberbotWebhook`](../timberbot/src/TimberbotWebhook.cs) batches event pushes and sends them out-of-band.
+
+## Read architecture
+
+There are three main read patterns inside `ReadV2`.
+
+### 1. Projection-backed collections
+
+Used for entity-style endpoints like:
+
+- `buildings`
+- `beavers`
+- `trees`
+- `crops`
+- `gatherables`
+
+Shape:
+
+- main-thread tracked refs
+- published DTO snapshot
+- listener-thread filtering / pagination / serialization
+
+For buildings specifically, `ReadV2` uses a fresh-on-request `ProjectionSnapshot<BuildingDefinition, BuildingState, BuildingDetailState>`.
+
+Properties:
+
+- requests ask for fresh data
+- main thread coalesces waiting readers
+- one publish satisfies multiple readers
+- responses serialize from the published snapshot off-thread
+
+### 2. Value stores
+
+Used for singleton-ish endpoints like:
+
+- `settlement`
+- `time`
+- `weather`
+- `speed`
+- `workhours`
+- `science`
+- `distribution`
+
+Shape:
+
+- main-thread builder produces a DTO or raw JSON snapshot
+- waiting readers block until the next publish for that store
+- listener thread serializes the published result
+
+### 3. Derived reads
+
+Used for aggregate endpoints like:
+
+- `summary`
+- `alerts`
+- `power`
+- `wellbeing`
+- `districts`
+- `resources`
+- `population`
+- `tree_clusters`
+- `food_clusters`
+
+These are built from:
+
+- published snapshots
+- registry-backed cached/indexed data
+- explicit thread-safe surfaces
+- a small amount of safe direct service data where needed
+
+## Fresh-on-request behavior
+
+The fresh-read contract is:
+
+- a GET may wait for the next main-thread publish
+- the returned data is fresh as of the frame that serviced the request
+- concurrent readers are intended to coalesce onto shared publishes when possible
+
+This is different from the old always-on cache mirror:
+
+- old model: continuously refresh a mirrored read graph
+- current model: publish snapshots when readers need them
+
+Current compromise:
+
+- `ReadV2` owns the live read contract
+- `TimberbotEntityRegistry` still refreshes some support data on cadence
+
+So the architecture is already post-legacy, but not yet fully “zero background refresh everywhere.”
+
+## ID model
+
+Timberbot uses two ID forms.
+
+### Public ID
+
+- numeric `id`
+- exposed in GET payloads
+- accepted by write endpoints
+- easy for humans and scripts to type
+
+Source:
+
+- Unity-style instance handle associated with the entity’s `GameObject`
+
+### Internal ID
+
+- `Guid`
+- Timberborn `EntityComponent.EntityId`
+
+Used for:
+
+- canonical internal entity identity
+- bridging into Timberborn `EntityRegistry`
+
+Compatibility mapping lives in `TimberbotEntityRegistry`:
+
+- `int -> Guid`
+- `Guid -> int`
+
+This lets the mod align with Timberborn internally without forcing GUIDs into the public API.
+
+## Current request flow
+
+### GET
 
 ```
-Cadence N:   main refreshes _buildings.Write  |  background reads _buildings.Read
-             [_buildings.Swap()]
-Cadence N+1: main refreshes old .Read         |  background reads freshly updated buffer
+HTTP GET
+  -> ListenLoop()
+  -> RouteRequest()
+  -> ReadV2 endpoint method
+     -> request fresh snapshot/value if needed
+     -> wait for publish if needed
+     -> filter/paginate/serialize from published data
+  -> Respond()
 ```
 
-**Rules:**
-- `DoubleBuffer.Add(writeItem, readItem)`: queued via `ConcurrentQueue`, applied at `Swap()` time
-- `DoubleBuffer.Add(item)`: same deferral, safe for value-only types
-- `DoubleBuffer.RemoveAll()`: queued, applied at `Swap()` time
-- `RefreshCachedState`: updates `.Write` only, then `.Swap()` (which applies pending adds/removes first)
-- No copy-back. Old read buffer (now write) has same entities, 1-cadence-stale values
-- Structural changes (entity create/delete) have up to 1-cadence delay, same staleness as mutable fields
-- Neither thread modifies `.Read` during iteration. Background foreach is always safe.
-
-**Reference-type fields** (`List<T>`, `Dictionary<K,V>`) must be separate instances per buffer. Shared references cause mutation-during-read corruption. Use `Add(writeItem, readItem)` with distinct instances. Immutable-after-add fields (e.g. `OccupiedTiles`) are safe to share.
-
-## Entity lifecycle
+### POST
 
 ```
-Entity created (building placed, beaver born, tree spawned)
-  -> EntityInitializedEvent (EventBus)
-  -> OnEntityInitialized()
-  -> AddToIndexes(): resolve component refs, add to both read+write buffers
-
-Entity destroyed (building demolished, beaver died, tree cut)
-  -> EntityDeletedEvent (EventBus)
-  -> OnEntityDeleted()
-  -> RemoveFromIndexes(): remove from both buffers + entity cache
-```
-
-## Cached classes
-
-Component references resolved once at entity-add time. Mutable state refreshed on main thread at 1Hz cadence. All classes (not structs) -- modified in-place, `Clone()` via `MemberwiseClone` for double-buffer independence.
-
-**Booleans are stored as `int` (0/1), not `bool`.** This is intentional -- the data layer stores 0/1 natively so both toon and JSON output emit integers without format translation. Game API bools are converted at assignment time with `? 1 : 0`. When reading these fields in C#, use `!= 0` / `== 0` instead of truthy/falsy.
-
-```
-CachedBuilding {
-  // immutable refs (set at add-time, never refreshed)
-  Entity, Id, Name, BlockObject, Pausable, Floodgate, BuilderPrio, Workplace, WorkplacePrio,
-  Reachability, Mechanical, Status, PowerNode, Site, Inventories, Wonder, Dwelling, Clutch,
-  Manufactory, BreedingPod, RangedEffect, DistrictBuilding
-  HasFloodgate(int), HasClutch(int), HasWonder(int), IsGenerator(int), IsConsumer(int),
-  HasEntrance(int)
-  EffectRadius, NominalPowerInput, NominalPowerOutput, X, Y, Z, Orientation
-  OccupiedTiles (immutable List, safe to share between buffers)
-  EntranceX, EntranceY
-
-  // mutable primitives (refreshed by RefreshCachedState at 1Hz)
-  Finished(int), Paused(int), Unreachable(int), Powered(int),
-  AssignedWorkers, DesiredWorkers, MaxWorkers, Dwellers, MaxDwellers,
-  FloodgateHeight, FloodgateMaxHeight, BuildProgress, MaterialProgress, HasMaterials(int),
-  ClutchEngaged(int), WonderActive(int),
-  PowerDemand, PowerSupply, PowerNetworkId,
-  CurrentRecipe, ProductionProgress, ReadyToProduce(int), NeedsNutrients(int),
-  Stock, Capacity, District, ConstructionPriority, WorkplacePriorityStr
-
-  // mutable reference types (SEPARATE instances per buffer!)
-  Recipes (List<string>), Inventory (Dict<string,int>), NutrientStock (Dict<string,int>)
-}
-
-CachedNaturalResource {
-  // immutable refs
-  Id, Name, BlockObject, Living, Cuttable, Gatherable, Growable, X, Y, Z
-  // mutable primitives (all value types -- safe to share)
-  Alive(int), Grown(int), Growth(float), Marked(int)
-}
-
-CachedBeaver {
-  // immutable refs
-  Id, Name, IsBot(int), Go, NeedMgr, WbTracker, Worker, Life, Carrier,
-  Deteriorable, Contaminable, Dweller, Citizen
-  // mutable primitives
-  Wellbeing, X, Y, Z, Workplace, District, HasHome(int), Contaminated(int),
-  LifeProgress, DeteriorationProgress,
-  IsCarrying(int), CarryingGood, CarryAmount, LiftingCapacity, Overburdened(int),
-  AnyCritical(int)
-  // mutable reference type (SEPARATE instance per buffer!)
-  Needs (List<CachedNeed>)  -- CachedNeed.Favorable/Critical/Active are int 0/1
-}
-
-CachedDistrict {
-  Name, Adults, Children, Bots
-  Resources (Dict<string, (int available, int all)>) -- goodId -> (available, total)
-  ResourcesToon (string) -- pre-serialized: "Water":50,"Log":236,...
-  ResourcesJson (string) -- pre-serialized: "Water":{"available":50,"all":54},...
-  // not double-buffered (tiny list, 1-3 items, refreshed in place)
-}
+HTTP POST
+  -> ListenLoop()
+  -> parse JSON body
+  -> enqueue PendingRequest
+  -> [next frame] DrainRequests()
+  -> RouteRequest()
+  -> Write/Placement/Webhook mutation
+  -> Respond()
 ```
 
 ## Serialization
 
-`TimberbotJw` is a fluent zero-alloc JSON writer with depth-aware auto-separator handling. Each component owns its own instance sized for its workload. The main read instance (300KB) lives in `TimberbotEntityCache.Jw`; smaller instances (512-1024 bytes) exist in HttpServer, Debug, Write, Webhook, and Placement. Each is `Reset()` per request, serial within its owning thread.
+`TimberbotJw` is still the core JSON writer.
 
-```csharp
-// main read instance (300KB) -- used by all GET list endpoints
-public readonly TimberbotJw Jw = new TimberbotJw(300000);
+Current usage pattern:
 
-// usage -- auto-commas, nesting-aware, fluent chaining
-var jw = _jw.Reset().OpenArr();
-foreach (var c in _buildings.Read)
-{
-    jw.OpenObj()
-        .Key("id").Int(c.Id)
-        .Key("name").Str(c.Name)
-        .Key("finished").Bool(c.Finished)
-        .CloseObj();
-}
-jw.CloseArr();
-return jw.ToString();
-```
+- each component owns its own writer instance
+- `Reset()` per request/build
+- no shared listener-thread/main-thread writer instance for live API paths
 
-Pre-serialized strings detected in `Respond()`: `data is string s ? s : JsonConvert.SerializeObject(data)`.
+Major live writers:
 
-## Reusable collections (TimberbotRead)
+- `ReadV2` main collection/value writer
+- smaller dedicated builders inside `ReadV2` for science/distribution
+- `Write`
+- `Placement`
+- `Webhook`
+- `HttpServer` for small error responses
 
-GET endpoints run on the background thread. To avoid per-call heap allocations, TimberbotRead holds field-level collections that are allocated once and cleared per call:
+## Spatial reads
 
-| Field | Used by | Replaces |
-|---|---|---|
-| `_treeSpecies`, `_cropSpecies` | CollectSummary | per-call Dicts |
-| `_roleCounts`, `_districtStats`, `_districtDCs` | CollectSummary | per-call Dicts |
-| `_needToGroup`, `_groupMaxPerBeaver`, `_wbGroupTotals`, `_districtWb` | CollectSummary | per-call Dicts |
-| `_resourceTotals` | CollectSummary | per-call Dict |
-| `_invSb`, `_recSb` | CollectBuildings full toon | per-building StringBuilders |
-| `_clusterCells`, `_clusterSpecies`, `_clusterSorted` | TreeClusters, FoodClusters, WriteClustersFiltered | per-call Dicts + List |
-| `_tileOccupants`, `_tileEntrances`, `_tileSeedlings`, `_tileDeadTiles`, `_tileSb` | CollectTiles | per-call Dict + HashSets + SB |
-| `_cropNames`, `_roleMap` | CollectSummary | static, never reallocated |
+`/api/tiles` is now served by `ReadV2`.
 
-## Main-thread cached endpoints
+It uses:
 
-Some endpoints require Unity API calls (`GetSpec`, `GetComponent`) that are unsafe on the background HTTP thread. These are pre-built as JSON strings on the main thread in `RefreshMainThreadData()`, called every 1s alongside `RefreshCachedState`. The background thread returns the cached string directly.
+- `IThreadSafeWaterMap`
+- `IThreadSafeColumnTerrainMap`
+- safe-wrapped soil reads
+- registry-backed cached building/resource occupancy data
 
-| Endpoint | Why cached | What runs on main thread |
-|---|---|---|
-| `CollectScience` | `BuildingService.Buildings` + `GetSpec<BuildingSpec>()` | Iterates all buildings, reads spec + unlock status |
-| `CollectDistribution` | `GetComponent<DistrictDistributionSetting>()` | Iterates districts, reads import/export settings |
+That means tile queries no longer depend on the removed legacy read class.
 
-## Data formats
+## Data freshness and staleness
 
-All endpoints accept a `format` parameter: `toon` (default) or `json`.
+Not all data in Timberbot is fresh for the same reason.
 
-- **toon**: compact token-efficient output for LLM/AI consumption. The `toons` library auto-detects uniform arrays and renders them as CSV tables with a header row.
-- **json**: full nested objects for programmatic access. Arrays of objects with named keys.
+### Fresh-on-request
 
-### CRITICAL: uniform schema rule
+Examples:
 
-**Every object in an array MUST have identical keys in BOTH formats at ALL detail levels.** No conditional/optional fields. Missing components get defaults: `""` for strings, `0` for numbers, `false` for bools. JSON collections get empty `{}` or `[]` when absent.
+- buildings collection snapshots
+- value-store-backed singleton endpoints
 
-Why: the `toons` library detects uniform arrays -> compact CSV tables. Non-uniform schemas (different objects having different keys) break detection and fall back to verbose YAML-like output (10-17x larger). Non-uniform schemas also make programmatic parsing fragile.
+Properties:
 
-**When adding new fields to any list endpoint: add them to EVERY object in the array with appropriate defaults.**
+- request-triggered
+- waits for publish
+- best freshness guarantee
 
-### format differences
+### Cadence-refreshed support data
 
-The schema is identical between toon and json. The only structural difference is how collections are represented:
+Examples:
 
-| field | toon | json |
-|---|---|---|
-| `occupants` (tiles) | `"Path:z2/Lodge:z2-4"` (flat string, z-ranges) | `[{"name":"Path","z":2},...]` (array) |
-| `inventory` (buildings full) | `"Water:30/Logs:5"` (flat string) | `{"Water":30,"Logs":5}` (object) |
-| `recipes` (buildings full) | `"Recipe1/Recipe2"` (flat string) | `["Recipe1","Recipe2"]` (array) |
-| `find_placement` booleans | 0/1 integers | 0/1 integers |
+- registry-backed caches/indexes still maintained by `RefreshCachedState()`
 
-### Client design
+Properties:
 
-The Python client (`timberbot.py`) defaults to toon format for CLI output. Internal methods that parse data programmatically (e.g. `map()`) force JSON via `_post_json()` to get structured arrays.
-
-### Test suite bots
-
-| Bot | Mode | Purpose |
-|---|---|---|
-| `self.bot` | JSON | All functional tests -- structured data for assertions |
-| `self.strict_bot` | JSON | Error tests -- raises TimberbotError |
-| `self.toon_bot` | toon | Format validation -- verifies toon output is compact |
-| `jbot` (local) | JSON | json_schema test -- validates JSON structure |
-| `tbot` (local) | toon | toon_schema test -- validates toon structure |
-
-Rule: functional tests that parse data use JSON. Tests that validate output format use toon.
+- still refreshed on the main thread every `refreshIntervalSeconds`
+- used by support paths and some remaining derived computations
+- transitional, not the desired final endstate
 
 ## Webhooks
 
-68 event handlers registered on Timberborn's `EventBus` (66 in TimberbotWebhook, 2 in TimberbotEntityCache). See [webhooks.md](webhooks.md) for the full event list, setup, and user-facing docs.
+Webhooks remain event-driven and batched.
 
-**Internals:**
+Behavior:
 
-- Events accumulate in `_pendingEvents` list on the main thread via `PushEvent()`
-- `FlushWebhooks()` runs every `webhookBatchMs` (default 200ms) from `UpdateSingleton`
-- Each flush sends ONE batched JSON array POST per webhook via `ThreadPool.QueueUserWorkItem`
-- Static `HttpClient` with 5s timeout
-- **Batching:** Configurable via `webhookBatchMs` in settings.json (0 = immediate, default 200ms)
-- **Circuit breaker:** N consecutive failures (default 30, configurable) disables the webhook, logged via `TimberbotLog`
-- **Zero allocations with no subscribers:** `PushEvent()` early-exits if `_webhooks.Count == 0`
-- Subscribers filter by event name (null = all events)
+- events accumulate on the main thread
+- `FlushWebhooks()` sends batches on a configurable cadence
+- dispatch happens through background work items
+
+Settings:
+
+- `webhooksEnabled`
+- `webhookBatchMs`
+- `webhookCircuitBreaker`
 
 ## Settings
 
-`settings.json` in mod folder (`Documents/Timberborn/Mods/Timberbot/`):
+`settings.json` in the mod folder:
 
 ```json
 {
@@ -257,55 +393,62 @@ Rule: functional tests that parse data use JSON. Tests that validate output form
 }
 ```
 
-- `httpHost`: host address for Python client remote connections (read by timberbot.py only, not the C# server). Default `"127.0.0.1"`
-- `webhookBatchMs`: batching window in milliseconds (default 200, 0 = immediate dispatch)
-- `webhookCircuitBreaker`: consecutive failures before disabling a webhook (default 30)
+Current meaning:
 
-Loaded once on game load. Missing file or fields use defaults.
+- `refreshIntervalSeconds` still affects `Registry.RefreshCachedState()`
+- it is no longer the main public read freshness mechanism
 
-## Pagination & Filtering
+## Test posture
 
-List endpoints support server-side pagination and filtering via query params:
+The live harness is now [`test_v2.py`](../timberbot/script/test_v2.py), despite the old name.
 
-- **Pagination:** `?limit=100` (default), `?offset=0`. `limit=0` = unlimited (flat array).
-- **Filtering:** `?name=Farm` (substring), `?x=120&y=140&radius=20` (proximity).
-- Filters apply BEFORE pagination. `total` reflects filtered count.
-- `PassesFilter()` helper in TimberbotRead keeps filtering DRY across all list endpoints.
-- Paginated response: `{total, offset, limit, items:[...]}`. Unlimited: flat `[...]`.
+It now validates the current `/api/*` surface directly.
 
-## Faction Detection
+Main modes:
 
-`TimberbotPlacement.DetectFaction()` uses `FactionService.Current.Id` (from `Timberborn.GameFactionSystem`) to detect the active faction at startup. The suffix (e.g. `.IronTeeth`, `.Folktails`) is stored in the static `TimberbotEntityCache.FactionSuffix` and used by `CleanName()` (strip faction from entity names) and `RoutePath()` (correct stairs/platform prefabs).
+- `smoke`
+- `freshness`
+- `write_to_read`
+- `performance`
+- `concurrency`
+- `all`
 
-## Request flow
+Historical oracle data was preserved before legacy removal:
 
-### GET (background thread, zero main-thread cost)
+- final live `v1` parity run
+- full dumped legacy fixtures under `timberbot/test-results/v1-fixtures/`
 
-```
-HTTP request -> ListenLoop -> parse query params (format, detail, limit, offset, name, x, y, radius)
-  -> RouteRequest -> read _*Read buffers -> PassesFilter -> pagination
-  -> TimberbotJw serialization -> Respond -> HTTP response
-```
+## Transitional debt still present
 
-### POST (main thread via queue)
+The architecture is much cleaner than before, but it is not fully finished.
 
-```
-HTTP request -> ListenLoop -> parse body + query params -> enqueue PendingRequest
-  -> [next frame] DrainRequests -> RouteRequest -> mutate game state
-  -> Respond -> HTTP response
-```
+Still transitional:
 
-## Spatial memory
+- `TimberbotEntityRegistry` still carries older cache/index responsibilities
+- `RefreshCachedState()` still runs every cadence
+- some aggregate reads still depend on registry-backed cached data rather than purely published snapshots
 
-Persistent colony knowledge in `~/Documents/Timberborn/Mods/Timberbot/memory/`:
+The likely endstate from here is:
 
-- **`brain.toon`** -- persistent state in toon format: goal, task queue, maps index. Summary is NOT persisted (always fetched live from `/api/summary`). Updated by `brain` command.
-- **`map-{name}-{x1}x{y1}y-{x2}x{y2}y.txt`** -- named ANSI map files with full encoding (z-level bg shading, moisture color, building/water/tree characters). Saved via `map ... name:label`, listed via `list_maps`.
+- shrink `TimberbotEntityRegistry` into a thinner lookup/identity adapter
+- move more remaining read-shaping data fully into `ReadV2`
+- further reduce or remove cadence refresh where it no longer serves writes/tooling
 
-Map rendering uses delta-encoded ANSI (only emits escape codes when bg/fg changes from previous tile) to keep output compact (~6KB for 41x41 area vs ~35KB with per-tile encoding).
+## File map
 
-## Data staleness
+Core runtime files:
 
-Mutable values (paused, workers, wellbeing) are up to `refreshIntervalSeconds` stale. Entity presence (which buildings/trees exist) is always current via EventBus. For a bot polling once per minute, 1s staleness is imperceptible.
+- [`TimberbotService.cs`](../timberbot/src/TimberbotService.cs)
+- [`TimberbotReadV2.cs`](../timberbot/src/TimberbotReadV2.cs)
+- [`TimberbotEntityRegistry.cs`](../timberbot/src/TimberbotEntityRegistry.cs)
+- [`TimberbotWrite.cs`](../timberbot/src/TimberbotWrite.cs)
+- [`TimberbotPlacement.cs`](../timberbot/src/TimberbotPlacement.cs)
+- [`TimberbotHttpServer.cs`](../timberbot/src/TimberbotHttpServer.cs)
+- [`TimberbotWebhook.cs`](../timberbot/src/TimberbotWebhook.cs)
+- [`TimberbotDebug.cs`](../timberbot/src/TimberbotDebug.cs)
 
-For file structure and build instructions, see [developing.md](developing.md#file-structure).
+Related docs:
+
+- [`fresh-on-request-snapshots.md`](fresh-on-request-snapshots.md)
+- [`thread-safe-surfaces.md`](thread-safe-surfaces.md)
+- [`developing.md`](developing.md)
