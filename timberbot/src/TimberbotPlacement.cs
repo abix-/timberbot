@@ -402,9 +402,15 @@ namespace Timberbot
                     break;
                 }
 
-                // travel direction from previous waypoint
-                int tdx = waypoints[zChangeWi].Item1 - waypoints[zChangeWi - 1].Item1;
-                int tdy = waypoints[zChangeWi].Item2 - waypoints[zChangeWi - 1].Item2;
+                // travel direction: dominant cardinal axis from z-change toward destination
+                // ensures entrance faces back toward curPos, exit faces toward destination
+                int dirX = x2 - (waypoints[zChangeWi].Item1 + minX);
+                int dirY = y2 - (waypoints[zChangeWi].Item2 + minY);
+                int tdx, tdy;
+                if (System.Math.Abs(dirX) >= System.Math.Abs(dirY))
+                    { tdx = dirX > 0 ? 1 : -1; tdy = 0; }
+                else
+                    { tdx = 0; tdy = dirY > 0 ? 1 : -1; }
                 // stair orientation: faces uphill
                 int updx = goingUp ? tdx : -tdx;
                 int updy = goingUp ? tdy : -tdy;
