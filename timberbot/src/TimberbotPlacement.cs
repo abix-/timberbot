@@ -267,12 +267,10 @@ namespace Timberbot
             return Jw.Result(("id", buildingId), ("name", name), ("demolished", true));
         }
 
-        // Route a path from (x1,y1) to (x2,y2) using A* with integrated stair placement.
-        // BuildCostGrid pre-computes valid stair positions at z-change edges and makes them
-        // traversable (cost=20). A* finds the optimal route in one pass, crossing elevations
-        // through pre-validated stair edges. Walking the result: flat tiles get paths, z-change
-        // edges place stairs from the pre-computed lookup. Stair orientation is determined by
-        // which edge was crossed -- no post-hoc guessing.
+        // Route a path from (x1,y1) to (x2,y2) using safe A* over a coherent 3D surface graph.
+        // Nodes represent walkable surfaces at (x,y,z). Edges represent either flat movement or
+        // directed vertical connectors. Existing stairs/platforms are reusable graph edges/surfaces,
+        // and generated connectors use the same edge abstraction with RequiresPlacement=true.
         public object RoutePath(int x1, int y1, int x2, int y2, string style = "direct", int sections = 0)
         {
             string stairsPrefab = "Stairs" + _factionSuffix;
@@ -284,7 +282,6 @@ namespace Timberbot
             bool stairsUnlocked = stairsBs == null || stairsBs.ScienceCost <= 0 || _buildingUnlockingService.Unlocked(stairsBs);
             bool platformUnlocked = platformBs == null || platformBs.ScienceCost <= 0 || _buildingUnlockingService.Unlocked(platformBs);
 
-            // --- SETUP ---
             const int PADDING = 10;
             int minX = System.Math.Min(x1, x2) - PADDING;
             int minY = System.Math.Min(y1, y2) - PADDING;
@@ -298,134 +295,195 @@ namespace Timberbot
             int gw = maxX - minX + 1;
             int gh = maxY - minY + 1;
 
-            Dictionary<long, StairEdge> stairEdges;
-            int[] gridHeights;
-            var costGrid = BuildCostGrid(minX, minY, gw, gh, out stairEdges, out gridHeights);
             if (style != "direct" && style != "straight") style = "direct";
 
-            var existingPathTiles = new HashSet<long>();
+            List<SurfaceNode> nodes;
+            List<GraphEdge>[] adj;
+            Dictionary<long, List<int>> nodesByTile;
+            int connectorCount;
+            BuildSurfaceGraph(minX, minY, gw, gh, out nodes, out adj, out nodesByTile, out connectorCount);
+
+            string PathKey(int x, int y, int z) => $"P|{x}|{y}|{z}";
+            string PlatformKey(int x, int y, int z) => $"F|{x}|{y}|{z}";
+            string StairKey(int x, int y, int z, int orient) => $"S|{x}|{y}|{z}|{orient}";
+            bool IsBenignOccupied(PlaceBuildingResult r) => r.Error != null && r.Error.StartsWith("occupied by");
+
+            var existingPathKeys = new HashSet<string>();
+            var existingPlatformKeys = new HashSet<string>();
+            var existingStairKeys = new HashSet<string>();
             foreach (var cb in _cache.Buildings.Read)
             {
-                if (cb.OccupiedTiles == null) continue;
-                if (!cb.Name.Contains("Path") && !cb.Name.Contains("Stairs") && !cb.Name.Contains("Platform")) continue;
+                if (cb.Name == null || cb.OccupiedTiles == null) continue;
+                bool isPath = cb.Name.Contains("Path");
+                bool isStairs = cb.Name.Contains("Stairs");
+                bool isPlatform = cb.Name.Contains("Platform");
+                if (!isPath && !isStairs && !isPlatform) continue;
                 foreach (var t in cb.OccupiedTiles)
-                    existingPathTiles.Add((long)t.x * 100000 + t.y);
+                {
+                    if (isPath) existingPathKeys.Add(PathKey(t.x, t.y, t.z));
+                    if (isPlatform) existingPlatformKeys.Add(PlatformKey(t.x, t.y, t.z));
+                }
+                if (isStairs)
+                    existingStairKeys.Add(StairKey(cb.X, cb.Y, cb.Z, ParseOrientation(cb.Orientation ?? "south")));
             }
 
-            var placedTiles = new HashSet<long>();
+            var placedPathKeys = new HashSet<string>();
+            var placedPlatformKeys = new HashSet<string>();
+            var placedStairKeys = new HashSet<string>();
             var errors = new List<string>();
-            int pathCount = 0, stairCount = 0, platformCount = 0, skipped = 0;
             var failedResults = new List<PlaceBuildingResult>();
-
-            // --- SINGLE A* PASS ---
-            // A* now routes through z-change edges where valid stairs exist (cost=20).
-            // Walk the resulting path: place paths on flat tiles, place stairs on z-change edges.
-            var waypoints = AStarPath(costGrid, gw, gh,
-                x1 - minX, y1 - minY, x2 - minX, y2 - minY, gw * gh * 4, style);
-
-            int stairCrossings = 0;
+            int pathCount = 0, stairCount = 0, platformCount = 0, skipped = 0;
+            int connectorCrossings = 0;
             int stoppedX = x2, stoppedY = y2;
             bool stopped = false;
 
-            if (waypoints == null)
+            void TryPlacePathNode(SurfaceNode node)
             {
-                errors.Add($"A* found no route from ({x1},{y1}) to ({x2},{y2}) -- {stairEdges.Count} stair edges in grid");
-            }
-            else
-            {
-                for (int wi = 0; wi < waypoints.Count; wi++)
+                if (!node.PlacePath || node.Z <= 0) return;
+                string key = PathKey(node.X, node.Y, node.Z);
+                if (existingPathKeys.Contains(key) || placedPathKeys.Contains(key)) return;
+                var r = PlaceBuilding("Path", node.X, node.Y, node.Z, "south");
+                if (r.Success)
                 {
-                    int lx = waypoints[wi].Item1, ly = waypoints[wi].Item2;
-                    int px = lx + minX, py = ly + minY;
-                    int idx = ly * gw + lx;
-                    int pz = gridHeights[idx];
-                    if (pz <= 0) continue;
-
-                    // check if this step crosses a z-change (stair edge)
-                    if (wi > 0)
-                    {
-                        int plx = waypoints[wi - 1].Item1, ply = waypoints[wi - 1].Item2;
-                        int prevIdx = ply * gw + plx;
-                        if (gridHeights[idx] != gridHeights[prevIdx])
-                        {
-                            // z-change: look up pre-computed stair placement
-                            long edgeKey = (long)prevIdx * 100000 + idx;
-                            StairEdge se;
-                            if (stairEdges.TryGetValue(edgeKey, out se))
-                            {
-                                if (!stairsUnlocked)
-                                {
-                                    errors.Add($"stairs not unlocked at ({px},{py})");
-                                    stoppedX = plx + minX; stoppedY = ply + minY; stopped = true; break;
-                                }
-
-                                // place the stair building on the lower tile
-                                long skey = (long)se.StairX * 100000 + se.StairY;
-                                if (!existingPathTiles.Contains(skey) && !placedTiles.Contains(skey))
-                                {
-                                    var rs = PlaceBuilding(stairsPrefab, se.StairX, se.StairY, se.BaseZ, OrientNames[se.OrientIdx]);
-                                    if (rs.Success) { stairCount++; placedTiles.Add(skey); }
-                                    else { skipped++; failedResults.Add(rs); errors.Add($"stair failed at ({se.StairX},{se.StairY})"); stoppedX = plx + minX; stoppedY = ply + minY; stopped = true; break; }
-                                }
-
-                                // place entrance path (one tile before stair)
-                                long ekey = (long)se.EntX * 100000 + se.EntY;
-                                if (!existingPathTiles.Contains(ekey) && !placedTiles.Contains(ekey))
-                                {
-                                    int ez = GetTerrainHeight(se.EntX, se.EntY);
-                                    if (ez > 0)
-                                    {
-                                        var er = PlaceBuilding("Path", se.EntX, se.EntY, ez, "south");
-                                        if (er.Success) { pathCount++; placedTiles.Add(ekey); }
-                                        else { skipped++; failedResults.Add(er); }
-                                    }
-                                }
-
-                                // place exit path (one tile after stair, on higher terrain)
-                                long xkey = (long)se.ExtX * 100000 + se.ExtY;
-                                if (!existingPathTiles.Contains(xkey) && !placedTiles.Contains(xkey))
-                                {
-                                    int xz = GetTerrainHeight(se.ExtX, se.ExtY);
-                                    if (xz > 0)
-                                    {
-                                        var xr = PlaceBuilding("Path", se.ExtX, se.ExtY, xz, "south");
-                                        if (xr.Success) { pathCount++; placedTiles.Add(xkey); }
-                                        else { skipped++; failedResults.Add(xr); }
-                                    }
-                                }
-
-                                stairCrossings++;
-                                // sections limit: stop after N stair crossings
-                                if (sections > 0 && stairCrossings >= sections)
-                                {
-                                    stoppedX = se.ExtX; stoppedY = se.ExtY; stopped = true; break;
-                                }
-                                continue; // skip placing a regular path on the z-change tile
-                            }
-                            else
-                            {
-                                errors.Add($"no stair edge from ({plx + minX},{ply + minY}) to ({px},{py})");
-                                stoppedX = plx + minX; stoppedY = ply + minY; stopped = true; break;
-                            }
-                        }
-                    }
-
-                    // flat tile: place path
-                    long key = (long)px * 100000 + py;
-                    if (placedTiles.Contains(key) || existingPathTiles.Contains(key)) continue;
-                    var r = PlaceBuilding("Path", px, py, pz, "south");
-                    if (r.Success) { pathCount++; placedTiles.Add(key); }
-                    else { skipped++; failedResults.Add(r); }
+                    pathCount++;
+                    placedPathKeys.Add(key);
+                }
+                else if (IsBenignOccupied(r))
+                {
+                    placedPathKeys.Add(key);
+                }
+                else
+                {
+                    skipped++;
+                    failedResults.Add(r);
                 }
             }
 
-            // serialize
+            List<int> startIds;
+            List<int> goalIds;
+            if (!nodesByTile.TryGetValue(TileKey(x1, y1), out startIds) || startIds.Count == 0)
+                startIds = null;
+            if (!nodesByTile.TryGetValue(TileKey(x2, y2), out goalIds) || goalIds.Count == 0)
+                goalIds = null;
+
+            if (startIds == null || goalIds == null)
+            {
+                if (startIds == null) errors.Add($"no walkable surface at start ({x1},{y1})");
+                if (goalIds == null) errors.Add($"no walkable surface at goal ({x2},{y2})");
+            }
+            else
+            {
+                var path = AStarPath(nodes, adj, startIds, goalIds, nodes.Count * 8, style);
+                if (path == null)
+                {
+                    errors.Add($"A* found no route from ({x1},{y1}) to ({x2},{y2}) -- {connectorCount} connectors in graph");
+                }
+                else
+                {
+                    if (path.Nodes.Count > 0)
+                        TryPlacePathNode(nodes[path.Nodes[0]]);
+
+                    for (int i = 0; i < path.Edges.Count; i++)
+                    {
+                        var edge = path.Edges[i];
+                        var src = nodes[path.Nodes[i]];
+                        var dst = nodes[path.Nodes[i + 1]];
+
+                        if (edge.IsConnector)
+                        {
+                            if (edge.RequiresPlacement)
+                            {
+                                if (!stairsUnlocked)
+                                {
+                                    errors.Add($"stairs not unlocked at ({src.X},{src.Y})");
+                                    stoppedX = src.X; stoppedY = src.Y; stopped = true;
+                                    break;
+                                }
+                                if (edge.Levels > 1 && !platformUnlocked)
+                                {
+                                    errors.Add($"platforms not unlocked for {edge.Levels}-level connector at ({src.X},{src.Y})");
+                                    stoppedX = src.X; stoppedY = src.Y; stopped = true;
+                                    break;
+                                }
+
+                                bool connectorFailed = false;
+                                foreach (var rt in edge.RampTiles)
+                                {
+                                    for (int p = 0; p < rt.platCount; p++)
+                                    {
+                                        int platformZ = rt.baseZ + p;
+                                        string pk = PlatformKey(rt.x, rt.y, platformZ);
+                                        if (existingPlatformKeys.Contains(pk) || placedPlatformKeys.Contains(pk)) continue;
+                                        var pr = PlaceBuilding(platformPrefab, rt.x, rt.y, platformZ, "south");
+                                        if (pr.Success)
+                                        {
+                                            platformCount++;
+                                            placedPlatformKeys.Add(pk);
+                                        }
+                                        else if (IsBenignOccupied(pr))
+                                        {
+                                            placedPlatformKeys.Add(pk);
+                                        }
+                                        else
+                                        {
+                                            skipped++;
+                                            failedResults.Add(pr);
+                                            errors.Add($"platform failed at ({rt.x},{rt.y},{platformZ})");
+                                            stoppedX = src.X; stoppedY = src.Y; stopped = true;
+                                            connectorFailed = true;
+                                            break;
+                                        }
+                                    }
+                                    if (connectorFailed) break;
+
+                                    int stairZ = rt.baseZ + rt.platCount;
+                                    string sk = StairKey(rt.x, rt.y, stairZ, edge.OrientIdx);
+                                    if (existingStairKeys.Contains(sk) || placedStairKeys.Contains(sk)) continue;
+                                    var sr = PlaceBuilding(stairsPrefab, rt.x, rt.y, stairZ, OrientNames[edge.OrientIdx]);
+                                    if (sr.Success)
+                                    {
+                                        stairCount++;
+                                        placedStairKeys.Add(sk);
+                                    }
+                                    else if (IsBenignOccupied(sr))
+                                    {
+                                        placedStairKeys.Add(sk);
+                                    }
+                                    else
+                                    {
+                                        skipped++;
+                                        failedResults.Add(sr);
+                                        errors.Add($"stair failed at ({rt.x},{rt.y},{stairZ})");
+                                        stoppedX = src.X; stoppedY = src.Y; stopped = true;
+                                        connectorFailed = true;
+                                        break;
+                                    }
+                                }
+                                if (connectorFailed) break;
+                            }
+
+                            TryPlacePathNode(dst);
+                            connectorCrossings++;
+                            if (sections > 0 && connectorCrossings >= sections)
+                            {
+                                stoppedX = dst.X; stoppedY = dst.Y; stopped = true;
+                                break;
+                            }
+                            continue;
+                        }
+
+                        TryPlacePathNode(dst);
+                    }
+                }
+            }
+
             var jw = _cache.Jw.BeginObj();
             jw.Obj("placed").Prop("paths", pathCount);
             if (stairCount > 0) jw.Prop("stairs", stairCount);
             if (platformCount > 0) jw.Prop("platforms", platformCount);
             jw.CloseObj().Prop("skipped", skipped);
-            jw.Prop("stairEdgesInGrid", stairEdges.Count);
+            jw.Prop("stairEdgesInGrid", connectorCount);
+            jw.Prop("connectorEdgesInGrid", connectorCount);
             if (stopped) jw.Prop("stoppedAt", $"{stoppedX},{stoppedY}");
 
             if (failedResults.Count > 0 || errors.Count > 0)
@@ -441,28 +499,166 @@ namespace Timberbot
             return jw.ToString();
         }
 
-        // Stair placement info pre-computed during grid building.
-        // Key: (fromIdx, toIdx) where fromIdx is the lower tile and toIdx is the higher tile.
-        // The stair occupies the lower tile, entrance is one tile further back, exit is the higher tile.
-        private struct StairEdge
+        private enum SurfaceKind : byte
         {
-            public int StairX, StairY, BaseZ, Levels;
-            public int EntX, EntY, ExtX, ExtY;
-            public int OrientIdx;
+            Terrain,
+            ExistingPath,
+            ExistingPlatformTop
         }
 
-        // Build an edge-based cost grid for A* over the region (minX,minY) with dimensions (w,h).
-        // Layout: ushort[w * h * 4] -- 4 directional entry costs per tile.
-        // Direction indices match ddx/ddy: 0=from west(+X), 1=from east(-X), 2=from south(+Y), 3=from north(-Y).
-        // Base costs: 1=existing path, 2=open ground, 8=shallow water, 50=deep water, 255=impassable.
-        // Z-change edges with valid stair placements get cost=20 (traversable).
-        // stairEdges: output lookup of pre-validated stair placements keyed by (fromIdx, toIdx).
-        private ushort[] BuildCostGrid(int minX, int minY, int w, int h,
-            out Dictionary<long, StairEdge> stairEdges, out int[] heights)
+        private struct SurfaceNode
         {
-            // first pass: compute base tile costs and terrain heights
+            public int X, Y, Z;
+            public ushort EntryCost;
+            public SurfaceKind Kind;
+            public bool Existing;
+            public bool PlacePath;
+        }
+
+        private struct GraphEdge
+        {
+            public int ToId;
+            public ushort Cost;
+            public bool IsConnector;
+            public bool RequiresPlacement;
+            public int BaseZ, Levels;
+            public int EntX, EntY, EntZ, ExtX, ExtY, ExtZ;
+            public int OrientIdx;
+            public List<(int x, int y, int baseZ, int platCount)> RampTiles;
+        }
+
+        private sealed class SurfacePath
+        {
+            public List<int> Nodes;
+            public List<GraphEdge> Edges;
+        }
+
+        private static long TileKey(int x, int y)
+        {
+            return ((long)x << 20) ^ (uint)y;
+        }
+
+        private static long SurfaceKey(int x, int y, int z)
+        {
+            return ((long)x << 40) ^ ((long)y << 20) ^ (uint)z;
+        }
+
+        private static bool PreferEdge(GraphEdge next, GraphEdge prev)
+        {
+            if (next.Cost != prev.Cost) return next.Cost < prev.Cost;
+            if (next.RequiresPlacement != prev.RequiresPlacement) return !next.RequiresPlacement;
+            if (next.IsConnector != prev.IsConnector) return !next.IsConnector;
+            return false;
+        }
+        private bool TryBuildGeneratedConnector(int minX, int minY, int w, int h, ushort[] baseCost, int[] terrainHeights,
+            int lowLx, int lowLy, int highLx, int highLy, out GraphEdge upEdge, out GraphEdge downEdge)
+        {
+            upEdge = default(GraphEdge);
+            downEdge = default(GraphEdge);
+
+            bool InBounds(int x, int y) => x >= 0 && x < w && y >= 0 && y < h;
+            int LocalIdx(int x, int y) => y * w + x;
+            bool ValidTile(int x, int y, int expectedZ)
+            {
+                if (!InBounds(x, y)) return false;
+                int li = LocalIdx(x, y);
+                return baseCost[li] < 255 && terrainHeights[li] == expectedZ;
+            }
+
+            int lowIdx = LocalIdx(lowLx, lowLy);
+            int highIdx = LocalIdx(highLx, highLy);
+            int lowZ = terrainHeights[lowIdx];
+            int highZ = terrainHeights[highIdx];
+            int levels = highZ - lowZ;
+            if (levels <= 0) return false;
+
+            int dx = highLx - lowLx;
+            int dy = highLy - lowLy;
+            int orientIdx = dx > 0 ? 3 : dx < 0 ? 1 : dy > 0 ? 2 : 0;
+            int baseZ = lowZ;
+            var rampTiles = new List<(int x, int y, int baseZ, int platCount)>();
+            int entLx, entLy, extLx, extLy;
+
+            if (levels == 1)
+            {
+                int stairLx = lowLx;
+                int stairLy = lowLy;
+                entLx = stairLx - dx;
+                entLy = stairLy - dy;
+                extLx = stairLx + dx;
+                extLy = stairLy + dy;
+                if (!ValidTile(stairLx, stairLy, baseZ) || !ValidTile(entLx, entLy, lowZ) || !ValidTile(extLx, extLy, highZ))
+                    return false;
+                rampTiles.Add((stairLx + minX, stairLy + minY, baseZ, 0));
+            }
+            else
+            {
+                int firstLx = highLx - dx * levels;
+                int firstLy = highLy - dy * levels;
+                entLx = firstLx - dx;
+                entLy = firstLy - dy;
+                int lastLx = firstLx + dx * (levels - 1);
+                int lastLy = firstLy + dy * (levels - 1);
+                extLx = lastLx + dx;
+                extLy = lastLy + dy;
+
+                if (!ValidTile(entLx, entLy, lowZ) || !ValidTile(extLx, extLy, highZ))
+                    return false;
+
+                for (int step = 0; step < levels; step++)
+                {
+                    int rampLx = firstLx + dx * step;
+                    int rampLy = firstLy + dy * step;
+                    if (!ValidTile(rampLx, rampLy, baseZ))
+                        return false;
+                    rampTiles.Add((rampLx + minX, rampLy + minY, baseZ, step));
+                }
+            }
+
+            upEdge = new GraphEdge
+            {
+                Cost = (ushort)(20 * levels),
+                IsConnector = true,
+                RequiresPlacement = true,
+                BaseZ = baseZ,
+                Levels = levels,
+                EntX = entLx + minX,
+                EntY = entLy + minY,
+                EntZ = lowZ,
+                ExtX = extLx + minX,
+                ExtY = extLy + minY,
+                ExtZ = highZ,
+                OrientIdx = orientIdx,
+                RampTiles = rampTiles
+            };
+            downEdge = new GraphEdge
+            {
+                Cost = (ushort)(20 * levels),
+                IsConnector = true,
+                RequiresPlacement = true,
+                BaseZ = baseZ,
+                Levels = levels,
+                EntX = extLx + minX,
+                EntY = extLy + minY,
+                EntZ = highZ,
+                ExtX = entLx + minX,
+                ExtY = entLy + minY,
+                ExtZ = lowZ,
+                OrientIdx = orientIdx,
+                RampTiles = rampTiles
+            };
+            return true;
+        }
+
+        // Build a coherent 3D surface graph over the region.
+        // Terrain/path/platform surfaces become nodes at (x,y,z).
+        // Existing stairs and generated ramps become directed connector edges.
+        private void BuildSurfaceGraph(int minX, int minY, int w, int h,
+            out List<SurfaceNode> nodes, out List<GraphEdge>[] adj,
+            out Dictionary<long, List<int>> nodesByTile, out int connectorCount)
+        {
             var baseCost = new ushort[w * h];
-            heights = new int[w * h];
+            var terrainHeights = new int[w * h];
 
             for (int ly = 0; ly < h; ly++)
             {
@@ -470,12 +666,11 @@ namespace Timberbot
                 {
                     int idx = ly * w + lx;
                     int tz = GetTerrainHeight(minX + lx, minY + ly);
-                    heights[idx] = tz;
+                    terrainHeights[idx] = tz;
                     baseCost[idx] = tz > 0 ? (ushort)2 : (ushort)255;
                 }
             }
 
-            // water
             for (int ly = 0; ly < h; ly++)
             {
                 for (int lx = 0; lx < w; lx++)
@@ -485,265 +680,413 @@ namespace Timberbot
                     float depth = GetWaterDepth(minX + lx, minY + ly);
                     if (depth > 0.5f) baseCost[idx] = 50;
                     else if (depth > 0f) baseCost[idx] = 8;
+                    if (HasOverhang(minX + lx, minY + ly))
+                        baseCost[idx] = 255;
                 }
             }
 
-            // overhangs
+            var existingPathSurfaces = new HashSet<long>();
+            var existingPlatformSurfaces = new HashSet<long>();
+            var existingStairs = new List<(int sx, int sy, int sz, int dir)>();
+
+            foreach (var cb in _cache.Buildings.Read)
+            {
+                if (cb.Name == null || cb.OccupiedTiles == null) continue;
+                bool isPath = cb.Name.Contains("Path");
+                bool isStairs = cb.Name.Contains("Stairs");
+                bool isPlatform = cb.Name.Contains("Platform");
+                bool isReusable = isPath || isStairs || isPlatform;
+
+                if (isStairs)
+                    existingStairs.Add((cb.X, cb.Y, cb.Z, ParseOrientation(cb.Orientation ?? "south")));
+
+                foreach (var t in cb.OccupiedTiles)
+                {
+                    int lx = t.x - minX;
+                    int ly = t.y - minY;
+                    if (lx < 0 || lx >= w || ly < 0 || ly >= h) continue;
+                    int idx = ly * w + lx;
+
+                    if (isPath)
+                    {
+                        existingPathSurfaces.Add(SurfaceKey(t.x, t.y, t.z));
+                        if (baseCost[idx] < 255) baseCost[idx] = 1;
+                    }
+                    else if (isPlatform)
+                    {
+                        existingPlatformSurfaces.Add(SurfaceKey(t.x, t.y, t.z + 1));
+                    }
+                    else if (isStairs)
+                    {
+                        baseCost[idx] = 255;
+                    }
+                    else if (!isReusable)
+                    {
+                        baseCost[idx] = 255;
+                    }
+                }
+            }
+
+            foreach (var nr in _cache.NaturalResources.Read)
+            {
+                int lx = nr.X - minX;
+                int ly = nr.Y - minY;
+                if (lx < 0 || lx >= w || ly < 0 || ly >= h) continue;
+                baseCost[ly * w + lx] = 255;
+            }
+
+            var nodeList = new List<SurfaceNode>();
+            var nodeIdBySurface = new Dictionary<long, int>();
+
+            void UpsertNode(int x, int y, int z, ushort entryCost, SurfaceKind kind, bool existing, bool placePath)
+            {
+                long key = SurfaceKey(x, y, z);
+                int id;
+                if (nodeIdBySurface.TryGetValue(key, out id))
+                {
+                    var n = nodeList[id];
+                    if (entryCost < n.EntryCost) n.EntryCost = entryCost;
+                    if ((byte)kind > (byte)n.Kind) n.Kind = kind;
+                    n.Existing = n.Existing || existing;
+                    n.PlacePath = n.PlacePath && placePath;
+                    nodeList[id] = n;
+                    return;
+                }
+
+                nodeIdBySurface[key] = nodeList.Count;
+                nodeList.Add(new SurfaceNode
+                {
+                    X = x,
+                    Y = y,
+                    Z = z,
+                    EntryCost = entryCost,
+                    Kind = kind,
+                    Existing = existing,
+                    PlacePath = placePath
+                });
+            }
+
             for (int ly = 0; ly < h; ly++)
             {
                 for (int lx = 0; lx < w; lx++)
                 {
                     int idx = ly * w + lx;
                     if (baseCost[idx] >= 255) continue;
-                    if (HasOverhang(minX + lx, minY + ly))
-                        baseCost[idx] = 255;
+                    int wx = minX + lx;
+                    int wy = minY + ly;
+                    int wz = terrainHeights[idx];
+                    bool hasExistingPath = existingPathSurfaces.Contains(SurfaceKey(wx, wy, wz));
+                    UpsertNode(wx, wy, wz, hasExistingPath ? (ushort)1 : baseCost[idx], hasExistingPath ? SurfaceKind.ExistingPath : SurfaceKind.Terrain, hasExistingPath, !hasExistingPath);
                 }
             }
 
-            // buildings
-            foreach (var cb in _cache.Buildings.Read)
+            foreach (var s in existingPathSurfaces)
             {
-                if (cb.OccupiedTiles == null) continue;
-                bool isPath = cb.Name.Contains("Path") || cb.Name.Contains("Stairs") || cb.Name.Contains("Platform");
-                foreach (var t in cb.OccupiedTiles)
+                int x = (int)(s >> 40);
+                int y = (int)((s >> 20) & 0xFFFFF);
+                int z = (int)(s & 0xFFFFF);
+                UpsertNode(x, y, z, 1, SurfaceKind.ExistingPath, true, false);
+            }
+            foreach (var s in existingPlatformSurfaces)
+            {
+                int x = (int)(s >> 40);
+                int y = (int)((s >> 20) & 0xFFFFF);
+                int z = (int)(s & 0xFFFFF);
+                UpsertNode(x, y, z, 1, SurfaceKind.ExistingPlatformTop, true, false);
+            }
+
+            nodesByTile = new Dictionary<long, List<int>>();
+            for (int i = 0; i < nodeList.Count; i++)
+            {
+                var n = nodeList[i];
+                long tileKey = TileKey(n.X, n.Y);
+                List<int> list;
+                if (!nodesByTile.TryGetValue(tileKey, out list))
                 {
-                    int lx = t.x - minX, ly = t.y - minY;
-                    if (lx < 0 || lx >= w || ly < 0 || ly >= h) continue;
-                    baseCost[ly * w + lx] = isPath ? (ushort)1 : (ushort)255;
+                    list = new List<int>();
+                    nodesByTile[tileKey] = list;
+                }
+                list.Add(i);
+            }
+            var edgeMap = new Dictionary<(int from, int to), GraphEdge>();
+
+            void AddEdge(int fromId, GraphEdge edge)
+            {
+                var key = (fromId, edge.ToId);
+                GraphEdge prev;
+                if (!edgeMap.TryGetValue(key, out prev) || PreferEdge(edge, prev))
+                    edgeMap[key] = edge;
+            }
+
+            int[] ndx = { 1, -1, 0, 0 };
+            int[] ndy = { 0, 0, 1, -1 };
+            for (int i = 0; i < nodeList.Count; i++)
+            {
+                var n = nodeList[i];
+                for (int d = 0; d < 4; d++)
+                {
+                    long nk = SurfaceKey(n.X + ndx[d], n.Y + ndy[d], n.Z);
+                    int toId;
+                    if (!nodeIdBySurface.TryGetValue(nk, out toId)) continue;
+                    AddEdge(i, new GraphEdge
+                    {
+                        ToId = toId,
+                        Cost = nodeList[toId].EntryCost,
+                        IsConnector = false,
+                        RequiresPlacement = false
+                    });
                 }
             }
 
-            // natural resources
-            foreach (var nr in _cache.NaturalResources.Read)
+            foreach (var s in existingStairs)
             {
-                int lx = nr.X - minX, ly = nr.Y - minY;
-                if (lx < 0 || lx >= w || ly < 0 || ly >= h) continue;
-                baseCost[ly * w + lx] = 255;
-            }
+                int dx = s.dir == 3 ? 1 : s.dir == 1 ? -1 : 0;
+                int dy = s.dir == 2 ? 1 : s.dir == 0 ? -1 : 0;
+                int entX = s.sx - dx;
+                int entY = s.sy - dy;
+                int entZ = s.sz;
+                int extX = s.sx + dx;
+                int extY = s.sy + dy;
+                int extZ = s.sz + 1;
 
-            // second pass: build edge-based grid with z-change handling
-            // directions: 0=from west(+X), 1=from east(-X), 2=from south(+Y), 3=from north(-Y)
-            // movement deltas for each direction d: ddx[d], ddy[d]
-            // ndx/ndy: neighbor offset for each entry direction d.
-            // d=0: neighbor at -X (west), entry "from west". d=1: +X (east). d=2: -Y (south). d=3: +Y (north).
-            int[] ndx = { -1, 1, 0, 0 };
-            int[] ndy = { 0, 0, -1, 1 };
-            var grid = new ushort[w * h * 4];
-            stairEdges = new Dictionary<long, StairEdge>();
+                int fromId, toId;
+                if (nodeIdBySurface.TryGetValue(SurfaceKey(entX, entY, entZ), out fromId) && nodeIdBySurface.TryGetValue(SurfaceKey(extX, extY, extZ), out toId))
+                {
+                    AddEdge(fromId, new GraphEdge
+                    {
+                        ToId = toId,
+                        Cost = 20,
+                        IsConnector = true,
+                        RequiresPlacement = false,
+                        BaseZ = s.sz,
+                        Levels = 1,
+                        EntX = entX,
+                        EntY = entY,
+                        EntZ = entZ,
+                        ExtX = extX,
+                        ExtY = extY,
+                        ExtZ = extZ,
+                        OrientIdx = s.dir,
+                        RampTiles = null
+                    });
+                }
+                if (nodeIdBySurface.TryGetValue(SurfaceKey(extX, extY, extZ), out fromId) && nodeIdBySurface.TryGetValue(SurfaceKey(entX, entY, entZ), out toId))
+                {
+                    AddEdge(fromId, new GraphEdge
+                    {
+                        ToId = toId,
+                        Cost = 20,
+                        IsConnector = true,
+                        RequiresPlacement = false,
+                        BaseZ = s.sz,
+                        Levels = 1,
+                        EntX = extX,
+                        EntY = extY,
+                        EntZ = extZ,
+                        ExtX = entX,
+                        ExtY = entY,
+                        ExtZ = entZ,
+                        OrientIdx = s.dir,
+                        RampTiles = null
+                    });
+                }
+            }
 
             for (int ly = 0; ly < h; ly++)
             {
                 for (int lx = 0; lx < w; lx++)
                 {
                     int idx = ly * w + lx;
-                    int idx4 = idx * 4;
-                    ushort bc = baseCost[idx];
+                    if (baseCost[idx] >= 255) continue;
 
-                    if (bc >= 255)
+                    if (lx + 1 < w && baseCost[idx + 1] < 255)
                     {
-                        grid[idx4] = grid[idx4 + 1] = grid[idx4 + 2] = grid[idx4 + 3] = 255;
-                        continue;
-                    }
-
-                    for (int d = 0; d < 4; d++)
-                    {
-                        int nlx = lx + ndx[d], nly = ly + ndy[d];
-                        if (nlx < 0 || nlx >= w || nly < 0 || nly >= h)
+                        int z0 = terrainHeights[idx];
+                        int z1 = terrainHeights[idx + 1];
+                        if (z0 != z1)
                         {
-                            grid[idx4 + d] = bc;
-                            continue;
-                        }
-                        int nIdx = nly * w + nlx;
-                        if (heights[idx] == heights[nIdx])
-                        {
-                            grid[idx4 + d] = bc;
-                            continue;
-                        }
-
-                        // z-change edge: check if a single-level stair can be placed here
-                        int zDiff = heights[nIdx] - heights[idx];
-                        if (System.Math.Abs(zDiff) == 1)
-                        {
-                            // travel direction: from neighbor into this tile (opposite of ndx/ndy)
-                            int tdx = -ndx[d], tdy = -ndy[d];
-                            // travel direction: from neighbor (nIdx) into this tile (idx)
-                            // goingUp: this tile (idx) is higher than neighbor
-                            bool goingUp = heights[idx] > heights[nIdx];
-                            // stair goes on the lower tile
-                            int lowerLx = goingUp ? nlx : lx;
-                            int lowerLy = goingUp ? nly : ly;
-                            int baseZ = System.Math.Min(heights[idx], heights[nIdx]);
-
-                            // stair tile = lower tile, entrance = one tile back from lower in travel dir
-                            int stairLx = lowerLx, stairLy = lowerLy;
-                            int entLx = stairLx - tdx, entLy = stairLy - tdy;
-
-                            // check entrance tile is in bounds and unobstructed
-                            bool entValid = entLx >= 0 && entLx < w && entLy >= 0 && entLy < h
-                                && baseCost[entLy * w + entLx] < 255
-                                && heights[entLy * w + entLx] == baseZ;
-
-                            // check stair tile is unobstructed
-                            bool stairValid = baseCost[stairLy * w + stairLx] < 255;
-
-                            if (entValid && stairValid)
+                            int lowLx = z0 < z1 ? lx : lx + 1;
+                            int lowLy = ly;
+                            int highLx = z0 < z1 ? lx + 1 : lx;
+                            int highLy = ly;
+                            GraphEdge upEdge, downEdge;
+                            if (TryBuildGeneratedConnector(minX, minY, w, h, baseCost, terrainHeights, lowLx, lowLy, highLx, highLy, out upEdge, out downEdge))
                             {
-                                // make this edge traversable with stair cost
-                                grid[idx4 + d] = 20;
-
-                                // uphill direction for orientation
-                                int updx = goingUp ? tdx : -tdx;
-                                int updy = goingUp ? tdy : -tdy;
-                                int orientIdx = updx > 0 ? 3 : updx < 0 ? 1 : updy > 0 ? 2 : 0;
-
-                                // key: (from, to) = (nIdx, idx) since A* steps from neighbor into this tile
-                                long edgeKey = (long)nIdx * 100000 + idx;
-                                if (!stairEdges.ContainsKey(edgeKey))
+                                int fromId, toId;
+                                if (nodeIdBySurface.TryGetValue(SurfaceKey(upEdge.EntX, upEdge.EntY, upEdge.EntZ), out fromId) && nodeIdBySurface.TryGetValue(SurfaceKey(upEdge.ExtX, upEdge.ExtY, upEdge.ExtZ), out toId))
                                 {
-                                    stairEdges[edgeKey] = new StairEdge
-                                    {
-                                        StairX = stairLx + minX, StairY = stairLy + minY,
-                                        BaseZ = baseZ, Levels = 1,
-                                        EntX = entLx + minX, EntY = entLy + minY,
-                                        ExtX = (goingUp ? nlx : lx) + minX, ExtY = (goingUp ? nly : ly) + minY,
-                                        OrientIdx = orientIdx
-                                    };
+                                    upEdge.ToId = toId;
+                                    AddEdge(fromId, upEdge);
+                                }
+                                if (nodeIdBySurface.TryGetValue(SurfaceKey(downEdge.EntX, downEdge.EntY, downEdge.EntZ), out fromId) && nodeIdBySurface.TryGetValue(SurfaceKey(downEdge.ExtX, downEdge.ExtY, downEdge.ExtZ), out toId))
+                                {
+                                    downEdge.ToId = toId;
+                                    AddEdge(fromId, downEdge);
                                 }
                             }
-                            else
-                            {
-                                grid[idx4 + d] = 255; // no valid stair placement
-                            }
                         }
-                        else
+                    }
+
+                    if (ly + 1 < h && baseCost[idx + w] < 255)
+                    {
+                        int z0 = terrainHeights[idx];
+                        int z1 = terrainHeights[idx + w];
+                        if (z0 != z1)
                         {
-                            grid[idx4 + d] = 255; // multi-level z-change: impassable for now
+                            int lowLx = lx;
+                            int lowLy = z0 < z1 ? ly : ly + 1;
+                            int highLx = lx;
+                            int highLy = z0 < z1 ? ly + 1 : ly;
+                            GraphEdge upEdge, downEdge;
+                            if (TryBuildGeneratedConnector(minX, minY, w, h, baseCost, terrainHeights, lowLx, lowLy, highLx, highLy, out upEdge, out downEdge))
+                            {
+                                int fromId, toId;
+                                if (nodeIdBySurface.TryGetValue(SurfaceKey(upEdge.EntX, upEdge.EntY, upEdge.EntZ), out fromId) && nodeIdBySurface.TryGetValue(SurfaceKey(upEdge.ExtX, upEdge.ExtY, upEdge.ExtZ), out toId))
+                                {
+                                    upEdge.ToId = toId;
+                                    AddEdge(fromId, upEdge);
+                                }
+                                if (nodeIdBySurface.TryGetValue(SurfaceKey(downEdge.EntX, downEdge.EntY, downEdge.EntZ), out fromId) && nodeIdBySurface.TryGetValue(SurfaceKey(downEdge.ExtX, downEdge.ExtY, downEdge.ExtZ), out toId))
+                                {
+                                    downEdge.ToId = toId;
+                                    AddEdge(fromId, downEdge);
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            return grid;
+            nodes = nodeList;
+            adj = new List<GraphEdge>[nodeList.Count];
+            for (int i = 0; i < adj.Length; i++) adj[i] = new List<GraphEdge>();
+            connectorCount = 0;
+            foreach (var kv in edgeMap)
+            {
+                adj[kv.Key.from].Add(kv.Value);
+                if (kv.Value.IsConnector) connectorCount++;
+            }
         }
 
-        // A* pathfinding on an edge-cost grid. 4-directional, plain Manhattan heuristic.
-        // Existing path has cost 1, so h = Manhattan is admissible and f = g + h is safe A*.
-        // style only acts as a secondary tie-break among equal-f nodes.
-        // Returns list of (localX, localY) from start to goal, or null if maxNodes exceeded.
-        private static List<(int, int)> AStarPath(ushort[] grid, int w, int h, int sx, int sy, int gx, int gy, int maxNodes, string style)
+        // Safe A* over the coherent surface graph. Plain Manhattan on x/y remains admissible because
+        // every traversable edge has minimum cost >= 1. style only acts as a secondary tie-break.
+        private static SurfacePath AStarPath(List<SurfaceNode> nodes, List<GraphEdge>[] adj, List<int> startIds, List<int> goalIds, int maxNodes, string style)
         {
-            if (sx < 0 || sx >= w || sy < 0 || sy >= h) return null;
-            if (gx < 0 || gx >= w || gy < 0 || gy >= h) return null;
+            if (startIds == null || startIds.Count == 0 || goalIds == null || goalIds.Count == 0) return null;
 
             bool straight = style == "straight";
+            var goalSet = new HashSet<int>(goalIds);
+            int Heuristic(int nodeId)
+            {
+                var n = nodes[nodeId];
+                int best = int.MaxValue;
+                for (int i = 0; i < goalIds.Count; i++)
+                {
+                    var g = nodes[goalIds[i]];
+                    int h = System.Math.Abs(g.X - n.X) + System.Math.Abs(g.Y - n.Y);
+                    if (h < best) best = h;
+                }
+                return best;
+            }
 
             var gScore = new Dictionary<int, int>();
             var openScore = new Dictionary<int, (int f, int bias)>();
             var cameFrom = new Dictionary<int, int>();
+            var cameEdge = new Dictionary<int, GraphEdge>();
             var open = new SortedSet<(int f, int bias, int idx)>();
 
-            int startIdx = sy * w + sx;
-            int goalIdx = gy * w + gx;
-            int start4 = startIdx * 4;
-            int goal4 = goalIdx * 4;
-            bool startBlocked = grid[start4] >= 255 && grid[start4 + 1] >= 255 && grid[start4 + 2] >= 255 && grid[start4 + 3] >= 255;
-            bool goalBlocked = grid[goal4] >= 255 && grid[goal4 + 1] >= 255 && grid[goal4 + 2] >= 255 && grid[goal4 + 3] >= 255;
-            if (startBlocked || goalBlocked) return null;
+            for (int i = 0; i < startIds.Count; i++)
+            {
+                int sid = startIds[i];
+                gScore[sid] = 0;
+                int h0 = Heuristic(sid);
+                openScore[sid] = (h0, 0);
+                open.Add((h0, 0, sid));
+            }
 
-            gScore[startIdx] = 0;
-            int h0 = System.Math.Abs(gx - sx) + System.Math.Abs(gy - sy);
-            openScore[startIdx] = (h0, 0);
-            open.Add((h0, 0, startIdx));
-
-            int[] ddx = { 1, -1, 0, 0 };
-            int[] ddy = { 0, 0, 1, -1 };
-            int[] opposite = { 1, 0, 3, 2 }; // entry direction when moving in direction d
             int nodesExpanded = 0;
-
             while (open.Count > 0)
             {
-                var (_, _, cidx) = open.Min;
-                open.Remove(open.Min);
+                var current = open.Min;
+                open.Remove(current);
+                int cidx = current.idx;
 
-                if (cidx == goalIdx)
+                if (goalSet.Contains(cidx))
                 {
-                    var path = new List<(int, int)>();
-                    int cur = goalIdx;
-                    while (cur != startIdx)
+                    var nodePath = new List<int>();
+                    var edgePath = new List<GraphEdge>();
+                    int cur = cidx;
+                    nodePath.Add(cur);
+                    while (cameFrom.ContainsKey(cur))
                     {
-                        path.Add((cur % w, cur / w));
+                        edgePath.Add(cameEdge[cur]);
                         cur = cameFrom[cur];
+                        nodePath.Add(cur);
                     }
-                    path.Add((sx, sy));
-                    path.Reverse();
-                    return path;
+                    nodePath.Reverse();
+                    edgePath.Reverse();
+                    return new SurfacePath { Nodes = nodePath, Edges = edgePath };
                 }
 
                 if (++nodesExpanded > maxNodes) return null;
+                int cg = gScore[cidx];
 
-                int cx2 = cidx % w;
-                int cy2 = cidx / w;
-                int cg = gScore.ContainsKey(cidx) ? gScore[cidx] : int.MaxValue;
-
-                // direction we arrived from (for optional equal-f tie-breaking)
                 int prevDx = 0, prevDy = 0;
                 if (straight && cameFrom.ContainsKey(cidx))
                 {
-                    int prev = cameFrom[cidx];
-                    prevDx = cx2 - (prev % w);
-                    prevDy = cy2 - (prev / w);
+                    var prevNode = nodes[cameFrom[cidx]];
+                    var curNode = nodes[cidx];
+                    prevDx = System.Math.Sign(curNode.X - prevNode.X);
+                    prevDy = System.Math.Sign(curNode.Y - prevNode.Y);
                 }
 
-                for (int d = 0; d < 4; d++)
+                foreach (var edge in adj[cidx])
                 {
-                    int nx = cx2 + ddx[d];
-                    int ny = cy2 + ddy[d];
-                    if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-                    int nidx = ny * w + nx;
-                    int edgeCost = grid[nidx * 4 + opposite[d]];
-                    if (edgeCost >= 255) continue; // impassable wall
-                    int tentG = cg + edgeCost;
-                    int prevG = gScore.ContainsKey(nidx) ? gScore[nidx] : int.MaxValue;
-                    if (tentG < prevG)
+                    int nidx = edge.ToId;
+                    int tentG = cg + edge.Cost;
+                    int prevG;
+                    if (gScore.TryGetValue(nidx, out prevG) && tentG >= prevG) continue;
+
+                    cameFrom[nidx] = cidx;
+                    cameEdge[nidx] = edge;
+                    gScore[nidx] = tentG;
+
+                    var curNode = nodes[cidx];
+                    var nextNode = nodes[nidx];
+                    int moveDx = System.Math.Sign(nextNode.X - curNode.X);
+                    int moveDy = System.Math.Sign(nextNode.Y - curNode.Y);
+                    int bias;
+                    if (straight)
                     {
-                        cameFrom[nidx] = cidx;
-                        gScore[nidx] = tentG;
-                        int baseH = System.Math.Abs(gx - nx) + System.Math.Abs(gy - ny);
-                        // Style preference only breaks ties among equal-f nodes.
-                        int bias;
-                        if (straight)
-                        {
-                            bool samedir = (ddx[d] == prevDx && ddy[d] == prevDy) || (prevDx == 0 && prevDy == 0);
-                            bias = samedir ? 0 : 2;
-                        }
-                        else
-                        {
-                            int remX = System.Math.Abs(gx - nx);
-                            int remY = System.Math.Abs(gy - ny);
-                            int remXbefore = System.Math.Abs(gx - cx2);
-                            int remYbefore = System.Math.Abs(gy - cy2);
-                            bool reducedX = remX < remXbefore;
-                            bool reducedY = remY < remYbefore;
-                            if (reducedX && remXbefore >= remYbefore) bias = 0;
-                            else if (reducedY && remYbefore >= remXbefore) bias = 0;
-                            else if (reducedX || reducedY) bias = 1;
-                            else bias = 3;
-                        }
-                        int nf = tentG + baseH;
-                        if (openScore.ContainsKey(nidx))
-                        {
-                            var prevOpen = openScore[nidx];
-                            open.Remove((prevOpen.f, prevOpen.bias, nidx));
-                        }
-                        openScore[nidx] = (nf, bias);
-                        open.Add((nf, bias, nidx));
+                        bool sameDir = (moveDx == prevDx && moveDy == prevDy) || (prevDx == 0 && prevDy == 0);
+                        bias = sameDir ? 0 : 2;
                     }
+                    else
+                    {
+                        var target = nodes[goalIds[0]];
+                        int remX = System.Math.Abs(target.X - nextNode.X);
+                        int remY = System.Math.Abs(target.Y - nextNode.Y);
+                        int remXbefore = System.Math.Abs(target.X - curNode.X);
+                        int remYbefore = System.Math.Abs(target.Y - curNode.Y);
+                        bool reducedX = remX < remXbefore;
+                        bool reducedY = remY < remYbefore;
+                        if (reducedX && remXbefore >= remYbefore) bias = 0;
+                        else if (reducedY && remYbefore >= remXbefore) bias = 0;
+                        else if (reducedX || reducedY) bias = 1;
+                        else bias = 3;
+                    }
+
+                    int nf = tentG + Heuristic(nidx);
+                    (int f, int bias) prevOpen;
+                    if (openScore.TryGetValue(nidx, out prevOpen))
+                        open.Remove((prevOpen.f, prevOpen.bias, nidx));
+                    openScore[nidx] = (nf, bias);
+                    open.Add((nf, bias, nidx));
                 }
             }
 
-            return null; // no path
+            return null;
         }
-
         // general purpose debug endpoint -- navigate, inspect, and call methods on any game object
         // chain through objects with dot-separated paths: "type._field1._field2.MethodName"
         // ================================================================
@@ -1211,3 +1554,4 @@ namespace Timberbot
         }
     }
 }
+
