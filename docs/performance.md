@@ -2,20 +2,33 @@
 
 Single source of truth for Timberbot API performance. All optimization decisions reference here.
 
+## Open issues
+
+| # | Issue | Severity | Cost | Location |
+|---|---|---|---|---|
+| 1 | `Math.Round(need.Points, 2)` boxes on Mono | Medium | 2400 calls/sec, ~96KB/sec | `TimberbotEntityCache.cs:358` |
+| 2 | Unity GC spikes freeze all threads | Low (unavoidable) | random 0.5-2s | Unity runtime |
+| 3 | `sb.ToString()` alloc per HTTP response | Low (unavoidable) | 1 string per request, 100-500KB | `TimberbotJw.ToString()` |
+| 4 | District refresh allocates every cycle | Low | new CachedDistrict + Dict per district per 1s | `TimberbotEntityCache.cs:377-421` |
+| 5 | Bots inflate beaver index without needing needs | Info | linear with bot count | late-game risk |
+| 6 | Power endpoint iterates all buildings per call | Info | linear with building count | late-game risk |
+
+Only #1 is actionable -- replace with TimberbotJw.Float() manual rounding. The rest are accepted or unavoidable.
+
 ## Entity tracking
 
 Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame allocation, zero `GetComponent` calls per request, zero main-thread cost for reads.
 
 - **Double buffer:** main thread writes to `_*Write` lists, swaps to `_*Read`. Background thread only reads `_*Read`. Zero contention.
-- **Cached classes:** `CachedBuilding` (18 component refs + ~25 cached primitives), `CachedNaturalResource` (5 refs + 7 primitives), `CachedBeaver` (10 refs + 14 primitives). Modified in-place, `Clone()` for double-buffer. Refreshed at 1Hz (configurable via settings.json).
+- **Cached classes:** `CachedBuilding` (20 component refs + ~48 cached fields), `CachedNaturalResource` (5 refs + 7 primitives), `CachedBeaver` (10 refs + ~22 cached fields). Modified in-place, `Clone()` for double-buffer. Refreshed at 1Hz (configurable via settings.json).
 - **Background GET serving:** all reads served on HTTP listener thread. Only POST (writes) queue to main thread.
-- **Static values at add-time:** EffectRadius, IsGenerator, IsConsumer, NominalPower, HasFloodgate, HasClutch, HasWonder, FloodgateMaxHeight, X, Y, Z, Orientation -- all set once in entity-add handler, never re-read.
+- **Static values at add-time:** EffectRadius, IsGenerator, IsConsumer, NominalPowerInput, NominalPowerOutput, HasFloodgate, HasClutch, HasWonder, FloodgateMaxHeight, X, Y, Z, Orientation, HasEntrance, EntranceX, EntranceY, OccupiedTiles, Id, Name -- all set once in entity-add handler, never re-read.
 
 | Index | Type | Mechanism | Per-frame cost | Rebuild trigger |
 |---|---|---|---|---|
-| `_buildingIndex` | `List<CachedBuilding>` | `EntityInitializedEvent` / `EntityDeletedEvent` | **zero** | entity add/remove |
-| `_naturalResourceIndex` | `List<CachedNaturalResource>` | same | **zero** | entity add/remove |
-| `_beaverIndex` | `List<CachedBeaver>` | same | **zero** | entity add/remove |
+| `Buildings` | `TimberbotDoubleBuffer<CachedBuilding>` | `EntityInitializedEvent` / `EntityDeletedEvent` | **zero** | entity add/remove |
+| `NaturalResources` | `TimberbotDoubleBuffer<CachedNaturalResource>` | same | **zero** | entity add/remove |
+| `Beavers` | `TimberbotDoubleBuffer<CachedBeaver>` | same | **zero** | entity add/remove |
 | `_entityCache` | `Dictionary<int, EntityComponent>` | same | **zero** | entity add/remove |
 
 ### Cached component refs
@@ -24,9 +37,9 @@ Event-driven double-buffered indexes via Timberborn's `EventBus`. Zero per-frame
 
 | Class | Fields cached | GetComponent calls saved per item |
 |---|---|---|
-| `CachedBuilding` | BlockObject, Pausable, Floodgate, BuilderPrio, Workplace, WorkplacePrio, Reachability, Mechanical, Status, PowerNode, Site, Inventories, Wonder, Dwelling, Clutch, Manufactory, BreedingPod, RangedEffect | **18** |
+| `CachedBuilding` | Entity, BlockObject, Pausable, Floodgate, BuilderPrio, Workplace, WorkplacePrio, Reachability, Mechanical, Status, PowerNode, Site, Inventories, Wonder, Dwelling, Clutch, Manufactory, BreedingPod, RangedEffect, DistrictBuilding | **20** |
 | `CachedNaturalResource` | BlockObject, Living, Cuttable, Gatherable, Growable | **5** |
-| `CachedBeaver` | NeedMgr, WbTracker, Worker, Life, Carrier, Deteriorable, Contaminable, Dweller, Citizen, Bot | **10** |
+| `CachedBeaver` | Go, NeedMgr, WbTracker, Worker, Life, Carrier, Deteriorable, Contaminable, Dweller, Citizen | **10** |
 
 ## Endpoint performance (measured, 522 buildings / 2986 trees / 65 beavers / 4161 total, 100 iterations)
 
@@ -59,7 +72,7 @@ None. All GET endpoints read entirely from cached double buffers. Zero live `Get
 
 ## Serialization
 
-All endpoints use a single shared `TimberbotJw` instance -- fluent zero-alloc JSON writer with auto-separator handling. One 300KB pre-allocated instance, `Reset()` per request. Serial on listener thread, never concurrent.
+All endpoints use a single shared `TimberbotJw` instance -- fluent zero-alloc JSON writer with auto-separator handling. One 300K-char pre-allocated instance (~600KB in .NET UTF-16), `Reset()` per request. Serial on listener thread, never concurrent.
 
 **A/B test results (trees, 2985 items):** Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), StringBuilder **2.0ms** (winner). Main-thread cost for reads is **zero**.
 
@@ -72,7 +85,7 @@ All endpoints use a single shared `TimberbotJw` instance -- fluent zero-alloc JS
 | All POST requests (writes) | main thread via `DrainRequests` | yes, for duration |
 | JSON serialization (`Respond`) | same thread as request | no for GETs |
 | `RefreshCachedState` (snapshot mutable values) | main thread, cadenced (default 1s) | <1ms for 3500 entities |
-| Double buffer swap | main thread, after refresh | ~0ms (ref swap, no copy-back) |
+| Double buffer swap | main thread, after refresh | ~0ms (applies pending adds/removes, then ref swap) |
 
 All reads served on the listener thread from double-buffered read lists. Zero main-thread cost for GET-only bot turns. Writes (POST) still queue to main thread. Thread-unsafe properties (reachability, powered) cached as primitives on main thread -- background thread never calls Unity component properties directly.
 
@@ -91,8 +104,8 @@ Game loads
 
 Every 1 second (main thread)
   -> read building/beaver/tree properties into existing objects (zero alloc)
-  -> refresh district population + resources into CachedDistrict list
-  -> swap buffer pointers (zero alloc)
+  -> refresh districts: new CachedDistrict + new Dictionary per district (small, 1-3 items)
+  -> swap: apply pending adds/removes, then swap buffer pointers
 
 Every HTTP request (background thread)
   -> read from cached buffers (zero alloc)
@@ -115,7 +128,7 @@ Every HTTP request (background thread)
 | `Needs.Clear()` + repopulate | 80 | List allocated once, reused via Clear() |
 | `new CachedNeed{...}` struct | 2400 | Struct = stack alloc, not heap. Goes directly into the List |
 | Inventory for-loop (indexed) | 500 | `for (int ii = 0; ...)` -- no enumerator boxing |
-| `Swap()` x3 | 3 | Pointer swap, O(1), zero copy |
+| `Swap()` x3 | 3 | Apply pending adds/removes then ref swap. O(pending changes) |
 | `Recipes = new List<string>()` | Rare | Guarded by null check -- allocates once per building, first refresh only |
 
 **Known allocations (accepted):**
@@ -146,7 +159,7 @@ Every HTTP request (background thread)
 
 | What | How |
 |---|---|
-| `_jw.Reset()` | Clears existing 300KB StringBuilder, no new alloc |
+| `_jw.Reset()` | Clears existing 300K-char StringBuilder, no new alloc |
 | `jw.Key().Int().Str().Bool()` | Appends to existing SB |
 | `jw.Float()` | Zero-alloc digit writing (no ToString) |
 | `jw.OpenObj().CloseObj()` | Appends `{` `}` to existing SB |
@@ -163,7 +176,7 @@ Every HTTP request (background thread)
 
 ### Webhooks (main thread, only with subscribers)
 
-No subscribers (common case): every `[OnEvent]` handler checks `_webhooks.Count > 0` before doing anything. Zero allocations when nobody is listening.
+No subscribers (common case): `PushEvent()` returns immediately when `_webhooks.Count == 0`. Handlers that build data payloads (DataInt/DataEntity) also guard with `_webhooks.Count > 0` to avoid allocation. Zero allocations when nobody is listening.
 
 With subscribers:
 
@@ -204,7 +217,7 @@ All hot path game API calls confirmed zero-alloc across 760K+ invocations.
 
 | Layer | Frequency | Allocs/sec (steady state) | Grade |
 |---|---|---|---|
-| RefreshCachedState | 1Hz | **0** (confirmed by 10K benchmark) | **A+** |
+| RefreshCachedState | 1Hz | ~3 (district rebuild: new CachedDistrict + Dict per district) | **A** |
 | HTTP GET response | On demand | 1 (ToString) + ~5 small | **A-** |
 | Webhook (no subscribers) | N/A | 0 | **A+** |
 | Webhook (with subscribers) | 5Hz flush | ~5-20 (TimberbotJw strings only) | **A-** |
@@ -223,7 +236,7 @@ All hot path game API calls confirmed zero-alloc across 760K+ invocations.
 |---|---|---|---|
 | ~~1~~ | ~~Webhook rate limiting~~ | -- | **FIXED** -- 200ms batching window (configurable via `webhookBatchMs`). Events accumulate, one POST per webhook per flush |
 | ~~2~~ | ~~Webhook circuit breaker~~ | -- | **FIXED** -- 30 consecutive failures (configurable) disables webhook, logged via TimberbotLog |
-| ~~3~~ | ~~TimberbotService split~~ | -- | **FIXED** -- 8 independent classes (TimberbotService 7 DI params, TimberbotRead 10, TimberbotWrite 20, TimberbotPlacement 13, TimberbotEntityCache 5, TimberbotWebhook 5, TimberbotDebug 1) |
+| ~~3~~ | ~~TimberbotService split~~ | -- | **FIXED** -- 8 independent classes (TimberbotService 7 DI params, TimberbotRead 19, TimberbotWrite 22, TimberbotPlacement 14, TimberbotEntityCache 5, TimberbotWebhook 5, TimberbotDebug 1) |
 | ~~4~~ | ~~RefreshCachedState error isolation~~ | -- | **Already done** -- per-entity try/catch in all 3 loops |
 | ~~5~~ | ~~NeedMgr.GetNeeds() allocation~~ | -- | **CONFIRMED zero-alloc** via 10K benchmark (0 GC0 across 760K calls) |
 
@@ -280,7 +293,7 @@ Total measured cost: ~0.4ms/sec (0.04% of frame budget at 60fps).
 | ~80 beaver reads + needs | ~0.2ms | 0 | Good |
 | Inventory for-loop (indexed) | ~0.05ms | 0 | **FIXED** -- was foreach, benchmarked 25% faster |
 | `GetNeeds()` IEnumerable per beaver | ~0.01ms | 0 (confirmed) | **Benchmarked: 0 GC0 across 760K calls** |
-| 3x `Swap()` pointer swap | O(1) | 0 | Good |
+| 3x `Swap()` (pending changes + ref swap) | O(pending) | 0 | Good |
 
 ### HTTP response (per request, background thread)
 
@@ -313,14 +326,14 @@ Total measured cost: ~0.4ms/sec (0.04% of frame budget at 60fps).
 
 - Main thread: 0.4ms/sec for 3500 entities. Scales linearly, projected ~1ms at late-game (10K entities)
 - Zero GC0 collections across all endpoints (confirmed by /api/benchmark)
-- All JSON output validated via test suite (51 tests, any-save-game compatible)
+- All JSON output validated via test suite (63 tests, any-save-game compatible)
 - No blocking issues remaining
 
 ## Test coverage
 
 Performance tests in `timberbot/script/test_validation.py`:
 
-- **51 tests** covering all Python client methods, any save game, any faction
+- **63 tests** covering all Python client methods, any save game, any faction
 - **Latency**: 20 endpoints x 100 iterations each (2000 calls total). All endpoints under 50ms min
 - **Reliability**: all 2000 responses valid (no errors, no corruption)
 - **Cache consistency**: same endpoint called twice returns same count (no stale refs)
