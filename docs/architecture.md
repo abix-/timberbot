@@ -42,8 +42,8 @@ UpdateSingleton() [every frame]             ListenLoop() [blocking accept]
   |                                           |           - published snapshots, or
   +-- ReadV2.ProcessPendingRefresh()          |           - explicit thread-safe services
   |     |                                     |     +-- TimberbotJw serialization
-  |     +-- satisfy waiting fresh reads       |     +-- Respond() sends JSON
-  |     +-- publish immutable snapshots       |
+  |     +-- advance main-thread capture       |     +-- Respond() sends JSON
+  |     +-- queue background finalize/publish |
   |                                           +-- POST request arrives
   +-- FlushWebhooks() [every frame]                 +-- queue to _pending
         |
@@ -55,7 +55,7 @@ UpdateSingleton() [every frame]             ListenLoop() [blocking accept]
 | HTTP listener accept/GET response | background | no |
 | Canonical GET endpoints | background | no |
 | POST endpoints | main thread via `DrainRequests()` | yes, for duration |
-| `ReadV2.ProcessPendingRefresh()` | main thread | yes, bounded by snapshot build work |
+| `ReadV2.ProcessPendingRefresh()` | main thread | yes, bounded by capture budget |
 | Webhook flush scheduling | main thread | negligible |
 
 ## High-level pieces
@@ -82,10 +82,11 @@ It owns:
 
 It owns:
 
-- fresh-on-request building snapshots
-- value stores for singleton/aggregate endpoints
+- staged fresh-on-request projection snapshots
+- staged value stores for singleton/aggregate endpoints
 - collection/value/paged route helpers
 - native serialization for `/api/*`
+- a private background finalize worker for snapshot publish work
 - some direct use of explicit Timberborn thread-safe services:
   - terrain
   - water
@@ -162,6 +163,7 @@ Used for entity-style endpoints like:
 Shape:
 
 - main-thread tracked refs
+- staged capture buffers
 - published DTO snapshot
 - listener-thread filtering / pagination / serialization
 
@@ -171,6 +173,8 @@ Properties:
 
 - requests ask for fresh data
 - main thread coalesces waiting readers
+- main thread captures live state into DTO buffers under a per-frame budget
+- background worker finalizes and publishes immutable snapshots
 - one publish satisfies multiple readers
 - responses serialize from the published snapshot off-thread
 
@@ -188,7 +192,8 @@ Used for singleton-ish endpoints like:
 
 Shape:
 
-- main-thread builder produces a DTO or raw JSON snapshot
+- main-thread capture produces a typed DTO/capture payload
+- background finalize turns that into the published snapshot where useful
 - waiting readers block until the next publish for that store
 - listener thread serializes the published result
 
@@ -216,7 +221,7 @@ These are built from:
 
 The fresh-read contract is:
 
-- a GET may wait for the next main-thread publish
+- a GET may wait across one or more frames for the next publish
 - the returned data is fresh as of the frame that serviced the request
 - concurrent readers are intended to coalesce onto shared publishes when possible
 
@@ -229,7 +234,8 @@ Current state:
 
 - `ReadV2` owns the live read contract
 - there is no cadence-driven read refresh in the main update loop
-- some debug/benchmark support code still uses registry-held tracked refs
+- `ProcessPendingRefresh()` is now a bounded capture scheduler, not a full publish loop
+- expensive finalize/publish work can run on `ReadV2`'s internal background worker
 
 ## ID model
 
@@ -297,9 +303,9 @@ HTTP POST
 
 Current usage pattern:
 
-- each component owns its own writer instance
+- each live request/build path owns its own writer instance
 - `Reset()` per request/build
-- no shared listener-thread/main-thread writer instance for live API paths
+- staged finalize paths avoid reusing main-thread writers across threads
 
 Major live writers:
 
@@ -420,6 +426,7 @@ Still transitional:
 - `/api/debug` and benchmark surfaces are still evolving around the new `ReadV2` vocabulary
 - some docs and historical notes still reference the removed cache architecture
 - fixture/history artifacts still describe the legacy migration path because they are preserved intentionally
+- capture budgeting is intentionally conservative and may still need tuning per domain
 
 The likely endstate from here is:
 

@@ -28,6 +28,7 @@ Implemented:
   - `TimberbotPagedEndpoint.cs`
 - fresh-on-request projection-backed reads for buildings, beavers, and natural-resource entity collections
 - native v2 value and derived endpoints for summary, districts, resources, population, alerts, power, wellbeing, notifications, science, distribution, time, weather, speed, workhours, tree clusters, and food clusters
+- staged refresh inside `TimberbotReadV2`: main-thread capture plus background finalize/publish
 - a dedicated v2 experiment harness at [`timberbot/script/test_v2.py`](../timberbot/script/test_v2.py)
 
 Important implementation note:
@@ -62,6 +63,7 @@ Current live status after build, reload, and retest:
 
 - final `/api/v1/*` vs `/api/*` parity run before removal: `318 passed, 0 failed`
 - post-cut `/api/*` full suite: `64 passed, 0 failed, 33 skipped`
+- post-staged-refresh full suite: `72 passed, 0 failed, 29 skipped`
 
 Important concrete progress:
 
@@ -95,6 +97,13 @@ Target behavior:
 - the refreshed data is published as an immutable/read-only snapshot
 - the request then responds from that snapshot off-thread
 - no migrated entity type performs continuous refresh work while idle
+
+Current implementation note:
+
+- the system no longer treats fresh-on-request as a single main-thread publish step
+- `ReadV2.ProcessPendingRefresh()` now advances bounded main-thread capture work
+- completed captures are finalized and published on an internal background worker
+- requests can wait across multiple frames if capture spills under budget
 
 ## Core idea
 
@@ -147,6 +156,16 @@ This bounds worst-case gameplay cost under polling:
 
 - many requests in one frame share one refresh
 - the system does not refresh once per request
+
+In the current staged implementation, a "refresh" is split into:
+
+- main-thread capture from live Timberborn objects
+- background finalize/publish from captured DTO buffers
+
+That means the bound that matters is now:
+
+- at most one active capture per migrated domain at a time
+- publish work no longer has to finish on the same main-thread frame
 
 ## Architectural split
 
@@ -359,6 +378,21 @@ For `GET /api/buildings_v2`:
 6. Waiting requests wake
 7. Listener thread filters/paginates/serializes from the published snapshot
 
+### Current staged coordination model
+
+The original single-phase design has now been replaced with a staged generic implementation inside `TimberbotReadV2`:
+
+1. listener-thread request registers as a waiter
+2. main thread marks capture pending for the required domain
+3. `ProcessPendingRefresh(now)` advances capture up to the configured frame budget
+4. when capture completes, `ReadV2` queues finalize work to its private background worker
+5. finalize builds any thread-safe derived strings/JSON and publishes the immutable snapshot
+6. only the waiters attached to that in-flight publish are released
+
+Important correctness rule:
+
+- waiters that arrive after capture has started are held for the next publish, not incorrectly released by the current one
+
 ### Coalescing rule
 
 - one refresh per frame max
@@ -383,6 +417,12 @@ For migrated fresh-read endpoints, `UpdateSingleton()` should conceptually run i
 3. Process pending fresh-read refreshes
 4. Publish snapshots and release waiters
 5. Flush webhooks
+
+Current implementation detail:
+
+- step 3 is now bounded capture scheduling
+- step 4 may finish on the `ReadV2` finalize worker after capture completes
+- the freshness contract is preserved by waiting for publish completion, not by forcing all work into one frame
 
 This order matters because:
 
@@ -632,6 +672,8 @@ Responsibilities:
 - expose fresh-read waiting and published snapshot access
 - expose publish metrics
 - keep published DTO arrays for definitions, state, and detail
+- coordinate staged capture vs finalize state
+- keep waiter ownership correct across in-flight publishes
 
 Required typed hooks:
 
@@ -644,6 +686,7 @@ Rules:
 - published snapshots contain only DTO data
 - no reflection in hot paths
 - no live Timberborn refs in published state
+- any background finalize step may only touch captured DTO buffers, not live tracked refs
 
 ### `CollectionQuery`
 
@@ -715,9 +758,15 @@ Rules:
 - schemas handle only row content
 - per-schema scratch buffers are allowed because serialization stays on the listener thread
 
-### `ValueStore<TSnapshot>` and `ValueRoute<TSnapshot>`
+### `ValueStore<TCapture, TSnapshot>` and `ValueRoute<TSnapshot>`
 
 These are the matching native-v2 primitives for singleton or aggregate snapshots that do not need collection filtering.
+
+In the current implementation they also support staged refresh:
+
+- main-thread capture returns `TCapture`
+- background finalize turns that into the published `TSnapshot`
+- trivial endpoints may use the same type for both capture and published snapshot
 
 They are used for endpoints such as:
 
@@ -837,6 +886,8 @@ Completed implementation sequence:
 6. Rebuilt summary, alerts, power, wellbeing, districts, resources, population, and cluster endpoints as native v2 reads.
 7. Removed `_legacyRead.*` usage from `TimberbotReadV2`.
 8. Revalidated smoke and full parity after reload.
+9. Split `ReadV2.ProcessPendingRefresh()` into bounded main-thread capture plus background finalize/publish.
+10. Revalidated the full live suite after the staged refresh cutover.
 
 ## Remaining follow-on work
 
@@ -845,6 +896,7 @@ The remaining migration work is mostly outside the core v2 GET stack:
 1. decide when `/api/*` should switch to the native v2 implementations
 2. retire obsolete legacy-only code once the team is comfortable removing the old parity oracle
 3. keep expanding freshness, performance, and concurrency coverage as write-path scenarios are hardened
+4. tune capture budgeting and publish metrics now that the staged pipeline is live
 
 ## Explicit non-goals for the spike
 

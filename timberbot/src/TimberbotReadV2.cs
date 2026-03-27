@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
+using System.Diagnostics;
 using Timberborn.BlockSystem;
 using Timberborn.BuilderPrioritySystem;
 using Timberborn.Buildings;
@@ -80,9 +81,6 @@ namespace Timberbot
         private readonly List<TrackedNaturalResourceRef> _trackedNaturalResources = new List<TrackedNaturalResourceRef>();
         private readonly Dictionary<Guid, TrackedNaturalResourceRef> _trackedNaturalResourcesById = new Dictionary<Guid, TrackedNaturalResourceRef>();
         private readonly TimberbotJw _jw = new TimberbotJw(300000);
-        private readonly StringBuilder _toonSb = new StringBuilder(256);
-        private readonly TimberbotJw _scienceBuildJw = new TimberbotJw(4096);
-        private readonly TimberbotJw _distributionBuildJw = new TimberbotJw(4096);
         private readonly ProjectionSnapshot<BuildingDefinition, BuildingState, BuildingDetailState> _snapshot
             = new ProjectionSnapshot<BuildingDefinition, BuildingState, BuildingDetailState>();
         private readonly ProjectionSnapshot<BeaverDefinition, BeaverState, BeaverDetailState> _beaverSnapshot
@@ -94,15 +92,15 @@ namespace Timberbot
         private readonly CollectionRoute<NaturalResourceDefinition, NaturalResourceState, NoDetail> _treesEndpoint;
         private readonly CollectionRoute<NaturalResourceDefinition, NaturalResourceState, NoDetail> _cropsEndpoint;
         private readonly CollectionRoute<NaturalResourceDefinition, NaturalResourceState, NoDetail> _gatherablesEndpoint;
-        private readonly ValueStore<SettlementSnapshot> _settlementStore = new ValueStore<SettlementSnapshot>();
-        private readonly ValueStore<TimeSnapshot> _timeStore = new ValueStore<TimeSnapshot>();
-        private readonly ValueStore<WeatherSnapshot> _weatherStore = new ValueStore<WeatherSnapshot>();
-        private readonly ValueStore<SpeedSnapshot> _speedStore = new ValueStore<SpeedSnapshot>();
-        private readonly ValueStore<WorkHoursSnapshot> _workHoursStore = new ValueStore<WorkHoursSnapshot>();
-        private readonly ValueStore<RawJsonSnapshot> _scienceStore = new ValueStore<RawJsonSnapshot>();
-        private readonly ValueStore<RawJsonSnapshot> _distributionStore = new ValueStore<RawJsonSnapshot>();
-        private readonly ValueStore<NotificationItem[]> _notificationsStore = new ValueStore<NotificationItem[]>();
-        private readonly ValueStore<DistrictSnapshot[]> _districtStore = new ValueStore<DistrictSnapshot[]>();
+        private readonly ValueStore<SettlementSnapshot, SettlementSnapshot> _settlementStore = new ValueStore<SettlementSnapshot, SettlementSnapshot>();
+        private readonly ValueStore<TimeSnapshot, TimeSnapshot> _timeStore = new ValueStore<TimeSnapshot, TimeSnapshot>();
+        private readonly ValueStore<WeatherSnapshot, WeatherSnapshot> _weatherStore = new ValueStore<WeatherSnapshot, WeatherSnapshot>();
+        private readonly ValueStore<SpeedSnapshot, SpeedSnapshot> _speedStore = new ValueStore<SpeedSnapshot, SpeedSnapshot>();
+        private readonly ValueStore<WorkHoursSnapshot, WorkHoursSnapshot> _workHoursStore = new ValueStore<WorkHoursSnapshot, WorkHoursSnapshot>();
+        private readonly ValueStore<ScienceCapture, RawJsonSnapshot> _scienceStore = new ValueStore<ScienceCapture, RawJsonSnapshot>();
+        private readonly ValueStore<DistributionCapture, RawJsonSnapshot> _distributionStore = new ValueStore<DistributionCapture, RawJsonSnapshot>();
+        private readonly ValueStore<NotificationItem[], NotificationItem[]> _notificationsStore = new ValueStore<NotificationItem[], NotificationItem[]>();
+        private readonly ValueStore<DistrictCapture[], DistrictSnapshot[]> _districtStore = new ValueStore<DistrictCapture[], DistrictSnapshot[]>();
         private readonly ValueRoute<TimeSnapshot> _timeRoute;
         private readonly ValueRoute<WeatherSnapshot> _weatherRoute;
         private readonly ValueRoute<SpeedSnapshot> _speedRoute;
@@ -130,6 +128,12 @@ namespace Timberbot
         private readonly HashSet<long> _tileSeedlings = new HashSet<long>();
         private readonly HashSet<long> _tileDeadTiles = new HashSet<long>();
         private readonly StringBuilder _tileSb = new StringBuilder(256);
+        private readonly object _finalizeQueueLock = new object();
+        private readonly Queue<Action> _finalizeQueue = new Queue<Action>();
+        private readonly AutoResetEvent _finalizeSignal = new AutoResetEvent(false);
+        private readonly ManualResetEvent _finalizeStop = new ManualResetEvent(false);
+        private readonly Thread _finalizeThread;
+        private const double CaptureBudgetMs = 1.0;
         private static readonly HashSet<string> _cropNames = new HashSet<string>
             { "Kohlrabi", "Soybean", "Corn", "Sunflower", "Eggplant", "Algae", "Cassava", "Mushroom", "Potato", "Wheat", "Carrot" };
         public static readonly int[] SpeedScale = { 0, 1, 3, 7 };
@@ -243,20 +247,42 @@ namespace Timberbot
                 new TimberbotJw(8192),
                 _ => BuildPowerFromBuildings(),
                 new PowerSchema());
+            _finalizeThread = new Thread(FinalizeLoop)
+            {
+                IsBackground = true,
+                Name = "TimberbotReadV2Finalize"
+            };
+            _finalizeThread.Start();
         }
 
         public int PublishSequence => _snapshot.Sequence;
         public int LastPublishedCount => _snapshot.Count;
         public float LastPublishedAt => _snapshot.PublishedAt;
+        public double LastCaptureMs => _snapshot.LastCaptureMs;
+        public double LastFinalizeMs => _snapshot.LastFinalizeMs;
+        public int PendingWaiters => _snapshot.PendingWaiterCount;
+        public int RefreshInFlight => _snapshot.InFlight ? 1 : 0;
         public int BeaverPublishSequence => _beaverSnapshot.Sequence;
         public int BeaverLastPublishedCount => _beaverSnapshot.Count;
         public float BeaverLastPublishedAt => _beaverSnapshot.PublishedAt;
+        public double BeaverLastCaptureMs => _beaverSnapshot.LastCaptureMs;
+        public double BeaverLastFinalizeMs => _beaverSnapshot.LastFinalizeMs;
+        public int BeaverPendingWaiters => _beaverSnapshot.PendingWaiterCount;
+        public int BeaverRefreshInFlight => _beaverSnapshot.InFlight ? 1 : 0;
         public int NaturalResourcePublishSequence => _naturalResourceSnapshot.Sequence;
         public int NaturalResourceLastPublishedCount => _naturalResourceSnapshot.Count;
         public float NaturalResourceLastPublishedAt => _naturalResourceSnapshot.PublishedAt;
+        public double NaturalResourceLastCaptureMs => _naturalResourceSnapshot.LastCaptureMs;
+        public double NaturalResourceLastFinalizeMs => _naturalResourceSnapshot.LastFinalizeMs;
+        public int NaturalResourcePendingWaiters => _naturalResourceSnapshot.PendingWaiterCount;
+        public int NaturalResourceRefreshInFlight => _naturalResourceSnapshot.InFlight ? 1 : 0;
         public int DistrictPublishSequence => _districtStore.Sequence;
         public int DistrictLastPublishedCount => _districtStore.Count;
         public float DistrictLastPublishedAt => _districtStore.PublishedAt;
+        public double DistrictLastCaptureMs => _districtStore.LastCaptureMs;
+        public double DistrictLastFinalizeMs => _districtStore.LastFinalizeMs;
+        public int DistrictPendingWaiters => _districtStore.PendingWaiterCount;
+        public int DistrictRefreshInFlight => _districtStore.InFlight ? 1 : 0;
         internal ProjectionSnapshot<BuildingDefinition, BuildingState, BuildingDetailState>.Snapshot CurrentBuildingSnapshot => _snapshot.Current;
         internal ProjectionSnapshot<BeaverDefinition, BeaverState, BeaverDetailState>.Snapshot CurrentBeaverSnapshot => _beaverSnapshot.Current;
         internal ProjectionSnapshot<NaturalResourceDefinition, NaturalResourceState, NoDetail>.Snapshot CurrentNaturalResourceSnapshot => _naturalResourceSnapshot.Current;
@@ -270,8 +296,59 @@ namespace Timberbot
         internal IReadOnlyList<TrackedNaturalResourceRef> TrackedNaturalResources => _trackedNaturalResources;
         internal DistrictCenterRegistry DebugDistrictRegistry => _districtCenterRegistry;
 
+        private void EnqueueFinalize(Action action)
+        {
+            lock (_finalizeQueueLock)
+                _finalizeQueue.Enqueue(action);
+            _finalizeSignal.Set();
+        }
+
+        private void FinalizeLoop()
+        {
+            var waitHandles = new WaitHandle[] { _finalizeStop, _finalizeSignal };
+            while (true)
+            {
+                Action action = null;
+                lock (_finalizeQueueLock)
+                {
+                    if (_finalizeQueue.Count > 0)
+                        action = _finalizeQueue.Dequeue();
+                }
+
+                if (action == null)
+                {
+                    int index = WaitHandle.WaitAny(waitHandles);
+                    if (index == 0)
+                    {
+                        lock (_finalizeQueueLock)
+                        {
+                            if (_finalizeQueue.Count == 0)
+                                return;
+                        }
+                    }
+                    continue;
+                }
+
+                try
+                {
+                    action();
+                }
+                catch (Exception ex)
+                {
+                    TimberbotLog.Error("readv2.finalize", ex);
+                }
+            }
+        }
+
         public void Register() => _eventBus.Register(this);
-        public void Unregister() => _eventBus.Unregister(this);
+        public void Unregister()
+        {
+            _eventBus.Unregister(this);
+            _finalizeStop.Set();
+            _finalizeSignal.Set();
+            if (_finalizeThread.IsAlive)
+                _finalizeThread.Join(2000);
+        }
 
         public void BuildAll()
         {
@@ -292,51 +369,74 @@ namespace Timberbot
             _naturalResourceSnapshot.MarkDirty();
             _snapshot.PublishNow(0f, _tracked.Count,
                 i => _tracked[i].Definition,
-                (s, i) => RefreshState(s, _tracked[i]));
+                (s, i) => RefreshState(s, _tracked[i]),
+                null,
+                FinalizeBuildingSnapshot);
             _beaverSnapshot.PublishNow(0f, _trackedBeavers.Count,
                 i => _trackedBeavers[i].Definition,
                 (s, i) => RefreshState(s, _trackedBeavers[i]));
             _naturalResourceSnapshot.PublishNow(0f, _trackedNaturalResources.Count,
                 i => _trackedNaturalResources[i].Definition,
                 (s, i) => RefreshState(s, _trackedNaturalResources[i]));
-            _settlementStore.PublishNow(0f, BuildSettlementSnapshot);
-            _timeStore.PublishNow(0f, BuildTimeSnapshot);
-            _weatherStore.PublishNow(0f, BuildWeatherSnapshot);
-            _speedStore.PublishNow(0f, BuildSpeedSnapshot);
-            _workHoursStore.PublishNow(0f, BuildWorkHoursSnapshot);
-            _scienceStore.PublishNow(0f, BuildScienceSnapshot);
-            _distributionStore.PublishNow(0f, BuildDistributionSnapshot);
-            _notificationsStore.PublishNow(0f, BuildNotificationsSnapshot);
-            _districtStore.PublishNow(0f, BuildDistrictSnapshots);
+            _settlementStore.PublishNow(0f, BuildSettlementSnapshot, IdentitySnapshot);
+            _timeStore.PublishNow(0f, BuildTimeSnapshot, IdentitySnapshot);
+            _weatherStore.PublishNow(0f, BuildWeatherSnapshot, IdentitySnapshot);
+            _speedStore.PublishNow(0f, BuildSpeedSnapshot, IdentitySnapshot);
+            _workHoursStore.PublishNow(0f, BuildWorkHoursSnapshot, IdentitySnapshot);
+            _scienceStore.PublishNow(0f, CaptureScienceSnapshot, FinalizeScienceSnapshot);
+            _distributionStore.PublishNow(0f, CaptureDistributionSnapshot, FinalizeDistributionSnapshot);
+            _notificationsStore.PublishNow(0f, BuildNotificationsSnapshot, IdentitySnapshot);
+            _districtStore.PublishNow(0f, CaptureDistrictSnapshots, FinalizeDistrictSnapshots);
         }
 
         public void ProcessPendingRefresh(float now)
         {
-            _snapshot.ProcessPending(now, _tracked.Count,
+            var budget = Stopwatch.StartNew();
+            _snapshot.ProcessPendingCapture(now, _tracked.Count,
                 i => _tracked[i].Definition,
                 (s, i) => RefreshState(s, _tracked[i]),
-                (d, i) => RefreshDetail(d, _tracked[i]));
-            _beaverSnapshot.ProcessPending(now, _trackedBeavers.Count,
+                (d, i) => RefreshDetail(d, _tracked[i]),
+                FinalizeBuildingSnapshot,
+                EnqueueFinalize,
+                () => budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs);
+            if (budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs) return;
+            _beaverSnapshot.ProcessPendingCapture(now, _trackedBeavers.Count,
                 i => _trackedBeavers[i].Definition,
                 (s, i) => RefreshState(s, _trackedBeavers[i]),
-                (d, i) => RefreshDetail(d, _trackedBeavers[i]));
-            _naturalResourceSnapshot.ProcessPending(now, _trackedNaturalResources.Count,
+                (d, i) => RefreshDetail(d, _trackedBeavers[i]),
+                null,
+                EnqueueFinalize,
+                () => budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs);
+            if (budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs) return;
+            _naturalResourceSnapshot.ProcessPendingCapture(now, _trackedNaturalResources.Count,
                 i => _trackedNaturalResources[i].Definition,
                 (s, i) => RefreshState(s, _trackedNaturalResources[i]),
-                null);
-            _settlementStore.ProcessPending(now, BuildSettlementSnapshot);
-            _timeStore.ProcessPending(now, BuildTimeSnapshot);
-            _weatherStore.ProcessPending(now, BuildWeatherSnapshot);
-            _speedStore.ProcessPending(now, BuildSpeedSnapshot);
-            _workHoursStore.ProcessPending(now, BuildWorkHoursSnapshot);
-            _scienceStore.ProcessPending(now, BuildScienceSnapshot);
-            _distributionStore.ProcessPending(now, BuildDistributionSnapshot);
-            _notificationsStore.ProcessPending(now, BuildNotificationsSnapshot);
-            _districtStore.ProcessPending(now, BuildDistrictSnapshots);
+                null,
+                null,
+                EnqueueFinalize,
+                () => budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs);
+            if (budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs) return;
+            _settlementStore.ProcessPendingCapture(now, BuildSettlementSnapshot, IdentitySnapshot, EnqueueFinalize, () => budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs);
+            if (budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs) return;
+            _timeStore.ProcessPendingCapture(now, BuildTimeSnapshot, IdentitySnapshot, EnqueueFinalize, () => budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs);
+            if (budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs) return;
+            _weatherStore.ProcessPendingCapture(now, BuildWeatherSnapshot, IdentitySnapshot, EnqueueFinalize, () => budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs);
+            if (budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs) return;
+            _speedStore.ProcessPendingCapture(now, BuildSpeedSnapshot, IdentitySnapshot, EnqueueFinalize, () => budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs);
+            if (budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs) return;
+            _workHoursStore.ProcessPendingCapture(now, BuildWorkHoursSnapshot, IdentitySnapshot, EnqueueFinalize, () => budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs);
+            if (budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs) return;
+            _scienceStore.ProcessPendingCapture(now, CaptureScienceSnapshot, FinalizeScienceSnapshot, EnqueueFinalize, () => budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs);
+            if (budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs) return;
+            _distributionStore.ProcessPendingCapture(now, CaptureDistributionSnapshot, FinalizeDistributionSnapshot, EnqueueFinalize, () => budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs);
+            if (budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs) return;
+            _notificationsStore.ProcessPendingCapture(now, BuildNotificationsSnapshot, IdentitySnapshot, EnqueueFinalize, () => budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs);
+            if (budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs) return;
+            _districtStore.ProcessPendingCapture(now, CaptureDistrictSnapshots, FinalizeDistrictSnapshots, EnqueueFinalize, () => budget.Elapsed.TotalMilliseconds >= CaptureBudgetMs);
         }
 
         internal ProjectionSnapshot<BuildingDefinition, BuildingState, BuildingDetailState>.Snapshot EnsureBuildingsFreshNow(float now, bool fullDetail = false)
-            => _snapshot.PublishNow(now, _tracked.Count, i => _tracked[i].Definition, (s, i) => RefreshState(s, _tracked[i]), fullDetail ? (d, i) => RefreshDetail(d, _tracked[i]) : null);
+            => _snapshot.PublishNow(now, _tracked.Count, i => _tracked[i].Definition, (s, i) => RefreshState(s, _tracked[i]), fullDetail ? (d, i) => RefreshDetail(d, _tracked[i]) : null, FinalizeBuildingSnapshot);
 
         internal ProjectionSnapshot<NaturalResourceDefinition, NaturalResourceState, NoDetail>.Snapshot EnsureNaturalResourcesFreshNow(float now)
             => _naturalResourceSnapshot.PublishNow(now, _trackedNaturalResources.Count, i => _trackedNaturalResources[i].Definition, (s, i) => RefreshState(s, _trackedNaturalResources[i]));
@@ -345,7 +445,7 @@ namespace Timberbot
             => _beaverSnapshot.PublishNow(now, _trackedBeavers.Count, i => _trackedBeavers[i].Definition, (s, i) => RefreshState(s, _trackedBeavers[i]), fullDetail ? (d, i) => RefreshDetail(d, _trackedBeavers[i]) : null);
 
         internal DistrictSnapshot[] EnsureDistrictsFreshNow(float now)
-            => _districtStore.PublishNow(now, BuildDistrictSnapshots);
+            => _districtStore.PublishNow(now, CaptureDistrictSnapshots, FinalizeDistrictSnapshots);
 
         public object CollectBuildings(string format = "toon", string detail = "basic", int limit = 100, int offset = 0,
             string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
@@ -1063,40 +1163,87 @@ namespace Timberbot
             };
         }
 
-        private RawJsonSnapshot BuildScienceSnapshot()
+        private ScienceCapture CaptureScienceSnapshot()
         {
-            var jw = _scienceBuildJw.Reset().OpenObj().Prop("points", _scienceService.SciencePoints);
-            jw.Arr("unlockables");
+            var unlockables = new List<ScienceUnlockableCapture>();
             foreach (var building in _buildingService.Buildings)
             {
                 var bs = building.GetSpec<BuildingSpec>();
                 if (bs == null || bs.ScienceCost <= 0) continue;
                 var templateSpec = building.GetSpec<Timberborn.TemplateSystem.TemplateSpec>();
                 var name = templateSpec?.TemplateName ?? "unknown";
+                unlockables.Add(new ScienceUnlockableCapture
+                {
+                    Name = name,
+                    Cost = bs.ScienceCost,
+                    Unlocked = _buildingUnlockingService.Unlocked(bs) ? 1 : 0
+                });
+            }
+            return new ScienceCapture
+            {
+                Points = _scienceService.SciencePoints,
+                Unlockables = unlockables.ToArray()
+            };
+        }
+
+        private RawJsonSnapshot FinalizeScienceSnapshot(ScienceCapture capture)
+        {
+            var jw = new TimberbotJw(4096).Reset().OpenObj().Prop("points", capture.Points);
+            jw.Arr("unlockables");
+            for (int i = 0; i < capture.Unlockables.Length; i++)
+            {
+                var unlockable = capture.Unlockables[i];
                 jw.OpenObj()
-                    .Prop("name", name)
-                    .Prop("cost", bs.ScienceCost)
-                    .Prop("unlocked", _buildingUnlockingService.Unlocked(bs))
+                    .Prop("name", unlockable.Name)
+                    .Prop("cost", unlockable.Cost)
+                    .Prop("unlocked", unlockable.Unlocked)
                     .CloseObj();
             }
             jw.CloseArr().CloseObj();
             return new RawJsonSnapshot { Json = jw.ToString() };
         }
 
-        private RawJsonSnapshot BuildDistributionSnapshot()
+        private DistributionCapture CaptureDistributionSnapshot()
         {
-            var jw = _distributionBuildJw.BeginArr();
+            var districts = new List<DistributionDistrictCapture>();
             foreach (var dc in _districtCenterRegistry.FinishedDistrictCenters)
             {
                 var distSetting = dc.GetComponent<Timberborn.DistributionSystem.DistrictDistributionSetting>();
                 if (distSetting == null) continue;
-                jw.OpenObj().Prop("district", dc.DistrictName).Arr("goods");
-                foreach (var gs in distSetting.GoodDistributionSettings)
+                var goods = new DistributionGoodCapture[distSetting.GoodDistributionSettings.Count];
+                for (int i = 0; i < distSetting.GoodDistributionSettings.Count; i++)
                 {
+                    var gs = distSetting.GoodDistributionSettings[i];
+                    goods[i] = new DistributionGoodCapture
+                    {
+                        Good = gs.GoodId,
+                        ImportOption = gs.ImportOption.ToString(),
+                        ExportThreshold = gs.ExportThreshold
+                    };
+                }
+                districts.Add(new DistributionDistrictCapture
+                {
+                    District = dc.DistrictName,
+                    Goods = goods
+                });
+            }
+            return new DistributionCapture { Districts = districts.ToArray() };
+        }
+
+        private RawJsonSnapshot FinalizeDistributionSnapshot(DistributionCapture capture)
+        {
+            var jw = new TimberbotJw(4096).BeginArr();
+            for (int di = 0; di < capture.Districts.Length; di++)
+            {
+                var district = capture.Districts[di];
+                jw.OpenObj().Prop("district", district.District).Arr("goods");
+                for (int gi = 0; gi < district.Goods.Length; gi++)
+                {
+                    var good = district.Goods[gi];
                     jw.OpenObj()
-                        .Prop("good", gs.GoodId)
-                        .Prop("importOption", gs.ImportOption.ToString())
-                        .Prop("exportThreshold", gs.ExportThreshold, "F0")
+                        .Prop("good", good.Good)
+                        .Prop("importOption", good.ImportOption)
+                        .Prop("exportThreshold", good.ExportThreshold, "F0")
                         .CloseObj();
                 }
                 jw.CloseArr().CloseObj();
@@ -1125,6 +1272,25 @@ namespace Timberbot
             {
                 TimberbotLog.Error("readv2.notifications", ex);
                 return Array.Empty<NotificationItem>();
+            }
+        }
+
+        private static T IdentitySnapshot<T>(T snapshot) where T : class => snapshot;
+
+        private void FinalizeBuildingSnapshot(ProjectionSnapshot<BuildingDefinition, BuildingState, BuildingDetailState>.Buffer buffer, int count, bool fullDetail)
+        {
+            if (!fullDetail) return;
+            for (int i = 0; i < count; i++)
+            {
+                var detail = buffer.Details[i];
+                detail.InventoryToon = ToToonDict(detail.Inventory);
+                var sb = new StringBuilder(128);
+                for (int ri = 0; ri < detail.Recipes.Count; ri++)
+                {
+                    if (ri > 0) sb.Append('/');
+                    sb.Append(detail.Recipes[ri]);
+                }
+                detail.RecipesToon = sb.ToString();
             }
         }
 
@@ -1302,7 +1468,6 @@ namespace Timberbot
         private void RefreshDetail(BuildingDetailState d, TrackedBuildingRef t)
         {
             d.Inventory.Clear();
-            d.InventoryToon = "";
             if (t.Inventories != null)
             {
                 try
@@ -1323,21 +1488,12 @@ namespace Timberbot
                     }
                 }
                 catch (Exception ex) { TimberbotLog.Error("readv2.inventory", ex); }
-                d.InventoryToon = ToToonDict(d.Inventory);
             }
             d.Recipes.Clear();
-            d.RecipesToon = "";
             if (t.Manufactory != null)
             {
                 foreach (var r in t.Manufactory.ProductionRecipes)
                     d.Recipes.Add(r.Id);
-                _toonSb.Clear();
-                for (int i = 0; i < d.Recipes.Count; i++)
-                {
-                    if (i > 0) _toonSb.Append('/');
-                    _toonSb.Append(d.Recipes[i]);
-                }
-                d.RecipesToon = _toonSb.ToString();
             }
             d.NutrientStock.Clear();
             if (t.BreedingPod != null)
@@ -1354,13 +1510,13 @@ namespace Timberbot
         private string ToToonDict(Dictionary<string, int> dict)
         {
             if (dict.Count == 0) return "";
-            _toonSb.Clear();
+            var sb = new StringBuilder(256);
             foreach (var kvp in dict)
             {
-                if (_toonSb.Length > 0) _toonSb.Append('/');
-                _toonSb.Append(kvp.Key).Append(':').Append(kvp.Value);
+                if (sb.Length > 0) sb.Append('/');
+                sb.Append(kvp.Key).Append(':').Append(kvp.Value);
             }
-            return _toonSb.ToString();
+            return sb.ToString();
         }
 
         private static void RefreshState(BeaverState s, TrackedBeaverRef t)
@@ -1467,50 +1623,70 @@ namespace Timberbot
             s.Growth = t.Growable != null ? t.Growable.GrowthProgress : 0f;
         }
 
-        private DistrictSnapshot[] BuildDistrictSnapshots()
+        private DistrictCapture[] CaptureDistrictSnapshots()
         {
             var goodIds = _cache.AllGoodIds;
-            var districts = new List<DistrictSnapshot>();
+            var districts = new List<DistrictCapture>();
             foreach (var dc in _districtCenterRegistry.AllDistrictCenters)
             {
                 if (dc == null) continue;
-                var item = new DistrictSnapshot
-                {
-                    Name = dc.DistrictName,
-                    Resources = new Dictionary<string, (int available, int all)>()
-                };
+                var item = new DistrictCapture { Name = dc.DistrictName };
                 var pop = dc.DistrictPopulation;
                 item.Adults = pop != null ? pop.NumberOfAdults : 0;
                 item.Children = pop != null ? pop.NumberOfChildren : 0;
                 item.Bots = pop != null ? pop.NumberOfBots : 0;
-
+                var resources = new List<DistrictResourceCapture>();
                 var counter = dc.GetComponent<DistrictResourceCounter>();
                 if (counter != null)
                 {
-                    var toonJw = new TimberbotJw(4096).BeginObj();
                     foreach (var goodId in goodIds)
                     {
                         var rc = counter.GetResourceCount(goodId);
                         if (rc.AllStock <= 0) continue;
-                        item.Resources[goodId] = (rc.AvailableStock, rc.AllStock);
-                        toonJw.Key(goodId).Int(rc.AvailableStock);
+                        resources.Add(new DistrictResourceCapture
+                        {
+                            GoodId = goodId,
+                            Available = rc.AvailableStock,
+                            All = rc.AllStock
+                        });
                     }
-                    toonJw.CloseObj();
-                    item.ResourcesToon = toonJw.ToInnerString();
-
-                    var jsonJw = new TimberbotJw(4096).BeginObj();
-                    foreach (var goodId in goodIds)
-                    {
-                        var rc = counter.GetResourceCount(goodId);
-                        if (rc.AllStock <= 0) continue;
-                        jsonJw.Key(goodId).OpenObj().Prop("available", rc.AvailableStock).Prop("all", rc.AllStock).CloseObj();
-                    }
-                    jsonJw.CloseObj();
-                    item.ResourcesJson = jsonJw.ToInnerString();
                 }
+                item.Resources = resources.ToArray();
                 districts.Add(item);
             }
             return districts.ToArray();
+        }
+
+        private DistrictSnapshot[] FinalizeDistrictSnapshots(DistrictCapture[] capture)
+        {
+            var districts = new DistrictSnapshot[capture.Length];
+            for (int i = 0; i < capture.Length; i++)
+            {
+                var source = capture[i];
+                var item = new DistrictSnapshot
+                {
+                    Name = source.Name,
+                    Adults = source.Adults,
+                    Children = source.Children,
+                    Bots = source.Bots,
+                    Resources = new Dictionary<string, (int available, int all)>()
+                };
+                var toonJw = new TimberbotJw(4096).BeginObj();
+                var jsonJw = new TimberbotJw(4096).BeginObj();
+                for (int ri = 0; ri < source.Resources.Length; ri++)
+                {
+                    var resource = source.Resources[ri];
+                    item.Resources[resource.GoodId] = (resource.Available, resource.All);
+                    toonJw.Key(resource.GoodId).Int(resource.Available);
+                    jsonJw.Key(resource.GoodId).OpenObj().Prop("available", resource.Available).Prop("all", resource.All).CloseObj();
+                }
+                toonJw.CloseObj();
+                jsonJw.CloseObj();
+                item.ResourcesToon = toonJw.ToInnerString();
+                item.ResourcesJson = jsonJw.ToInnerString();
+                districts[i] = item;
+            }
+            return districts;
         }
 
         private static bool PassesFilter(string entityName, int entityX, int entityY,
@@ -1985,18 +2161,28 @@ namespace Timberbot
             public delegate TDef GetDefinition(int index);
             public delegate void RefreshState(TState state, int index);
             public delegate void RefreshDetail(TDetail detail, int index);
+            public delegate void FinalizeBuffer(Buffer buffer, int count, bool fullDetail);
 
             private readonly object _lock = new object();
             private bool _refreshRequested;
             private bool _fullRequested;
             private readonly List<Waiter> _waiters = new List<Waiter>();
-            private readonly List<Waiter> _wakeBatch = new List<Waiter>();
             private readonly Buffer _bufA = new Buffer();
             private readonly Buffer _bufB = new Buffer();
             private Buffer _writeBuf;
             private Snapshot _published = Snapshot.Empty;
             private bool _structureDirty = true;
             private int _sequence;
+            private bool _captureInProgress;
+            private bool _finalizeInProgress;
+            private Buffer _captureBuf;
+            private int _captureCount;
+            private int _captureIndex;
+            private float _capturePublishedAt;
+            private bool _captureFullDetail;
+            private readonly List<Waiter> _activeWaiters = new List<Waiter>();
+            private double _lastCaptureMs;
+            private double _lastFinalizeMs;
 
             public ProjectionSnapshot()
             {
@@ -2007,31 +2193,135 @@ namespace Timberbot
             public int Count => _published.Count;
             public float PublishedAt => _published.PublishedAt;
             public Snapshot Current => _published;
+            public double LastCaptureMs => _lastCaptureMs;
+            public double LastFinalizeMs => _lastFinalizeMs;
+            public int PendingWaiterCount { get { lock (_lock) return _waiters.Count + _activeWaiters.Count; } }
+            public bool InFlight { get { lock (_lock) return _captureInProgress || _finalizeInProgress; } }
             public void MarkDirty() => _structureDirty = true;
 
-            public void ProcessPending(float now, int count, GetDefinition getDef, RefreshState refreshState, RefreshDetail refreshDetail)
+            public void ProcessPendingCapture(
+                float now,
+                int count,
+                GetDefinition getDef,
+                RefreshState refreshState,
+                RefreshDetail refreshDetail,
+                FinalizeBuffer finalizeBuffer,
+                Action<Action> enqueueFinalize,
+                Func<bool> budgetExceeded)
             {
-                bool full;
+                Buffer captureBuf;
+                int captureCount;
+                int startIndex;
+                bool fullDetail;
+                bool startingCapture = false;
                 lock (_lock)
                 {
-                    if (!_refreshRequested) return;
-                    _refreshRequested = false;
-                    full = _fullRequested;
-                    _fullRequested = false;
-                    _wakeBatch.Clear();
-                    _wakeBatch.AddRange(_waiters);
-                    _waiters.Clear();
+                    if (_finalizeInProgress) return;
+                    if (!_captureInProgress)
+                    {
+                        if (!_refreshRequested) return;
+                        _refreshRequested = false;
+                        _captureInProgress = true;
+                        _captureBuf = _writeBuf;
+                        _captureCount = count;
+                        _captureIndex = 0;
+                        _capturePublishedAt = now;
+                        _captureFullDetail = _fullRequested;
+                        _fullRequested = false;
+                        _activeWaiters.Clear();
+                        _activeWaiters.AddRange(_waiters);
+                        _waiters.Clear();
+                        startingCapture = true;
+                    }
+                    captureBuf = _captureBuf;
+                    captureCount = _captureCount;
+                    startIndex = _captureIndex;
+                    fullDetail = _captureFullDetail;
                 }
 
+                int i = startIndex;
                 try
                 {
-                    Publish(count, getDef, refreshState, full ? refreshDetail : null, now);
+                    var sw = Stopwatch.StartNew();
+                    if (startingCapture && _structureDirty)
+                    {
+                        _structureDirty = false;
+                        captureBuf.EnsureCapacity(captureCount);
+                        for (int di = 0; di < captureCount; di++)
+                            captureBuf.Definitions[di] = getDef(di);
+                    }
+
+                    for (; i < captureCount; i++)
+                    {
+                        refreshState(captureBuf.States[i], i);
+                        if (fullDetail)
+                            refreshDetail?.Invoke(captureBuf.Details[i], i);
+                        if (budgetExceeded())
+                        {
+                            i++;
+                            break;
+                        }
+                    }
+
+                    lock (_lock)
+                    {
+                        _lastCaptureMs = sw.Elapsed.TotalMilliseconds;
+                        if (i < captureCount)
+                        {
+                            _captureIndex = i;
+                            return;
+                        }
+                        _captureInProgress = false;
+                        _finalizeInProgress = true;
+                        _writeBuf = ReferenceEquals(captureBuf, _bufA) ? _bufB : _bufA;
+                        if (_writeBuf.Length < captureCount)
+                            _structureDirty = true;
+                    }
                 }
-                finally
+                catch (Exception ex)
                 {
-                    for (int i = 0; i < _wakeBatch.Count; i++)
-                        _wakeBatch[i].Signal.Set();
+                    List<Waiter> wakeBatch;
+                    lock (_lock)
+                    {
+                        _captureInProgress = false;
+                        _finalizeInProgress = false;
+                        _refreshRequested = false;
+                        _fullRequested = false;
+                        wakeBatch = new List<Waiter>(_activeWaiters);
+                        wakeBatch.AddRange(_waiters);
+                        _activeWaiters.Clear();
+                        _waiters.Clear();
+                    }
+                    for (int wi = 0; wi < wakeBatch.Count; wi++)
+                        wakeBatch[wi].Signal.Set();
+                    TimberbotLog.Error("readv2.capture", ex);
+                    return;
                 }
+
+                enqueueFinalize(() =>
+                {
+                    var finalizeSw = Stopwatch.StartNew();
+                    finalizeBuffer?.Invoke(captureBuf, captureCount, fullDetail);
+                    List<Waiter> wakeBatch;
+                    lock (_lock)
+                    {
+                        _published = new Snapshot
+                        {
+                            Definitions = captureBuf.Definitions,
+                            States = captureBuf.States,
+                            Details = fullDetail ? captureBuf.Details : null,
+                            Count = captureCount,
+                            PublishedAt = _capturePublishedAt
+                        };
+                        _sequence++;
+                        _lastFinalizeMs = finalizeSw.Elapsed.TotalMilliseconds;
+                        _finalizeInProgress = false;
+                        wakeBatch = new List<Waiter>(_activeWaiters);
+                        _activeWaiters.Clear();
+                    }
+                    for (int wi = 0; wi < wakeBatch.Count; wi++)
+                        wakeBatch[wi].Signal.Set();
+                });
             }
 
             public Snapshot RequestFresh(bool fullDetail, int timeoutMs)
@@ -2052,15 +2342,16 @@ namespace Timberbot
                 return _published;
             }
 
-            public Snapshot PublishNow(float now, int count, GetDefinition getDef, RefreshState refreshState, RefreshDetail refreshDetail = null)
+            public Snapshot PublishNow(float now, int count, GetDefinition getDef, RefreshState refreshState, RefreshDetail refreshDetail = null, FinalizeBuffer finalizeBuffer = null)
             {
-                Publish(count, getDef, refreshState, refreshDetail, now);
+                Publish(count, getDef, refreshState, refreshDetail, now, finalizeBuffer);
                 return _published;
             }
 
-            private void Publish(int count, GetDefinition getDef, RefreshState refreshState, RefreshDetail refreshDetail, float now)
+            private void Publish(int count, GetDefinition getDef, RefreshState refreshState, RefreshDetail refreshDetail, float now, FinalizeBuffer finalizeBuffer)
             {
                 var buf = _writeBuf;
+                var captureSw = Stopwatch.StartNew();
                 if (_structureDirty)
                 {
                     _structureDirty = false;
@@ -2074,6 +2365,10 @@ namespace Timberbot
                     refreshState(buf.States[i], i);
                     refreshDetail?.Invoke(buf.Details[i], i);
                 }
+                _lastCaptureMs = captureSw.Elapsed.TotalMilliseconds;
+                var finalizeSw = Stopwatch.StartNew();
+                finalizeBuffer?.Invoke(buf, count, refreshDetail != null);
+                _lastFinalizeMs = finalizeSw.Elapsed.TotalMilliseconds;
 
                 _published = new Snapshot
                 {
@@ -2112,7 +2407,7 @@ namespace Timberbot
                 public readonly ManualResetEventSlim Signal = new ManualResetEventSlim(false);
             }
 
-            private sealed class Buffer
+            internal sealed class Buffer
             {
                 public TDef[] Definitions = Array.Empty<TDef>();
                 public TState[] States = Array.Empty<TState>();
@@ -2417,6 +2712,44 @@ namespace Timberbot
         }
         private sealed class SpeedSnapshot { public int Speed; }
         private sealed class WorkHoursSnapshot { public float EndHours; public bool AreWorkingHours; }
+        private sealed class ScienceCapture
+        {
+            public int Points;
+            public ScienceUnlockableCapture[] Unlockables;
+        }
+        private sealed class ScienceUnlockableCapture
+        {
+            public string Name;
+            public int Cost;
+            public int Unlocked;
+        }
+        private sealed class DistributionCapture
+        {
+            public DistributionDistrictCapture[] Districts;
+        }
+        private sealed class DistributionDistrictCapture
+        {
+            public string District;
+            public DistributionGoodCapture[] Goods;
+        }
+        private sealed class DistributionGoodCapture
+        {
+            public string Good;
+            public string ImportOption;
+            public float ExportThreshold;
+        }
+        private sealed class DistrictCapture
+        {
+            public string Name;
+            public int Adults, Children, Bots;
+            public DistrictResourceCapture[] Resources;
+        }
+        private sealed class DistrictResourceCapture
+        {
+            public string GoodId;
+            public int Available;
+            public int All;
+        }
         private sealed class RawJsonSnapshot { public string Json; }
         private sealed class NotificationItem { public string Subject; public string Description; public int Cycle; public int CycleDay; }
         private sealed class AlertItem { public string Type; public int Id; public string Name; public string Workers; }
@@ -2429,20 +2762,30 @@ namespace Timberbot
             void Write(TimberbotJw jw, string format, TSnapshot snapshot);
         }
 
-        private sealed class ValueStore<TSnapshot> where TSnapshot : class
+        private sealed class ValueStore<TCapture, TSnapshot>
+            where TCapture : class
+            where TSnapshot : class
         {
-            public delegate TSnapshot BuildSnapshot();
+            public delegate TCapture CaptureSnapshot();
+            public delegate TSnapshot FinalizeSnapshot(TCapture capture);
 
             private readonly object _lock = new object();
             private bool _refreshRequested;
             private readonly List<Waiter> _waiters = new List<Waiter>();
-            private readonly List<Waiter> _wakeBatch = new List<Waiter>();
+            private readonly List<Waiter> _activeWaiters = new List<Waiter>();
             private TSnapshot _published;
             private int _sequence;
             private float _publishedAt;
+            private bool _finalizeInProgress;
+            private double _lastCaptureMs;
+            private double _lastFinalizeMs;
             public TSnapshot Current => _published;
             public int Sequence => _sequence;
             public float PublishedAt => _publishedAt;
+            public double LastCaptureMs => _lastCaptureMs;
+            public double LastFinalizeMs => _lastFinalizeMs;
+            public int PendingWaiterCount { get { lock (_lock) return _waiters.Count + _activeWaiters.Count; } }
+            public bool InFlight { get { lock (_lock) return _finalizeInProgress; } }
             public int Count
             {
                 get
@@ -2453,28 +2796,56 @@ namespace Timberbot
                 }
             }
 
-            public void ProcessPending(float now, BuildSnapshot build)
+            public void ProcessPendingCapture(float now, CaptureSnapshot capture, FinalizeSnapshot finalize, Action<Action> enqueueFinalize, Func<bool> budgetExceeded)
             {
+                if (budgetExceeded()) return;
+                List<Waiter> activeWaiters;
+                TCapture captured;
                 lock (_lock)
                 {
-                    if (!_refreshRequested) return;
+                    if (!_refreshRequested || _finalizeInProgress) return;
                     _refreshRequested = false;
-                    _wakeBatch.Clear();
-                    _wakeBatch.AddRange(_waiters);
+                    _activeWaiters.Clear();
+                    _activeWaiters.AddRange(_waiters);
                     _waiters.Clear();
+                    _finalizeInProgress = true;
+                    activeWaiters = new List<Waiter>(_activeWaiters);
                 }
 
                 try
                 {
-                    _published = build();
-                    _publishedAt = now;
-                    _sequence++;
+                    var captureSw = Stopwatch.StartNew();
+                    captured = capture();
+                    _lastCaptureMs = captureSw.Elapsed.TotalMilliseconds;
                 }
-                finally
+                catch (Exception ex)
                 {
-                    for (int i = 0; i < _wakeBatch.Count; i++)
-                        _wakeBatch[i].Signal.Set();
+                    lock (_lock)
+                    {
+                        _finalizeInProgress = false;
+                        _activeWaiters.Clear();
+                    }
+                    for (int i = 0; i < activeWaiters.Count; i++)
+                        activeWaiters[i].Signal.Set();
+                    TimberbotLog.Error("readv2.value_capture", ex);
+                    return;
                 }
+                enqueueFinalize(() =>
+                {
+                    var finalizeSw = Stopwatch.StartNew();
+                    var published = finalize(captured);
+                    lock (_lock)
+                    {
+                        _published = published;
+                        _publishedAt = now;
+                        _sequence++;
+                        _lastFinalizeMs = finalizeSw.Elapsed.TotalMilliseconds;
+                        _finalizeInProgress = false;
+                        _activeWaiters.Clear();
+                    }
+                    for (int i = 0; i < activeWaiters.Count; i++)
+                        activeWaiters[i].Signal.Set();
+                });
             }
 
             public TSnapshot RequestFresh(int timeoutMs)
@@ -2493,11 +2864,16 @@ namespace Timberbot
                 return _published;
             }
 
-            public TSnapshot PublishNow(float now, BuildSnapshot build)
+            public TSnapshot PublishNow(float now, CaptureSnapshot capture, FinalizeSnapshot finalize)
             {
-                _published = build();
+                var captureSw = Stopwatch.StartNew();
+                var captured = capture();
+                _lastCaptureMs = captureSw.Elapsed.TotalMilliseconds;
+                var finalizeSw = Stopwatch.StartNew();
+                _published = finalize(captured);
                 _publishedAt = now;
                 _sequence++;
+                _lastFinalizeMs = finalizeSw.Elapsed.TotalMilliseconds;
                 return _published;
             }
 
