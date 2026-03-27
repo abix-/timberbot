@@ -372,27 +372,38 @@ namespace Timberbot
             // SWAP: the Write buffers (just updated with fresh data) become the new Read
             // buffers. The background HTTP thread will now see the updated data.
             // The old Read buffers become the new Write targets for next refresh.
-            // This is a pointer swap -- O(1), no data copying.
-            // districts (not double-buffered -- tiny list, refreshed in place)
-            Districts.Clear();
+            // districts: reuse existing CachedDistrict objects, update in place.
+            // Only allocate new ones when a district appears for the first time.
             try
             {
                 var goods = _goodService.Goods;
+                // mark all existing as stale, then un-mark as we find matches
+                for (int di = 0; di < Districts.Count; di++)
+                    Districts[di]._stale = true;
+
                 foreach (var dc in DistrictRegistry.FinishedDistrictCenters)
                 {
-                    var pop = dc.DistrictPopulation;
-                    var cd = new CachedDistrict
+                    // find existing or create new
+                    CachedDistrict cd = null;
+                    for (int di = 0; di < Districts.Count; di++)
+                        if (Districts[di].Name == dc.DistrictName) { cd = Districts[di]; break; }
+                    if (cd == null)
                     {
-                        Name = dc.DistrictName,
-                        Adults = pop != null ? pop.NumberOfAdults : 0,
-                        Children = pop != null ? pop.NumberOfChildren : 0,
-                        Bots = pop != null ? pop.NumberOfBots : 0,
-                    };
+                        cd = new CachedDistrict { Name = dc.DistrictName, Resources = new Dictionary<string, (int, int)>() };
+                        Districts.Add(cd);
+                    }
+                    cd._stale = false;
+
+                    var pop = dc.DistrictPopulation;
+                    cd.Adults = pop != null ? pop.NumberOfAdults : 0;
+                    cd.Children = pop != null ? pop.NumberOfChildren : 0;
+                    cd.Bots = pop != null ? pop.NumberOfBots : 0;
+
                     var counter = dc.GetComponent<DistrictResourceCounter>();
                     if (counter != null)
                     {
-                        cd.Resources = new Dictionary<string, (int, int)>();
-                        // pre-serialize toon: "Water":50,"Log":236
+                        if (cd.Resources == null) cd.Resources = new Dictionary<string, (int, int)>();
+                        cd.Resources.Clear();
                         var dj = _districtJw.BeginObj();
                         foreach (var goodId in goods)
                         {
@@ -406,7 +417,6 @@ namespace Timberbot
                         dj.CloseObj();
                         cd.ResourcesToon = dj.ToInnerString();
 
-                        // pre-serialize json: "Water":{"available":50,"all":54}
                         dj.BeginObj();
                         foreach (var goodId in goods)
                         {
@@ -417,8 +427,9 @@ namespace Timberbot
                         dj.CloseObj();
                         cd.ResourcesJson = dj.ToInnerString();
                     }
-                    Districts.Add(cd);
                 }
+                // remove districts that no longer exist
+                Districts.RemoveAll(d => d._stale);
             }
             catch (System.Exception _ex) { TimberbotLog.Error("cache.districts", _ex); }
 
@@ -767,6 +778,7 @@ namespace Timberbot
             public Dictionary<string, (int available, int all)> Resources;  // for projection math + toon resources
             public string ResourcesToon;  // pre-serialized: "Water":50,"Log":236,...
             public string ResourcesJson;  // pre-serialized: "Water":{"available":50,"all":54},...
+            internal bool _stale;         // used by RefreshCachedState to detect removed districts
         }
     }
 }

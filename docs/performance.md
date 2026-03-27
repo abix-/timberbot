@@ -10,9 +10,7 @@ None.
 
 ### Medium
 
-| # | Issue | Cost | Location |
-|---|---|---|---|
-| 11 | District refresh allocates `new CachedDistrict` + `new Dictionary` per district every 1s | ~3 objects/sec | `TimberbotEntityCache.cs:377-421` |
+None.
 
 ### Low
 
@@ -43,6 +41,7 @@ None.
 | ~~8~~ | ~~`CollectTiles`: new Dictionary + 3 HashSet + StringBuilder per tile~~ | **FIXED** -- reuses field-level `_tileOccupants`/`_tileEntrances`/`_tileSeedlings`/`_tileDeadTiles`/`_tileSb` |
 | ~~9~~ | ~~`CollectDistribution` GetComponent on background thread~~ | **FIXED** -- pre-built on main thread via `RefreshMainThreadData()` |
 | ~~10~~ | ~~`CollectScience` GetSpec on background thread~~ | **FIXED** -- pre-built on main thread via `RefreshMainThreadData()` |
+| ~~11~~ | ~~District refresh allocates new CachedDistrict + Dict per district every 1s~~ | **FIXED** -- reuses existing CachedDistrict objects, updates in place, clears Dict |
 | ~~23~~ | ~~`Math.Round(need.Points, 2)` boxes on Mono~~ | **DISPROVED** -- 0 GC0 across 11.4M calls. 1.8x slower than manual but no alloc |
 
 ## Entity tracking
