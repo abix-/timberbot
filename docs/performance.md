@@ -224,17 +224,4 @@ All scaling is linear with item count. Bot polling at 1/min cadence -- even 30ms
 | -- | TimberbotService monolith | Split into 8 classes with focused DI |
 | -- | RefreshCachedState error isolation | Per-entity try/catch in all 3 loops |
 
-## Test coverage
-
-Performance tests in `timberbot/script/test_validation.py`:
-
-- **63 tests** covering all Python client methods, any save game, any faction
-- **Latency**: 20 endpoints x 100 iterations each (2000 calls total). All endpoints under 50ms min
-- **Reliability**: all 2000 responses valid (no errors, no corruption)
-- **Cache consistency**: same endpoint called twice returns same count (no stale refs)
-- **Cache invalidation**: place path -> count+1, demolish -> count back (EventBus + DoubleBuffer)
-- **Data accuracy**: `validate` endpoint compares cached vs live game state per field. `validate_all` checks all 621 entities, 3876 fields, 0 mismatches
-- **Burst**: 7 sequential calls < 3s total (24ms measured)
-- **Save-agnostic**: discovery phase detects faction, map bounds, existing buildings
-- **Webhooks**: register, receive, filter, unregister, bad URL resilience, payload accuracy
-- **CLI args**: `--perf`, `--benchmark`, `--list`, `-n`, individual test names
+For test coverage and how to run tests, see [developing.md](developing.md#testing).

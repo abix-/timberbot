@@ -301,21 +301,4 @@ Map rendering uses delta-encoded ANSI (only emits escape codes when bg/fg change
 
 Mutable values (paused, workers, wellbeing) are up to `refreshIntervalSeconds` stale. Entity presence (which buildings/trees exist) is always current via EventBus. For a bot polling once per minute, 1s staleness is imperceptible.
 
-## File structure
-
-```
-TimberbotService.cs           -- Lifecycle, settings, orchestration (7 DI params)
-TimberbotEntityCache.cs       -- Double-buffered entity caching, cached classes, indexes (5 DI params)
-TimberbotRead.cs              -- All GET read endpoints (19 DI params)
-TimberbotWrite.cs             -- All POST write endpoints (22 DI params)
-TimberbotPlacement.cs         -- Building placement, path routing, terrain (14 DI params)
-TimberbotWebhook.cs           -- Batched push event notifications, circuit breaker (5 DI params)
-TimberbotDebug.cs             -- Reflection inspector and benchmark (1 DI param)
-TimberbotHttpServer.cs        -- HttpListener, routing, request/response handling
-TimberbotJw.cs                -- Fluent zero-alloc JSON writer
-TimberbotDoubleBuffer.cs      -- Generic double-buffer with Add/RemoveAll/Swap
-TimberbotLog.cs               -- File-based error logging, timestamped, thread-safe
-TimberbotConfigurator.cs      -- Bindito DI module registration
-TimberbotAutoLoad.cs          -- Auto-load a save at main menu via autoload.json or CLI args
-TimberbotAutoLoadConfigurator.cs -- MainMenu context DI registration for auto-load
-```
+For file structure and build instructions, see [developing.md](developing.md#file-structure).
