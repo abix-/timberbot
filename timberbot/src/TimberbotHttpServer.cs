@@ -261,6 +261,8 @@ namespace Timberbot
                         return _service.Read.CollectDistricts(format);
                     case "/api/buildings":
                         return _service.Read.CollectBuildings(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
+                    case "/api/buildings_v2":
+                        return _service.BuildingsV2.CollectBuildings(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/trees":
                         return _service.Read.CollectTrees(format, limit, offset, filterName, filterX, filterY, filterRadius);
                     case "/api/crops":
@@ -451,7 +453,7 @@ namespace Timberbot
             }
 
             return _jw.Error("unknown_endpoint", ("endpoints", new[] {
-                "GET /api/ping", "GET /api/summary", "GET /api/buildings", "GET /api/trees",
+                "GET /api/ping", "GET /api/summary", "GET /api/buildings", "GET /api/buildings_v2", "GET /api/trees",
                 "GET /api/beavers", "GET /api/resources", "GET /api/districts", "GET /api/weather",
                 "GET /api/time", "GET /api/speed", "GET /api/prefabs", "GET /api/power",
                 "POST /api/speed", "POST /api/building/place", "POST /api/building/demolish"

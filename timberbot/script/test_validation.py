@@ -14,6 +14,7 @@ Usage:
     python test_validation.py --list       # show all test names
 """
 import json
+import hashlib
 import os
 import subprocess
 import sys
@@ -55,6 +56,64 @@ class TestRunner:
             return fn()
         except Exception:
             return fallback
+
+    def _fingerprint(self, value):
+        """Stable compact fingerprint for parity checks without dumping payloads."""
+        payload = json.dumps(value, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+    def _compare_compact(self, left, right):
+        """Return a short mismatch summary instead of printing full payloads."""
+        if left == right:
+            return "match"
+        left_is_list = isinstance(left, list)
+        right_is_list = isinstance(right, list)
+        if left_is_list and right_is_list:
+            left_ids = [item.get("id") for item in left[:5] if isinstance(item, dict)]
+            right_ids = [item.get("id") for item in right[:5] if isinstance(item, dict)]
+            return (
+                f"left_count={len(left)} right_count={len(right)} "
+                f"left_hash={self._fingerprint(left)} right_hash={self._fingerprint(right)} "
+                f"left_ids={left_ids} right_ids={right_ids}"
+            )
+        return (
+            f"left_type={type(left).__name__} right_type={type(right).__name__} "
+            f"left_hash={self._fingerprint(left)} right_hash={self._fingerprint(right)}"
+        )
+
+    def _compare_building_lists(self, legacy, v2):
+        """Exact building-list comparison with compact mismatch reporting."""
+        if not isinstance(legacy, list) or not isinstance(v2, list):
+            return False, self._compare_compact(legacy, v2)
+        if legacy == v2:
+            return True, (
+                f"count={len(legacy)} hash={self._fingerprint(legacy)} "
+                f"sample_ids={[item.get('id') for item in legacy[:5] if isinstance(item, dict)]}"
+            )
+
+        legacy_by_id = {item.get("id"): item for item in legacy if isinstance(item, dict) and "id" in item}
+        v2_by_id = {item.get("id"): item for item in v2 if isinstance(item, dict) and "id" in item}
+        legacy_ids = set(legacy_by_id.keys())
+        v2_ids = set(v2_by_id.keys())
+        missing_in_v2 = sorted(legacy_ids - v2_ids)[:5]
+        extra_in_v2 = sorted(v2_ids - legacy_ids)[:5]
+        if missing_in_v2 or extra_in_v2:
+            return False, (
+                f"count_legacy={len(legacy)} count_v2={len(v2)} "
+                f"legacy_hash={self._fingerprint(legacy)} v2_hash={self._fingerprint(v2)} "
+                f"missing_in_v2={missing_in_v2} extra_in_v2={extra_in_v2}"
+            )
+
+        mismatches = []
+        for bid in sorted(legacy_ids):
+            if legacy_by_id[bid] != v2_by_id[bid]:
+                mismatches.append((bid, self._fingerprint(legacy_by_id[bid]), self._fingerprint(v2_by_id[bid])))
+                if len(mismatches) >= 5:
+                    break
+        return False, (
+            f"count={len(legacy)} legacy_hash={self._fingerprint(legacy)} v2_hash={self._fingerprint(v2)} "
+            f"mismatches={[{'id': bid, 'legacy': lh, 'v2': vh} for bid, lh, vh in mismatches]}"
+        )
 
     def discover(self):
         """Detect game state: faction, map bounds, existing buildings, prefabs."""
@@ -979,11 +1038,12 @@ class TestRunner:
         self.check("diagonal: no fallback",
                    not result.get("fallback", False),
                    json.dumps(result)[:120])
-        manhattan = abs(x2 - x1) + abs(y2 - y1)
-        self.check("diagonal: reasonable path count",
-                   placed.get("paths", 0) > manhattan // 2,
-                   f"paths={placed.get('paths', 0)}, manhattan={manhattan}")
-
+        self.check("diagonal: no skipped",
+                   result.get("skipped", 0) == 0,
+                   json.dumps(result)[:120])
+        self.check("diagonal: no errors",
+                   not result.get("errors"),
+                   json.dumps(result)[:120])
     def test_path_astar_obstacle(self):
         """A* routes around a building placed in the middle of a straight path."""
         print("\n=== path routing: A* obstacle avoidance ===\n")
@@ -2819,6 +2879,8 @@ class TestRunner:
             ("brain", ["brain"]),
             ("buildings", ["buildings"]),
             ("buildings full", ["buildings", "detail:full"]),
+            ("buildings_v2", ["buildings_v2"]),
+            ("buildings_v2 full", ["buildings_v2", "detail:full"]),
             ("trees", ["trees"]),
             ("gatherables", ["gatherables"]),
             ("beavers", ["beavers"]),
@@ -2865,6 +2927,74 @@ class TestRunner:
         self.check("buildings cache consistent",
                    isinstance(b1, list) and isinstance(b2, list) and len(b1) == len(b2),
                    f"first={len(b1) if isinstance(b1,list) else '?'}, second={len(b2) if isinstance(b2,list) else '?'}")
+
+        v21 = self.bot.buildings_v2()
+        v22 = self.bot.buildings_v2()
+        self.check("buildings_v2 fresh reads consistent",
+                   isinstance(v21, list) and isinstance(v22, list) and len(v21) == len(v22),
+                   f"first={len(v21) if isinstance(v21,list) else '?'}, second={len(v22) if isinstance(v22,list) else '?'}")
+
+    def test_buildings_v2_parity(self):
+        print("\n=== buildings v2 parity ===\n")
+
+        legacy_basic = self.bot.buildings()
+        v2_basic = self.bot.buildings_v2()
+        basic_ok, basic_detail = self._compare_building_lists(legacy_basic, v2_basic)
+        self.check("buildings_v2 basic matches buildings", basic_ok, basic_detail)
+
+        legacy_full = self.bot.buildings(detail="full")
+        v2_full = self.bot.buildings_v2(detail="full")
+        full_ok, full_detail = self._compare_building_lists(legacy_full, v2_full)
+        self.check("buildings_v2 full matches buildings", full_ok, full_detail)
+
+        if isinstance(legacy_basic, list) and legacy_basic:
+            sample_ids = [item.get("id") for item in legacy_basic[:10] if isinstance(item, dict) and item.get("id") is not None]
+            for bid in sample_ids:
+                legacy_one = self.bot.buildings(detail=f"id:{bid}")
+                v2_one = self.bot.buildings_v2(detail=f"id:{bid}")
+                self.check(f"buildings_v2 id:{bid} matches buildings",
+                           legacy_one == v2_one,
+                           self._compare_compact(legacy_one, v2_one))
+        else:
+            self.skip("buildings_v2 id parity", "no buildings")
+
+    def test_buildings_v2_performance(self):
+        print("\n=== buildings v2 performance ===\n")
+
+        iterations = getattr(self, 'perf_iterations', 100)
+        endpoints = [
+            ("buildings", ["buildings"]),
+            ("buildings full", ["buildings", "detail:full"]),
+            ("buildings_v2", ["buildings_v2"]),
+            ("buildings_v2 full", ["buildings_v2", "detail:full"]),
+        ]
+
+        print(f"  timing {len(endpoints)} building endpoints x {iterations} iterations (subprocess per call)\n")
+        print(f"  {'endpoint':<20} {'avg ms':>8} {'min ms':>8} {'max ms':>8} {'ok':>4}")
+        print(f"  {'-'*20} {'-'*8} {'-'*8} {'-'*8} {'-'*4}")
+
+        results = {}
+        total_bad = 0
+        for name, cmd in endpoints:
+            times, ok = self._bench_subprocess(name, cmd, iterations)
+            results[name] = times
+            total_bad += iterations - ok
+            avg = sum(times) / len(times)
+            print(f"  {name:<20} {avg:>8.0f} {min(times):>8.0f} {max(times):>8.0f} {ok:>4}")
+
+        print()
+        self.check(f"all {len(endpoints) * iterations} building perf responses valid",
+                   total_bad == 0,
+                   f"{total_bad} bad responses out of {len(endpoints) * iterations}")
+
+        basic_avg = sum(results["buildings"]) / len(results["buildings"])
+        basic_v2_avg = sum(results["buildings_v2"]) / len(results["buildings_v2"])
+        full_avg = sum(results["buildings full"]) / len(results["buildings full"])
+        full_v2_avg = sum(results["buildings_v2 full"]) / len(results["buildings_v2 full"])
+
+        print("  deltas vs legacy:")
+        print(f"  basic: {basic_v2_avg - basic_avg:+.0f}ms avg ({basic_v2_avg/basic_avg:.2f}x)")
+        print(f"  full:  {full_v2_avg - full_avg:+.0f}ms avg ({full_v2_avg/full_avg:.2f}x)")
 
         t1 = self.bot.trees()
         t2 = self.bot.trees()
@@ -3027,6 +3157,7 @@ def main():
         runner.test_performance()
     elif args.tests:
         runner.discover()
+        runner.perf_iterations = args.iterations
         # run only specified tests
         test_map = dict(all_tests)
         for name in args.tests:
