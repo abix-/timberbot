@@ -12,14 +12,11 @@ Historical note: sections that still discuss `TimberbotRead`, `TimberbotDoubleBu
 | 13 | Low | `CollectAlerts`: `$"{a}/{b}"` per unstaffed building | N strings | `TimberbotReadV2.cs` |
 | 14 | Low | `CollectBuildings` basic: `$"{a}/{b}"` per building with workers | N strings | `TimberbotReadV2.cs` |
 | 15 | Low | `CollectBeavers` basic: string concat `critical + "+" + n.Id` | N strings | `TimberbotReadV2.cs` |
-| 16 | Low | `CollectPowerNetworks`: new Dict + PowerNetwork + List per network | ~N networks | `TimberbotReadV2.cs` |
-| 17 | Low | `CollectWellbeing`: 4 Dicts + List per group | ~10 objects | `TimberbotReadV2.cs` |
+| 16 | Low | `CollectPowerNetworks`: inner `List<PowerBuildingItem>` + `.ToArray()` per network | ~N networks | `TimberbotReadV2.cs` |
 | 18 | Low | `CollectNotifications`: `.ToString()` per notification field | 2N strings | `TimberbotReadV2.cs` |
 | 20 | Low | `GetBeaverNeeds()` called on background thread (thread-questionable) | unknown | `TimberbotReadV2.cs` |
 | 21 | Low | Unity GC spikes freeze all threads | 0.5-2s | unavoidable |
 | 22 | Low | `sb.ToString()` alloc per HTTP response | 100-500KB | unavoidable |
-
-All remaining issues are low severity.
 
 All remaining issues are low severity. Benchmark with `/api/benchmark` to measure impact.
 
@@ -163,15 +160,16 @@ All scaling is linear with item count. Bot polling at 1/min cadence -- even 30ms
 
 - **Bots scale free:** bots don't eat/drink/sleep but DO add to beaver index. 50+ bots = more entities to cache and serialize
 - **Multi-district:** each district has its own resource counters. 3+ districts increases summary/resources iteration
-- **Vertical builds:** heavy platform/stair stacking increases map `occupants` arrays (more allocs per tile)
+- **Vertical builds:** heavy platform/stair stacking increases map `occupants` list sizes (lists reused, but more items per tile)
 - **Power networks:** complex power grids fragment into many small networks. `power` endpoint iterates all buildings per call
 
 ### Allocation grades
 
 | Layer | Frequency | Allocs/sec (steady state) | Grade |
 |---|---|---|---|
-| RefreshCachedState | 1Hz | **0** (district reuse, confirmed by benchmark) | **A+** |
+| Snapshot capture | On demand | **0** (reusable buffers, confirmed by benchmark) | **A+** |
 | HTTP GET response | On demand | 1 (ToString) + ~5 small strings | **A-** |
+| Derived endpoints (alerts, power) | On demand | 1-2 (`.ToArray()` copies) | **A-** |
 | Webhook (no subscribers) | N/A | 0 | **A+** |
 | Webhook (with subscribers) | 5Hz flush | ~5-20 (TimberbotJw strings only) | **A-** |
 | Entity lifecycle | Rare | N per entity | **A** (expected) |
@@ -207,6 +205,7 @@ All scaling is linear with item count. Bot polling at 1/min cadence -- even 30ms
 | 26 | `BuildAlertsFromBuildings` `new List` per call | Field-level `_alertBuffer`, cleared per call. `.ToArray()` remains (1 alloc) |
 | 27 | `BuildPowerFromBuildings` `new Dictionary` per call | Field-level `_powerNetworks`, cleared per call. Inner `List`/`.ToArray()` remain |
 | 28 | `CollectWellbeing` 4 new Dicts + N Lists per call | All 4 dicts hoisted to field-level. Inner `List<NeedSpec>` reused via clear-in-place |
+| 17 | `CollectWellbeing`: 4 Dicts + List per group | Superseded by #28 -- all dicts field-level |
 | 9 | `CollectDistribution` GetComponent on background thread | Pre-built on main thread via `RefreshMainThreadData()` |
 | 10 | `CollectScience` GetSpec on background thread | Pre-built on main thread via `RefreshMainThreadData()` |
 | 11 | District refresh allocates new CachedDistrict + Dict every 1s | Reuses existing CachedDistrict objects, updates in place, clears Dict |
