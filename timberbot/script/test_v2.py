@@ -464,7 +464,7 @@ class V2Runner:
             cases.extend(self._list_matrix(spec, "full", discovery))
             for fmt in ("json", "toon"):
                 for entity_id in discovery.sample_ids.get(spec.name, [])[:10]:
-                    params = {"format": fmt, "detail": f"id:{entity_id}"}
+                    params = {"format": fmt, "id": entity_id}
                     cases.append(CaseSpec(spec.name, f"{spec.name}:{fmt}:id:{entity_id}", params))
             return cases
 
@@ -486,7 +486,7 @@ class V2Runner:
             ]
             if discovery.sample_ids.get(spec.name):
                 entity_id = discovery.sample_ids[spec.name][0]
-                cases.append(CaseSpec(spec.name, f"{spec.name}:json_id:{entity_id}", {"format": "json", "detail": f"id:{entity_id}"}))
+                cases.append(CaseSpec(spec.name, f"{spec.name}:json_id:{entity_id}", {"format": "json", "id": entity_id}))
             return cases
         return []
 
@@ -512,7 +512,7 @@ class V2Runner:
             self._run_case("smoke", spec, cases[0])
 
     def _building_v2_detail(self, building_id: int) -> dict[str, Any]:
-        data = self.raw.get("/api/buildings", {"format": "json", "detail": f"id:{building_id}"}).data
+        data = self.raw.get("/api/buildings", {"format": "json", "id": building_id}).data
         if isinstance(data, dict) and "id" in data:
             return data
         items = self._extract_items(data)

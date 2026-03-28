@@ -22,7 +22,7 @@ namespace Timberbot
     //
     // format param: "toon" (default) = flat for tabular display, "json" = full nested data
     // entity access: no typed queries in Timberborn, so we iterate _entityRegistry.Entities + GetComponent<T>()
-    // names: CleanName() strips "(Clone)" and the detected faction suffix from all output
+    // names: CanonicalName() strips only "(Clone)"; public API names remain faction-qualified
     // entity lookup: Registry resolves numeric API IDs through Timberborn entity GUIDs
     public class TimberbotService : ILoadableSingleton, IUpdatableSingleton, IUnloadableSingleton
     {
@@ -90,7 +90,7 @@ namespace Timberbot
             ReadV2.Register();           // subscribe to entity lifecycle events for v2 snapshots
             Registry.Register();              // subscribe to entity lifecycle events
             Placement.DetectFaction();          // detect faction suffix -- must run before BuildAllIndexes
-            Registry.BuildAllIndexes();        // populate indexes from existing entities (uses CleanName)
+            Registry.BuildAllIndexes();        // populate indexes from existing entities
             ReadV2.BuildAll();          // populate v2 building trackers from existing entities
             _server = new TimberbotHttpServer(_httpPort, this, _debugEnabled);
             TimberbotLog.Info($"HTTP server started on port {_httpPort}");
@@ -158,3 +158,4 @@ namespace Timberbot
         }
     }
 }
+

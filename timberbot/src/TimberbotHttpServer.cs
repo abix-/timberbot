@@ -63,6 +63,7 @@ namespace Timberbot
             public JObject Body;                 // parsed JSON body (null if no body)
             public string Format;                // "toon" or "json" (response format)
             public string Detail;                // "basic" or "full" (response detail level)
+            public int Id;                       // single-entity targeting for collection reads / entity POSTs
             public int Limit;                    // max items to return (0 = unlimited, default 100)
             public int Offset;                   // skip first N items
             public string FilterName;            // name substring filter (case-insensitive)
@@ -218,6 +219,7 @@ namespace Timberbot
                 // detail: "basic" = compact fields, "full" = all fields including inventory/needs
                 var format = ctx.Request.QueryString["format"] ?? "toon";
                 var detail = ctx.Request.QueryString["detail"] ?? "basic";
+                int.TryParse(ctx.Request.QueryString["id"], out int id);
                 // pagination: limit=100 default (0=unlimited), offset=0 default
                 int.TryParse(ctx.Request.QueryString["limit"], out int limit);
                 int.TryParse(ctx.Request.QueryString["offset"], out int offset);
@@ -239,7 +241,7 @@ namespace Timberbot
                     {
                         var data = path == "/api/tiles"
                             ? _service.ReadV2.CollectTiles(format, tileX1, tileY1, tileX2, tileY2)
-                            : RouteReadRequest(path, format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
+                            : RouteReadRequest(path, format, detail, id, limit, offset, filterName, filterX, filterY, filterRadius);
                         Respond(ctx, 200, data);
                     }
                     catch (Exception ex)
@@ -272,10 +274,11 @@ namespace Timberbot
                     }
                 }
 
-                // POST requests can override format/detail/limit/offset in the JSON body too
+                // POST requests can override format/detail/id/limit/offset in the JSON body too
                 // (body takes priority over query string)
                 format = body?.Value<string>("format") ?? format;
                 detail = body?.Value<string>("detail") ?? detail;
+                if (body?["id"] != null) id = body.Value<int>("id");
                 if (body?["limit"] != null) limit = body.Value<int>("limit");
                 if (body?["offset"] != null) offset = body.Value<int>("offset");
                 if (body?["name"] != null) filterName = body.Value<string>("name");
@@ -291,6 +294,7 @@ namespace Timberbot
                     Body = body,
                     Format = format,
                     Detail = detail,
+                    Id = id,
                     Limit = limit,
                     Offset = offset,
                     FilterName = filterName,
@@ -304,7 +308,7 @@ namespace Timberbot
         }
 
         // GET routing table. All POST routing is descriptor-driven via BuildPostRoutes().
-        private object RouteReadRequest(string path, string format = "toon", string detail = "basic", int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
+        private object RouteReadRequest(string path, string format = "toon", string detail = "basic", int id = 0, int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
         {
             switch (path)
             {
@@ -327,7 +331,7 @@ namespace Timberbot
                 case "/api/districts":
                     return _service.ReadV2.CollectDistricts(format);
                 case "/api/buildings":
-                    return _service.ReadV2.CollectBuildings(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
+                    return _service.ReadV2.CollectBuildings(format, detail, id, limit, offset, filterName, filterX, filterY, filterRadius);
                 case "/api/trees":
                     return _service.ReadV2.CollectTrees(format, limit, offset, filterName, filterX, filterY, filterRadius);
                 case "/api/crops":
@@ -335,7 +339,7 @@ namespace Timberbot
                 case "/api/gatherables":
                     return _service.ReadV2.CollectGatherables(format, limit, offset, filterName, filterX, filterY, filterRadius);
                 case "/api/beavers":
-                    return _service.ReadV2.CollectBeavers(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
+                    return _service.ReadV2.CollectBeavers(format, detail, id, limit, offset, filterName, filterX, filterY, filterRadius);
                 case "/api/distribution":
                     return _service.ReadV2.CollectDistribution(format);
                 case "/api/science":
@@ -394,7 +398,7 @@ namespace Timberbot
                 Queued("/api/building/plantable", req => new LambdaWriteJob(req.Route, () => _service.Write.SetPlantablePriority(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<string>("plantable") ?? ""))),
                 Queued("/api/building/workers", req => new LambdaWriteJob(req.Route, () => _service.Write.SetWorkers(req.Body?.Value<int>("id") ?? 0, req.Body?.Value<int>("count") ?? 0))),
                 Queued("/api/planting/mark", req => new LambdaWriteJob(req.Route, () => _service.Write.MarkPlanting(req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<int>("z") ?? 0, req.Body?.Value<string>("crop") ?? ""))),
-                Queued("/api/planting/find", req => _service.Write.CreateFindPlantingSpotsJob(req.Body?.Value<string>("crop") ?? "", req.Body?.Value<int>("building_id") ?? 0, req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<int>("z") ?? 0)),
+                Queued("/api/planting/find", req => _service.Write.CreateFindPlantingSpotsJob(req.Body?.Value<string>("crop") ?? "", req.Body?.Value<int?>("id") ?? req.Body?.Value<int>("building_id") ?? 0, req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<int>("z") ?? 0)),
                 Queued("/api/building/range", req => _service.Write.CreateCollectBuildingRangeJob(req.Body?.Value<int>("id") ?? 0)),
                 Queued("/api/planting/clear", req => new LambdaWriteJob(req.Route, () => _service.Write.UnmarkPlanting(req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<int>("z") ?? 0))),
                 Queued("/api/cutting/area", req => new LambdaWriteJob(req.Route, () => _service.Write.MarkCuttingArea(req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<int>("z") ?? 0, req.Body?.Value<bool>("marked") ?? true))),

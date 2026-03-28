@@ -402,7 +402,7 @@ namespace Timberbot
             if (tracked.Floodgate != null) AddComparison(fields, ref mismatches, ref total, "floodgateHeight", state.FloodgateHeight, tracked.Floodgate.Height);
             if (tracked.Clutch != null) AddComparison(fields, ref mismatches, ref total, "clutchEngaged", state.ClutchEngaged, tracked.Clutch.IsEngaged ? 1 : 0);
             if (tracked.Wonder != null) AddComparison(fields, ref mismatches, ref total, "wonderActive", state.WonderActive, tracked.Wonder.IsActive ? 1 : 0);
-            AddComparison(fields, ref mismatches, ref total, "name", def.Name, tracked.BlockObject != null ? TimberbotEntityRegistry.CleanName(tracked.BlockObject.GameObject.name) : def.Name);
+            AddComparison(fields, ref mismatches, ref total, "name", def.Name, tracked.BlockObject != null ? TimberbotEntityRegistry.CanonicalName(tracked.BlockObject.GameObject.name) : def.Name);
 
             return new { id, type = "building", name = def.Name, fields, mismatches, total };
         }
@@ -428,7 +428,7 @@ namespace Timberbot
                 AddComparison(fields, ref mismatches, ref total, "z", state.Z, Mathf.FloorToInt(pos.y));
             }
             var wp = tracked.Worker?.Workplace;
-            AddComparison(fields, ref mismatches, ref total, "workplace", state.Workplace ?? "", wp != null ? TimberbotEntityRegistry.CleanName(wp.GameObject.name) : "");
+            AddComparison(fields, ref mismatches, ref total, "workplace", state.Workplace ?? "", wp != null ? TimberbotEntityRegistry.CanonicalName(wp.GameObject.name) : "");
 
             return new { id, type = "beaver", name = def.Name, fields, mismatches, total };
         }
@@ -738,3 +738,4 @@ namespace Timberbot
         }
     }
 }
+

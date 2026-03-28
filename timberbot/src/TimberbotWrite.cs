@@ -203,7 +203,7 @@ namespace Timberbot
                 pausable.Pause();
             else
                 pausable.Resume();
-            return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)).Prop("paused", pausable.Paused).CloseObj().ToString();
+            return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("paused", pausable.Paused).CloseObj().ToString();
         }
 
         // engage/disengage clutch on a building
@@ -218,7 +218,7 @@ namespace Timberbot
                 return _jw.Error("invalid_type: no clutch", ("id", buildingId));
 
             clutch.SetMode(engaged ? ClutchMode.Engaged : ClutchMode.Disengaged);
-            return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)).Prop("engaged", clutch.IsEngaged).CloseObj().ToString();
+            return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("engaged", clutch.IsEngaged).CloseObj().ToString();
         }
 
         // adjust floodgate water gate height (clamped to max)
@@ -234,7 +234,7 @@ namespace Timberbot
 
             var clamped = Mathf.Clamp(height, 0f, floodgate.MaxHeight);
             floodgate.SetHeightAndSynchronize(clamped);
-            return _jw.Result(("id", buildingId), ("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)), ("height", floodgate.Height), ("maxHeight", floodgate.MaxHeight));
+            return _jw.Result(("id", buildingId), ("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)), ("height", floodgate.Height), ("maxHeight", floodgate.MaxHeight));
         }
 
         // set construction or workplace priority (VeryLow/Normal/VeryHigh)
@@ -259,7 +259,7 @@ namespace Timberbot
                 if (prio != null)
                 {
                     prio.SetPriority(parsed);
-                    return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)).Prop("constructionPriority", prio.Priority.ToString()).CloseObj().ToString();
+                    return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("constructionPriority", prio.Priority.ToString()).CloseObj().ToString();
                 }
             }
 
@@ -269,7 +269,7 @@ namespace Timberbot
                 if (wpPrio != null)
                 {
                     wpPrio.SetPriority(parsed);
-                    return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)).Prop("workplacePriority", wpPrio.Priority.ToString()).CloseObj().ToString();
+                    return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("workplacePriority", wpPrio.Priority.ToString()).CloseObj().ToString();
                 }
             }
 
@@ -288,7 +288,7 @@ namespace Timberbot
                 return _jw.Error("invalid_type: no haul priority", ("id", buildingId));
 
             hp.Prioritized = prioritized;
-            return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)).Prop("haulPrioritized", hp.Prioritized).CloseObj().ToString();
+            return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("haulPrioritized", hp.Prioritized).CloseObj().ToString();
         }
 
         // DANGEROUS: changing a recipe DESTROYS in-progress items and all consumed materials.
@@ -313,7 +313,7 @@ namespace Timberbot
                 try
                 {
                     manufactory.SetRecipe(null);
-                    return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)).Prop("recipe", "none").CloseObj().ToString();
+                    return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("recipe", "none").CloseObj().ToString();
                 }
                 catch (System.Exception ex)
                 {
@@ -335,7 +335,7 @@ namespace Timberbot
             try
             {
                 manufactory.SetRecipe(recipe);
-                return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)).Prop("recipe", recipe.Id).CloseObj().ToString();
+                return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("recipe", recipe.Id).CloseObj().ToString();
             }
             catch (System.Exception ex)
             {
@@ -358,12 +358,12 @@ namespace Timberbot
             if (action == "planting")
             {
                 farmhouse.PrioritizePlanting();
-                return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)).Prop("action", "planting").CloseObj().ToString();
+                return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("action", "planting").CloseObj().ToString();
             }
             else if (action == "harvesting" || action == "none")
             {
                 farmhouse.UnprioritizePlanting();
-                return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)).Prop("action", "default").CloseObj().ToString();
+                return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("action", "default").CloseObj().ToString();
             }
 
             return _jw.Error("invalid_param: use planting or harvesting", ("action", action));
@@ -383,7 +383,7 @@ namespace Timberbot
             if (string.IsNullOrEmpty(plantableName) || plantableName == "none")
             {
                 prioritizer.PrioritizePlantable(null);
-                return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)).Prop("prioritized", "none").CloseObj().ToString();
+                return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("prioritized", "none").CloseObj().ToString();
             }
 
             var planterBuilding = ec.GetComponent<PlanterBuilding>();
@@ -403,7 +403,7 @@ namespace Timberbot
                 return _jw.Error("not_found", ("plantableName", plantableName), ("available", available));
 
             prioritizer.PrioritizePlantable(match);
-            return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)).Prop("prioritized", match.TemplateName).CloseObj().ToString();
+            return _jw.BeginObj().Prop("id", buildingId).Prop("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)).Prop("prioritized", match.TemplateName).CloseObj().ToString();
         }
 
         // ================================================================
@@ -423,7 +423,7 @@ namespace Timberbot
 
             var clamped = Mathf.Clamp(count, 0, workplace.MaxWorkers);
             workplace.DesiredWorkers = clamped;
-            return _jw.Result(("id", buildingId), ("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)), ("desiredWorkers", workplace.DesiredWorkers), ("maxWorkers", workplace.MaxWorkers), ("assignedWorkers", workplace.NumberOfAssignedWorkers));
+            return _jw.Result(("id", buildingId), ("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)), ("desiredWorkers", workplace.DesiredWorkers), ("maxWorkers", workplace.MaxWorkers), ("assignedWorkers", workplace.NumberOfAssignedWorkers));
         }
 
         // Mark or unmark a rectangular area for tree cutting. Lumberjacks will chop
@@ -483,7 +483,7 @@ namespace Timberbot
             return new
             {
                 id = buildingId,
-                name = TimberbotEntityRegistry.CleanName(ec.GameObject.name),
+                name = TimberbotEntityRegistry.CanonicalName(ec.GameObject.name),
                 capacity
             };
         }
@@ -500,7 +500,7 @@ namespace Timberbot
                 return _jw.Error("invalid_type: not a single-good stockpile", ("id", buildingId));
 
             sga.AllowedGood = goodId;
-            return _jw.Result(("id", buildingId), ("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)), ("good", sga.AllowedGood));
+            return _jw.Result(("id", buildingId), ("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)), ("good", sga.AllowedGood));
         }
 
         // mark area for crop planting (validates via PlantingAreaValidator.CanPlant)
@@ -548,7 +548,7 @@ namespace Timberbot
 
         // Find valid planting spots for a crop. Two modes:
         //
-        // 1. By building (building_id != 0): uses InRangePlantingCoordinates to get all
+        // 1. By building (id != 0): uses InRangePlantingCoordinates to get all
         //    tiles within the farmhouse's work range. Only farmhouses/foresters have this.
         //    The range is a circle around the building, same as the green overlay in-game.
         //
@@ -720,7 +720,7 @@ namespace Timberbot
 
             var terrainRange = ec.GetComponent<Timberborn.BuildingsNavigation.BuildingTerrainRange>();
             if (terrainRange == null)
-                return _jw.Error("invalid_type: no work range", ("id", buildingId), ("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)));
+                return _jw.Error("invalid_type: no work range", ("id", buildingId), ("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)));
 
             var range = terrainRange.GetRange();
             int moistCount = 0;
@@ -737,7 +737,7 @@ namespace Timberbot
             return new
             {
                 id = buildingId,
-                name = TimberbotEntityRegistry.CleanName(ec.GameObject.name),
+                name = TimberbotEntityRegistry.CanonicalName(ec.GameObject.name),
                 tiles = range.Count,
                 moist = moistCount,
                 bounds = range.Count > 0 ? new { x1 = minX, y1 = minY, x2 = maxX, y2 = maxY } : null
@@ -955,7 +955,7 @@ namespace Timberbot
                 var terrainRange = ec.GetComponent<Timberborn.BuildingsNavigation.BuildingTerrainRange>();
                 if (terrainRange == null)
                 {
-                    _result = _owner._jw.Error("invalid_type: no work range", ("id", _buildingId), ("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)));
+                    _result = _owner._jw.Error("invalid_type: no work range", ("id", _buildingId), ("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)));
                     _completed = true;
                     return false;
                 }
@@ -963,7 +963,7 @@ namespace Timberbot
                 _range = new List<Vector3Int>();
                 foreach (var c in terrainRange.GetRange())
                     _range.Add(c);
-                _name = TimberbotEntityRegistry.CleanName(ec.GameObject.name);
+                _name = TimberbotEntityRegistry.CanonicalName(ec.GameObject.name);
                 return true;
             }
         }
@@ -971,3 +971,4 @@ namespace Timberbot
         // PLACEMENT VALIDATION
     }
 }
+

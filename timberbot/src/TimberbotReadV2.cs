@@ -531,9 +531,9 @@ namespace Timberbot
         internal DistrictSnapshot[] EnsureDistrictsFreshNow(float now)
             => _districtStore.PublishNow(now, CaptureDistrictSnapshots, FinalizeDistrictSnapshots);
 
-        public object CollectBuildings(string format = "toon", string detail = "basic", int limit = 100, int offset = 0,
+        public object CollectBuildings(string format = "toon", string detail = "basic", int id = 0, int limit = 100, int offset = 0,
             string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
-            => _buildingsEndpoint.Collect(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
+            => _buildingsEndpoint.Collect(format, detail, id, limit, offset, filterName, filterX, filterY, filterRadius);
 
         // CollectSummary: the single-call colony overview.
         // Returns everything an AI needs to assess the colony: population, resources,
@@ -984,13 +984,13 @@ namespace Timberbot
             return jw.End();
         }
         public object CollectTrees(string format = "toon", int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
-            => _treesEndpoint.Collect(format, "basic", limit, offset, filterName, filterX, filterY, filterRadius);
+            => _treesEndpoint.Collect(format, "basic", 0, limit, offset, filterName, filterX, filterY, filterRadius);
         public object CollectCrops(string format = "toon", int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
-            => _cropsEndpoint.Collect(format, "basic", limit, offset, filterName, filterX, filterY, filterRadius);
+            => _cropsEndpoint.Collect(format, "basic", 0, limit, offset, filterName, filterX, filterY, filterRadius);
         public object CollectGatherables(string format = "toon", int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
-            => _gatherablesEndpoint.Collect(format, "basic", limit, offset, filterName, filterX, filterY, filterRadius);
-        public object CollectBeavers(string format = "toon", string detail = "basic", int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
-            => _beaversEndpoint.Collect(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
+            => _gatherablesEndpoint.Collect(format, "basic", 0, limit, offset, filterName, filterX, filterY, filterRadius);
+        public object CollectBeavers(string format = "toon", string detail = "basic", int id = 0, int limit = 100, int offset = 0, string filterName = null, int filterX = 0, int filterY = 0, int filterRadius = 0)
+            => _beaversEndpoint.Collect(format, detail, id, limit, offset, filterName, filterX, filterY, filterRadius);
         public object CollectDistribution(string format = "toon") => _distributionRoute.Collect(format);
         public object CollectScience(string format = "toon") => _scienceRoute.Collect(format);
         // CollectWellbeing: aggregate wellbeing by category across all beavers.
@@ -1210,7 +1210,7 @@ namespace Timberbot
                             {
                                 if (oi > 0) _tileSb.Append('+');
                                 _tileSb.Append(occList[oi].name);
-                                _tileSb.Append('@');
+                                _tileSb.Append(':');
                                 _tileSb.Append(occList[oi].z);
                             }
                         }
@@ -1521,6 +1521,7 @@ namespace Timberbot
         {
             var bo = t.BlockObject;
             s.Finished = bo != null && bo.IsFinished ? 1 : 0;
+            s.Pausable = t.Pausable != null ? 1 : 0;
             s.Paused = t.Pausable != null && t.Pausable.Paused ? 1 : 0;
             s.Unreachable = t.Reachability != null && t.Reachability.IsAnyUnreachable() ? 1 : 0;
             s.Reachable = t.Reachability != null ? (s.Unreachable == 0 ? 1 : 0) : 0;
@@ -1574,6 +1575,16 @@ namespace Timberbot
             }
             else { s.CurrentRecipe = ""; s.ProductionProgress = 0f; s.ReadyToProduce = 0; }
             s.NeedsNutrients = t.BreedingPod != null && t.BreedingPod.NeedsNutrients ? 1 : 0;
+            s.Nutrients = 0;
+            if (t.BreedingPod != null)
+            {
+                try
+                {
+                    foreach (var ga in t.BreedingPod.Nutrients)
+                        s.Nutrients += ga.Amount;
+                }
+                catch (Exception ex) { TimberbotLog.Error("readv2.nutrients_state", ex); }
+            }
             s.Stock = 0; s.Capacity = 0;
             if (t.Inventories != null)
             {
@@ -1666,7 +1677,7 @@ namespace Timberbot
             }
 
             var wp = t.Worker?.Workplace;
-            s.Workplace = wp != null ? TimberbotEntityRegistry.CleanName(wp.GameObject.name) : null;
+            s.Workplace = wp != null ? TimberbotEntityRegistry.CanonicalName(wp.GameObject.name) : null;
             var dc = t.Citizen?.AssignedDistrict;
             s.District = dc?.DistrictName;
             s.HasHome = t.Dweller != null && t.Dweller.HasHome ? 1 : 0;
@@ -1882,7 +1893,7 @@ namespace Timberbot
             {
                 EntityId = entityId,
                 Id = id,
-                Name = TimberbotEntityRegistry.CleanName(ec.GameObject.name),
+                Name = TimberbotEntityRegistry.CanonicalName(ec.GameObject.name),
                 BlockObject = ec.GetComponent<BlockObject>(),
                 Pausable = ec.GetComponent<PausableBuilding>(),
                 Floodgate = ec.GetComponent<Floodgate>(),
@@ -1982,7 +1993,7 @@ namespace Timberbot
             t.Definition = new BeaverDefinition
             {
                 Id = _cache.GetLegacyId(ec),
-                Name = TimberbotEntityRegistry.CleanName(ec.GameObject.name),
+                Name = TimberbotEntityRegistry.CanonicalName(ec.GameObject.name),
                 IsBot = ec.GetComponent<Bot>() != null ? 1 : 0
             };
             _trackedBeavers.Add(t);
@@ -2002,7 +2013,7 @@ namespace Timberbot
             var gatherable = ec.GetComponent<Gatherable>();
             var growable = ec.GetComponent<Timberborn.Growing.Growable>();
             var coords = blockObject != null ? blockObject.Coordinates : Vector3Int.zero;
-            var name = TimberbotEntityRegistry.CleanName(ec.GameObject.name);
+            var name = TimberbotEntityRegistry.CanonicalName(ec.GameObject.name);
             var definition = new NaturalResourceDefinition
             {
                 Id = _cache.GetLegacyId(ec),
@@ -2071,7 +2082,7 @@ namespace Timberbot
             if (_trackedNaturalResourcesById.ContainsKey(entityId)) return;
             if (_trackedBeaversById.ContainsKey(entityId)) return;
 
-            var name = TimberbotEntityRegistry.CleanName(ec.GameObject.name);
+            var name = TimberbotEntityRegistry.CanonicalName(ec.GameObject.name);
             var occupied = new List<(int, int, int)>();
             try
             {
@@ -2213,7 +2224,7 @@ namespace Timberbot
 
         internal sealed class BuildingState
         {
-            public int Finished, Paused, Unreachable, Reachable, Powered;
+            public int Finished, Pausable, Paused, Unreachable, Reachable, Powered;
             public string District;
             public int AssignedWorkers, DesiredWorkers, MaxWorkers;
             public int Dwellers, MaxDwellers;
@@ -2226,7 +2237,7 @@ namespace Timberbot
             public string CurrentRecipe;
             public float ProductionProgress;
             public int ReadyToProduce;
-            public int NeedsNutrients;
+            public int NeedsNutrients, Nutrients;
             public int Stock, Capacity;
         }
 
@@ -2324,10 +2335,10 @@ namespace Timberbot
             public bool Paginated;
             public bool NeedsFullDetail;
 
-            public static CollectionQuery Parse(string format, string detail, int limit, int offset, string filterName, int filterX, int filterY, int filterRadius)
+            public static CollectionQuery Parse(string format, string detail, int id, int limit, int offset, string filterName, int filterX, int filterY, int filterRadius)
             {
-                int? singleId = null;
-                if (!string.IsNullOrEmpty(detail) && detail.StartsWith("id:", StringComparison.Ordinal))
+                int? singleId = id != 0 ? id : (int?)null;
+                if (!singleId.HasValue && !string.IsNullOrEmpty(detail) && detail.StartsWith("id:", StringComparison.Ordinal))
                 {
                     if (int.TryParse(detail.Substring(3), out int parsed))
                         singleId = parsed;
@@ -2674,9 +2685,9 @@ namespace Timberbot
                 _schema = schema;
             }
 
-            public object Collect(string format, string detail, int limit, int offset, string filterName, int filterX, int filterY, int filterRadius)
+            public object Collect(string format, string detail, int id, int limit, int offset, string filterName, int filterX, int filterY, int filterRadius)
             {
-                var query = CollectionQuery.Parse(format, detail, limit, offset, filterName, filterX, filterY, filterRadius);
+                var query = CollectionQuery.Parse(format, detail, id, limit, offset, filterName, filterX, filterY, filterRadius);
                 ProjectionSnapshot<TDef, TState, TDetail>.Snapshot snapshot;
                 try { snapshot = _snapshotProvider(query.NeedsFullDetail, 2000); }
                 catch (TimeoutException) { return _jw.Error("refresh_timeout"); }
@@ -2752,6 +2763,7 @@ namespace Timberbot
                 }
 
                 jw.Prop("constructionPriority", s.ConstructionPriority ?? "")
+                    .Prop("pausable", s.Pausable)
                     .Prop("workplacePriority", s.WorkplacePriorityStr ?? "")
                     .Prop("maxWorkers", s.MaxWorkers)
                     .Prop("desiredWorkers", s.DesiredWorkers)
@@ -2779,6 +2791,8 @@ namespace Timberbot
                     .Prop("currentRecipe", s.CurrentRecipe ?? "")
                     .Prop("productionProgress", s.ProductionProgress)
                     .Prop("readyToProduce", s.ReadyToProduce)
+                    .Prop("needsNutrients", s.NeedsNutrients)
+                    .Prop("nutrients", s.Nutrients)
                     .Prop("effectRadius", d.EffectRadius)
                     .Prop("isWonder", d.HasWonder)
                     .Prop("wonderActive", s.WonderActive);
@@ -3265,3 +3279,4 @@ namespace Timberbot
         }
     }
 }
+

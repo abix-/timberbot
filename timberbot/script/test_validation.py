@@ -16,6 +16,7 @@ Usage:
 import json
 import hashlib
 import os
+import re
 import subprocess
 import sys
 import time
@@ -49,6 +50,7 @@ class TestRunner:
         self.x2 = 158
         self.y2 = 158
         self.prefab_names = set()
+        self._doc_contract_cache = None
 
     def _safe_call(self, fn, fallback=None):
         """Call a bot method, return fallback on any error (bad JSON, timeout, etc)."""
@@ -121,7 +123,7 @@ class TestRunner:
 
         buildings = self._safe_call(lambda: self.bot.buildings(), [])
 
-        # detect faction from prefab list (building names have faction stripped by CleanName)
+        # detect faction from prefab list (building names are now faction-qualified)
         try:
             prefabs = self.bot.prefabs()
         except Exception:
@@ -277,6 +279,275 @@ class TestRunner:
                 return b.get("id")
         return None
 
+    def _load_doc_contracts(self):
+        if self._doc_contract_cache is not None:
+            return self._doc_contract_cache
+
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "docs", "api-reference.md")
+        if not os.path.exists(path):
+            self._doc_contract_cache = {}
+            return self._doc_contract_cache
+
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+
+        contracts = {}
+        current_endpoint = None
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            m = re.match(r"^###\s+(GET|POST)\s+(/api/[^\s]+)", line)
+            if m:
+                current_endpoint = m.group(2)
+                i += 1
+                continue
+
+            if current_endpoint and line.startswith("#### Response") and "error" not in line.lower():
+                j = i + 1
+                while j < len(lines) and not lines[j].strip().startswith("| Field | Type | Description |"):
+                    if lines[j].strip().startswith("### "):
+                        break
+                    j += 1
+                if j >= len(lines) or not lines[j].strip().startswith("| Field | Type | Description |"):
+                    i += 1
+                    continue
+
+                table = []
+                j += 2  # skip header + separator
+                while j < len(lines):
+                    row = lines[j].strip()
+                    if not row.startswith("|"):
+                        break
+                    parts = [p.strip() for p in row.strip("|").split("|")]
+                    if len(parts) >= 3:
+                        field, type_name, desc = parts[0], parts[1], parts[2]
+                        for expanded in self._expand_doc_field_names(field):
+                            table.append({
+                                "field": expanded,
+                                "type": self._normalize_doc_type(type_name),
+                                "description": desc,
+                                "optional": self._is_optional_doc_field(desc),
+                                "full_only": "detail=full" in desc.lower(),
+                                "id_only": "detail=id" in desc.lower(),
+                            })
+                    j += 1
+                if table and current_endpoint not in contracts:
+                    contracts[current_endpoint] = table
+                i = j
+                continue
+
+            i += 1
+
+        self._doc_contract_cache = contracts
+        return contracts
+
+    def _expand_doc_field_names(self, field):
+        if "," in field and "." in field:
+            prefix, suffix = field.rsplit(".", 1)
+            return [f"{prefix}.{part.strip()}" for part in suffix.split(",") if part.strip()]
+        if "," in field:
+            return [part.strip() for part in field.split(",") if part.strip()]
+        return [field.strip()]
+
+    def _normalize_doc_type(self, type_name):
+        t = type_name.strip().lower()
+        if t == "string":
+            return str
+        if t == "int":
+            return int
+        if t == "float":
+            return float
+        if t == "bool":
+            return bool
+        if t == "array":
+            return list
+        if t == "object":
+            return dict
+        return object
+
+    def _is_optional_doc_field(self, description):
+        d = description.lower()
+        return "(optional" in d or "omitted if" in d or "absent fields mean" in d
+
+    def _doc_contract_specs(self):
+        return [
+            {"label": "summary", "path": "/api/summary", "fetch": lambda: self.bot.summary(), "kind": "object"},
+            {"label": "time", "path": "/api/time", "fetch": lambda: self.bot.time(), "kind": "object"},
+            {"label": "weather", "path": "/api/weather", "fetch": lambda: self.bot.weather(), "kind": "object"},
+            {"label": "population", "path": "/api/population", "fetch": lambda: self.bot.population(), "kind": "list"},
+            {"label": "resources", "path": "/api/resources", "fetch": lambda: self.bot.resources(), "kind": "object"},
+            {"label": "districts", "path": "/api/districts", "fetch": lambda: self.bot.districts(), "kind": "list"},
+            {"label": "buildings_full", "path": "/api/buildings", "fetch": lambda: self.bot.buildings(limit=0, detail="full"), "kind": "list"},
+            {"label": "trees", "path": "/api/trees", "fetch": lambda: self.bot.trees(limit=0), "kind": "list"},
+            {"label": "crops", "path": "/api/crops", "fetch": lambda: self.bot.crops(limit=0), "kind": "list"},
+            {"label": "gatherables", "path": "/api/gatherables", "fetch": lambda: self.bot.gatherables(limit=0), "kind": "list"},
+            {"label": "beavers_full", "path": "/api/beavers", "fetch": lambda: self.bot.beavers(limit=0, detail="full"), "kind": "list"},
+            {"label": "prefabs", "path": "/api/prefabs", "fetch": lambda: self.bot.prefabs(), "kind": "list"},
+            {"label": "power", "path": "/api/power", "fetch": lambda: self.bot.power(), "kind": "list"},
+            {"label": "alerts", "path": "/api/alerts", "fetch": lambda: self.bot.alerts(), "kind": "list"},
+            {"label": "wellbeing", "path": "/api/wellbeing", "fetch": lambda: self.bot.wellbeing(), "kind": "object"},
+            {"label": "notifications", "path": "/api/notifications", "fetch": lambda: self.bot.notifications(), "kind": "list"},
+            {"label": "distribution", "path": "/api/distribution", "fetch": lambda: self.bot.distribution(), "kind": "list"},
+            {"label": "science", "path": "/api/science", "fetch": lambda: self.bot.science(), "kind": "object"},
+            {"label": "speed", "path": "/api/speed", "fetch": lambda: self.bot.speed(), "kind": "object"},
+            {"label": "workhours", "path": "/api/workhours", "fetch": lambda: self.bot.workhours(), "kind": "object"},
+            {"label": "tree_clusters", "path": "/api/tree_clusters", "fetch": lambda: self.bot.tree_clusters(), "kind": "list"},
+            {"label": "tiles", "path": "/api/tiles", "fetch": lambda: self.bot.tiles(self.center_x, self.center_y, self.center_x + 3, self.center_y + 3), "kind": "object"},
+        ]
+
+    def _doc_row_conditions(self, endpoint_path):
+        if endpoint_path == "/api/buildings":
+            return {
+                "pausable": lambda row: True,
+                "statuses": lambda row: bool(row.get("statuses")),
+                "height": lambda row: row.get("name", "").lower().find("floodgate") >= 0,
+                "maxHeight": lambda row: row.get("name", "").lower().find("floodgate") >= 0,
+                "needsNutrients": lambda row: "breedingpod" in row.get("name", "").lower(),
+                "nutrients": lambda row: "breedingpod" in row.get("name", "").lower(),
+                "isClutch": lambda row: row.get("name", "").lower().find("clutch") >= 0 or bool(row.get("isClutch")),
+                "clutchEngaged": lambda row: row.get("name", "").lower().find("clutch") >= 0 or bool(row.get("isClutch")),
+                "dwellers": lambda row: any(token in row.get("name", "").lower() for token in ("lodge", "barracks")),
+                "maxDwellers": lambda row: any(token in row.get("name", "").lower() for token in ("lodge", "barracks")),
+                "recipes": lambda row: "factory" in row.get("name", "").lower() or "assembler" in row.get("name", "").lower() or bool(row.get("recipes")),
+                "currentRecipe": lambda row: "factory" in row.get("name", "").lower() or "assembler" in row.get("name", "").lower() or bool(row.get("recipes")),
+                "entranceX": lambda row: "entranceX" in row or "entranceY" in row or "entranceZ" in row,
+                "entranceY": lambda row: "entranceX" in row or "entranceY" in row or "entranceZ" in row,
+                "entranceZ": lambda row: "entranceX" in row or "entranceY" in row or "entranceZ" in row,
+            }
+        if endpoint_path == "/api/beavers":
+            return {
+                "carrying": lambda row: bool(row.get("carrying")),
+                "carryAmount": lambda row: bool(row.get("carrying")),
+                "overburdened": lambda row: bool(row.get("carrying")),
+                "deterioration": lambda row: bool(row.get("isBot")),
+                "activity": lambda row: "activity" in row,
+            }
+        if endpoint_path == "/api/prefabs":
+            return {
+                "scienceCost": lambda row: bool(row.get("scienceCost")) or "unlocked" in row,
+                "unlocked": lambda row: "scienceCost" in row or "unlocked" in row,
+            }
+        if endpoint_path == "/api/alerts":
+            return {
+                "workers": lambda row: row.get("type") == "unstaffed",
+                "status": lambda row: row.get("type") == "status",
+            }
+        return {}
+
+    def _collect_path_values(self, value, path):
+        tokens = path.split(".") if path else []
+
+        def walk(current, idx):
+            if idx >= len(tokens):
+                return [current]
+            token = tokens[idx]
+            if token.endswith("[]"):
+                key = token[:-2]
+                items = current.get(key) if isinstance(current, dict) else None
+                if not isinstance(items, list):
+                    return []
+                values = []
+                for item in items:
+                    values.extend(walk(item, idx + 1))
+                return values
+            if not isinstance(current, dict) or token not in current:
+                return []
+            return walk(current[token], idx + 1)
+
+        return walk(value, 0)
+
+    def _doc_type_matches(self, value, expected):
+        if expected == float and isinstance(value, (int, float)):
+            return True
+        if expected == bool:
+            return isinstance(value, bool) or (isinstance(value, int) and value in (0, 1))
+        if expected == int:
+            return isinstance(value, int) and not isinstance(value, bool)
+        return isinstance(value, expected)
+
+    def _audit_doc_contracts(self):
+        print("\n=== docs contract audit ===\n")
+
+        contracts = self._load_doc_contracts()
+        specs = self._doc_contract_specs()
+        for spec in specs:
+            fields = contracts.get(spec["path"])
+            if spec["path"] == "/api/crops" and not fields:
+                fields = contracts.get("/api/trees")
+            if not fields:
+                self.skip(f"docs contract {spec['label']}", f"no docs table for {spec['path']}")
+                continue
+
+            payload = spec["fetch"]()
+            rows = payload if spec["kind"] == "list" and isinstance(payload, list) else None
+            if spec["kind"] == "object" and not isinstance(payload, dict):
+                self.check(f"docs contract {spec['label']}", False, f"unexpected {type(payload).__name__}")
+                continue
+            if spec["kind"] == "list" and not isinstance(rows, list):
+                self.check(f"docs contract {spec['label']}", False, f"unexpected {type(payload).__name__}")
+                continue
+            if spec["kind"] == "list" and not rows:
+                self.skip(f"docs contract {spec['label']}", "no rows on current save")
+                continue
+
+            conditions = self._doc_row_conditions(spec["path"])
+            missing = []
+            mismatched = []
+            uncovered = []
+
+            for field in fields:
+                path = field["field"]
+                expected = field["type"]
+                if spec["kind"] == "object":
+                    values = self._collect_path_values(payload, path)
+                    if not values:
+                        if not field["optional"]:
+                            missing.append(path)
+                        continue
+                    if not all(self._doc_type_matches(v, expected) for v in values[:20]):
+                        mismatched.append(path)
+                    continue
+
+                predicate = conditions.get(path)
+                if predicate:
+                    candidates = [row for row in rows if isinstance(row, dict) and predicate(row)]
+                    if not candidates:
+                        uncovered.append(path)
+                        continue
+                    values = []
+                    for row in candidates:
+                        values.extend(self._collect_path_values(row, path))
+                    if not values:
+                        missing.append(path)
+                        continue
+                    if not all(self._doc_type_matches(v, expected) for v in values[:20]):
+                        mismatched.append(path)
+                    continue
+
+                required_rows = [row for row in rows if isinstance(row, dict)]
+                if not required_rows:
+                    self.skip(f"docs contract {spec['label']}", "no dict rows on current save")
+                    break
+                for row in required_rows[:20]:
+                    values = self._collect_path_values(row, path)
+                    if not values:
+                        if not field["optional"]:
+                            missing.append(path)
+                        break
+                    if not all(self._doc_type_matches(v, expected) for v in values[:5]):
+                        mismatched.append(path)
+                        break
+
+            detail = []
+            if missing:
+                detail.append(f"missing={sorted(set(missing))[:8]}")
+            if mismatched:
+                detail.append(f"type={sorted(set(mismatched))[:8]}")
+            if uncovered:
+                detail.append(f"uncovered={sorted(set(uncovered))[:8]}")
+            ok = not missing and not mismatched
+            self.check(f"docs contract {spec['label']}", ok, "; ".join(detail))
+
     GROUPS = {
         "read": [
             "read_endpoints", "summary_projection", "map_moisture", "map_render",
@@ -389,10 +660,10 @@ class TestRunner:
         self.check("set speed 0", not self.err(result))
 
         # verify via debug
-        verify = self.debug_get("Read._speedManager.CurrentSpeed")
+        verify = self.debug_get("Write._speedManager.CurrentSpeed")
         self.check("verify speed=0 via debug",
-                   str(verify.get("value", "")) == "0",
-                   f"got: {verify.get('value')}")
+                   str(verify.get("result", "")) in ("0", "0.0"),
+                   f"got: {verify.get('result')}")
 
         # restore
         self.bot.set_speed(orig_speed)
@@ -563,7 +834,7 @@ class TestRunner:
         if not fh:
             self.skip("crops", "no FarmHouse found")
             return
-        fb = self.bot.buildings(detail=f"id:{fh}")
+        fb = self.bot.buildings(id=fh)
         if not fb or not isinstance(fb, list) or not fb:
             self.skip("crops", "cannot get farmhouse details")
             return
@@ -821,7 +1092,7 @@ class TestRunner:
         # reachability via doorstep: build path from DC to a spot, verify reachable
         dc = self.find_building("DistrictCenter")
         if dc:
-            dc_bld = self.bot.buildings(detail=f"id:{dc}")
+            dc_bld = self.bot.buildings(id=dc)
             dc_info = dc_bld[0] if isinstance(dc_bld, list) and dc_bld else None
             if dc_info:
                 dcx, dcy = dc_info["x"], dc_info["y"]
@@ -923,7 +1194,7 @@ class TestRunner:
             if self.has(placed, "id"):
                 self.check("pump placed successfully", True)
                 # verify it shows up in buildings
-                bld = self.bot.buildings(detail=f"id:{placed['id']}")
+                bld = self.bot.buildings(id=placed["id"])
                 if isinstance(bld, list) and bld:
                     b = bld[0]
                     self.check("pump is water building",
@@ -1017,7 +1288,7 @@ class TestRunner:
         existing = set()
         if isinstance(buildings, list):
             for b in buildings:
-                if str(b.get("name", "")) == "LumberjackFlag":
+                if "LumberjackFlag" in str(b.get("name", "")):
                     existing.add((b.get("x"), b.get("y"), b.get("z")))
         endpoints = {(x1, y1), (x2, y2)}
         for ex, ey in endpoints:
@@ -1428,7 +1699,7 @@ class TestRunner:
         if not pump:
             self.skip("map moisture", "no water pump found")
             return
-        pb = self.bot.buildings(detail=f"id:{pump}")
+        pb = self.bot.buildings(id=pump)
         if not pb or not isinstance(pb, list) or not pb:
             self.skip("map moisture", "cannot get pump details")
             return
@@ -1588,10 +1859,10 @@ class TestRunner:
                    json.dumps(result)[:100])
 
         # verify via debug
-        verify = self.debug_get("Read._workingHoursManager.EndHours")
+        verify = self.debug_get("Write._workingHoursManager.EndHours")
         self.check("verify workhours via debug",
-                   str(verify.get("value", "")) == "20",
-                   f"got: {verify.get('value')}")
+                   str(verify.get("result", "")) in ("20", "20.0"),
+                   f"got: {verify.get('result')}")
 
         # restore
         self.bot.set_workhours(orig_hours)
@@ -1706,7 +1977,7 @@ class TestRunner:
         # building mode
         fid = self.find_building("FarmHouse")
         if fid:
-            result2 = self.bot.find_planting("Kohlrabi", building_id=fid)
+            result2 = self.bot.find_planting("Kohlrabi", id=fid)
             self.check("find_planting by building",
                        self.has(result2, "spots"),
                        json.dumps(result2)[:100])
@@ -1902,7 +2173,7 @@ class TestRunner:
                    f"groups: {groups_seen}")
 
         # single beaver by id
-        single = self.bot.beavers(detail=f"id:{beaver['id']}")
+        single = self.bot.beavers(id=beaver["id"])
         self.check("single beaver returns 1 result", len(single) == 1,
                    f"got {len(single)}")
         self.check("single has all needs",
@@ -1942,10 +2213,10 @@ class TestRunner:
         buildings = self.bot.buildings()
 
         # BotPartFactory
-        factories = [b for b in buildings if b.get("name") == "BotPartFactory"]
+        factories = [b for b in buildings if "BotPartFactory" in str(b.get("name", ""))]
         if factories:
             fid = factories[0]["id"]
-            detail = self.bot.buildings(detail=f"id:{fid}")
+            detail = self.bot.buildings(id=fid)
             if detail:
                 d = detail[0]
                 self.check("factory has recipes", "recipes" in d)
@@ -1957,10 +2228,10 @@ class TestRunner:
             self.skip("bot_factory", "no BotPartFactory")
 
         # BotAssembler
-        assemblers = [b for b in buildings if b.get("name") == "BotAssembler"]
+        assemblers = [b for b in buildings if "BotAssembler" in str(b.get("name", ""))]
         if assemblers:
             aid = assemblers[0]["id"]
-            detail = self.bot.buildings(detail=f"id:{aid}")
+            detail = self.bot.buildings(id=aid)
             if detail:
                 d = detail[0]
                 self.check("assembler has recipes", "recipes" in d)
@@ -1973,10 +2244,10 @@ class TestRunner:
             self.skip("bot_assembler", "no BotAssembler")
 
         # ChargingStation
-        chargers = [b for b in buildings if b.get("name") == "ChargingStation"]
+        chargers = [b for b in buildings if "ChargingStation" in str(b.get("name", ""))]
         if chargers:
             cid = chargers[0]["id"]
-            detail = self.bot.buildings(detail=f"id:{cid}")
+            detail = self.bot.buildings(id=cid)
             if detail:
                 self.check("charger has powered field", "powered" in detail[0])
         else:
@@ -2059,7 +2330,7 @@ class TestRunner:
         json_result = self.bot.tiles(px - 1, py - 1, px + 1, py + 1)
         json_tiles = json_result.get("tiles", [])
         self.check("json tiles returned", len(json_tiles) > 0)
-        json_occupied = [t for t in json_tiles if "occupants" in t]
+        json_occupied = [t for t in json_tiles if isinstance(t.get("occupants"), list) and len(t.get("occupants")) > 0]
         if json_occupied:
             occ = json_occupied[0]["occupants"]
             self.check("json occupants is array", isinstance(occ, list), f"type={type(occ).__name__}")
@@ -2069,11 +2340,11 @@ class TestRunner:
         else:
             self.skip("json occupants", "no occupied tiles near DC")
 
-        # TOON format: occupants is flat string "Name:z/Name:z"
+        # TOON format: occupants is flat string "Name:z+Name:z"
         toon_result = self.toon_bot.tiles(px - 1, py - 1, px + 1, py + 1)
         toon_tiles = toon_result.get("tiles", [])
         self.check("toon tiles returned", len(toon_tiles) > 0)
-        toon_occupied = [t for t in toon_tiles if "occupants" in t]
+        toon_occupied = [t for t in toon_tiles if isinstance(t.get("occupants"), str) and len(t.get("occupants")) > 0]
         if toon_occupied:
             occ = toon_occupied[0]["occupants"]
             self.check("toon occupants is string", isinstance(occ, str), f"type={type(occ).__name__}")
@@ -2091,7 +2362,7 @@ class TestRunner:
         """Test carried goods fields on beavers."""
         print("\n=== carried goods ===\n")
         beavers = self.bot.beavers(detail="full")
-        carriers = [b for b in beavers if "carrying" in b]
+        carriers = [b for b in beavers if b.get("carrying")]
         if carriers:
             c = carriers[0]
             self.check("carrying is string", isinstance(c["carrying"], str))
@@ -2357,7 +2628,7 @@ class TestRunner:
         # single building by id
         if basic:
             bid = basic[0]["id"]
-            single = self.bot.buildings(detail=f"id:{bid}")
+            single = self.bot.buildings(id=bid)
             self.check("single returns list", isinstance(single, list))
             self.check("single has 1 result", len(single) == 1)
             if single:
@@ -2500,7 +2771,6 @@ class TestRunner:
             ("place unknown prefab",    lambda: bot.place_building("Fake", sx, sy, sz),         "not_found"),
             ("place bad orientation",   lambda: bot.place_building("Path", sx, sy, sz, "bogus"), "invalid_param"),
             ("find_placement unknown",  lambda: bot.find_placement("Fake", 0, 0, 10, 10),      "not_found"),
-            ("place_path diagonal",     lambda: bot.place_path(100, 100, 105, 105),             "invalid_param"),
             ("stockpile_capacity nonexistent", lambda: bot.set_capacity(999999, 100),           "not_found"),
             ("stockpile_good nonexistent", lambda: bot.set_good(999999, "Water"),               "not_found"),
             ("building_range nonexistent", lambda: bot.building_range(999999),                  "not_found"),
@@ -2604,6 +2874,7 @@ class TestRunner:
     def test_json_schema(self):
         """Validate JSON structure of every endpoint in both toon and json formats."""
         print("\n=== json schema ===\n")
+        self._audit_doc_contracts()
 
         def validate(data, schema, path="root"):
             errors = []
@@ -2942,7 +3213,7 @@ class TestRunner:
             self.skip("cache vs live", "debug endpoint not available or unexpected response")
 
     def test_district_accuracy(self):
-        """Cross-validate per-district housing/employment/population in summary against buildings+beavers."""
+        """Cross-validate current summary population/employment/building-category data against buildings+beavers."""
         print("\n=== district accuracy ===\n")
 
         jbot = Timberbot(json_mode=True)
@@ -2985,9 +3256,9 @@ class TestRunner:
                        dpop == bcount,
                        f"population={dpop}, beavers in district={bcount}")
 
-        # --- verify housing per district matches building data ---
-        # count beds from buildings that have dwelling data
-        housing_by_district = {}  # {district: [occupied, total]}
+        # --- verify current building-category summary matches building data ---
+        # summary now exposes housing as a building-category count, not district bed capacity
+        housing_buildings = 0
         workers_by_district = {}  # {district: [assigned, desired]}
         for b in items:
             # buildings in full detail have maxDwellers, dwellers, assignedWorkers, desiredWorkers
@@ -2995,14 +3266,9 @@ class TestRunner:
             # skip paths -- they have no district relevance for housing/employment
             if bname == "Path":
                 continue
-            # we need to figure out district from the building -- but full detail doesn't include district
-            # instead we verify the totals match
             max_d = b.get("maxDwellers", 0)
             if max_d and max_d > 0:
-                dwellers = b.get("dwellers", 0)
-                housing_by_district["_all"] = housing_by_district.get("_all", [0, 0])
-                housing_by_district["_all"][0] += dwellers
-                housing_by_district["_all"][1] += max_d
+                housing_buildings += 1
             desired = b.get("desiredWorkers", 0)
             if desired and desired > 0:
                 assigned = b.get("assignedWorkers", 0)
@@ -3010,17 +3276,11 @@ class TestRunner:
                 workers_by_district["_all"][0] += assigned
                 workers_by_district["_all"][1] += desired
 
-        # verify global sums
-        sum_occ = sum(d["housing"]["occupiedBeds"] for d in districts)
-        sum_beds = sum(d["housing"]["totalBeds"] for d in districts)
-        bld_occ = housing_by_district.get("_all", [0, 0])[0]
-        bld_beds = housing_by_district.get("_all", [0, 0])[1]
-        self.check(f"housing total beds: summary ({sum_beds}) vs buildings ({bld_beds})",
-                   sum_beds == bld_beds,
-                   f"summary={sum_beds}, buildings={bld_beds}")
-        self.check(f"housing occupied: summary ({sum_occ}) vs buildings ({bld_occ})",
-                   sum_occ == bld_occ,
-                   f"summary={sum_occ}, buildings={bld_occ}")
+        building_roles = summary.get("buildings", {})
+        summary_housing = building_roles.get("housing", 0)
+        self.check(f"housing building count: summary ({summary_housing}) vs buildings ({housing_buildings})",
+                   summary_housing == housing_buildings,
+                   f"summary={summary_housing}, buildings={housing_buildings}")
 
         sum_assigned = sum(d["employment"]["assigned"] for d in districts)
         sum_vacancies = sum(d["employment"]["vacancies"] for d in districts)
@@ -3032,15 +3292,6 @@ class TestRunner:
         self.check(f"employment vacancies: summary ({sum_vacancies}) vs buildings ({bld_vacancies})",
                    abs(sum_vacancies - bld_vacancies) <= 1,
                    f"summary={sum_vacancies}, buildings={bld_vacancies}")
-
-        # verify homeless = pop - occupiedBeds (per district)
-        for d in districts:
-            dname = d["name"]
-            dpop = d["population"]["adults"] + d["population"]["children"] + d["population"]["bots"]
-            expected_homeless = max(0, dpop - d["housing"]["occupiedBeds"])
-            actual_homeless = d["housing"]["homeless"]
-            self.check(f"district '{dname}' homeless ({actual_homeless}) = pop-beds ({expected_homeless})",
-                       actual_homeless == expected_homeless)
 
         # verify unemployed = adults - assigned (per district)
         for d in districts:
@@ -3210,8 +3461,8 @@ class TestRunner:
         if isinstance(legacy_basic, list) and legacy_basic:
             sample_ids = [item.get("id") for item in legacy_basic[:10] if isinstance(item, dict) and item.get("id") is not None]
             for bid in sample_ids:
-                legacy_one = self.bot.buildings(detail=f"id:{bid}")
-                v2_one = self.bot.buildings_v2(detail=f"id:{bid}")
+                legacy_one = self.bot.buildings(id=bid)
+                v2_one = self.bot.buildings_v2(id=bid)
                 self.check(f"buildings_v2 id:{bid} matches buildings",
                            legacy_one == v2_one,
                            self._compare_compact(legacy_one, v2_one))
@@ -3444,5 +3695,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 

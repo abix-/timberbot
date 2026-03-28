@@ -62,9 +62,14 @@ namespace Timberbot
             return (i >= 0 && i < PriorityNames.Length) ? PriorityNames[i] : "Normal";
         }
 
+        public static string CanonicalName(string name)
+        {
+            return name.Replace("(Clone)", "").Trim();
+        }
+
         public static string CleanName(string name)
         {
-            var clean = name.Replace("(Clone)", "");
+            var clean = CanonicalName(name);
             if (FactionSuffix.Length > 0) clean = clean.Replace(FactionSuffix, "");
             return clean.Trim();
         }
@@ -177,9 +182,9 @@ namespace Timberbot
 
             var ec = e.Entity;
             if (ec.GetComponent<Timberborn.Buildings.Building>() != null)
-                WebhookMgr.PushEvent("building.placed", WebhookMgr.DataEntity(GetLegacyId(ec), CleanName(ec.GameObject.name)));
+                WebhookMgr.PushEvent("building.placed", WebhookMgr.DataEntity(GetLegacyId(ec), CanonicalName(ec.GameObject.name)));
             else if (ec.GetComponent<Timberborn.NeedSystem.NeedManager>() != null)
-                WebhookMgr.PushEvent("beaver.born", WebhookMgr.DataEntityBot(GetLegacyId(ec), CleanName(ec.GameObject.name), ec.GetComponent<Bot>() != null));
+                WebhookMgr.PushEvent("beaver.born", WebhookMgr.DataEntityBot(GetLegacyId(ec), CanonicalName(ec.GameObject.name), ec.GetComponent<Bot>() != null));
         }
 
         [OnEvent]
@@ -189,12 +194,13 @@ namespace Timberbot
             {
                 var ec = e.Entity;
                 if (ec.GetComponent<Timberborn.Buildings.Building>() != null)
-                    WebhookMgr.PushEvent("building.demolished", WebhookMgr.DataEntity(GetLegacyId(ec), CleanName(ec.GameObject.name)));
+                    WebhookMgr.PushEvent("building.demolished", WebhookMgr.DataEntity(GetLegacyId(ec), CanonicalName(ec.GameObject.name)));
                 else if (ec.GetComponent<Timberborn.NeedSystem.NeedManager>() != null)
-                    WebhookMgr.PushEvent("beaver.died", WebhookMgr.DataEntity(GetLegacyId(ec), CleanName(ec.GameObject.name)));
+                    WebhookMgr.PushEvent("beaver.died", WebhookMgr.DataEntity(GetLegacyId(ec), CanonicalName(ec.GameObject.name)));
             }
 
             RemoveEntity(e.Entity);
         }
     }
 }
+

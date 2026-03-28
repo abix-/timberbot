@@ -268,7 +268,7 @@ Supported detail levels:
 
 - `basic`
 - `full`
-- `id:<id>`
+- `id=<id>`
 
 Schema compatibility requirement:
 
@@ -464,7 +464,7 @@ This should go through existing debug/benchmark surfaces rather than inventing a
 
 - `buildings_v2 basic` matches `buildings basic`
 - `buildings_v2 full` matches `buildings full`
-- `detail=id:<id>` behavior matches current endpoint
+- `id=<id>` behavior matches current endpoint
 - pagination and filtering semantics match
 - toon/json schema matches current endpoint exactly
 
@@ -496,7 +496,7 @@ For every `/api/v2/*` endpoint, validation should happen in three layers.
 - compare v1 vs v2 JSON output
 - compare v1 vs v2 TOON output
 - compare filtered and paginated responses
-- compare `detail=basic`, `detail=full`, and `detail=id:<id>` where supported
+- compare `detail=basic`, `detail=full`, and `id=<id>` where supported
 
 For entity endpoints:
 
@@ -552,7 +552,7 @@ The buildings spike has been implemented and measured against the live game.
 - `GET /api/buildings_v2` exists and is live
 - `buildings_v2` basic matches legacy `buildings`
 - `buildings_v2` full matches legacy `buildings`
-- sampled `detail=id:<id>` parity checks passed
+- sampled `id=<id>` parity checks passed
 
 Dedicated parity test:
 
@@ -707,7 +707,7 @@ Fields:
 
 Required parser behavior:
 
-- `detail=id:<id>` implies full detail and disables the pagination wrapper
+- `id=<id>` implies full detail and disables the pagination wrapper
 - `limit=0` means unlimited and returns a flat array
 - name/radius filters apply before pagination
 - paginated responses use `{total, offset, limit, items}`

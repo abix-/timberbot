@@ -313,11 +313,11 @@ Current work schedule.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| endHours | int | Hour when work ends (1-24) |
+| endHours | float | Hour when work ends (1-24) |
 | areWorkingHours | bool | Whether beavers are currently working |
 
 ```json
-{"endHours": 16, "areWorkingHours": true}
+{"endHours": 16.0, "areWorkingHours": true}
 ```
 
 ---
@@ -504,15 +504,15 @@ Import/export settings per good per district.
 | goods | array | Per-good settings |
 | goods[].good | string | Good name |
 | goods[].importOption | string | `"None"`, `"Allowed"`, or `"Forced"` |
-| goods[].exportThreshold | int | Export when stock exceeds this |
+| goods[].exportThreshold | float | Export when stock exceeds this |
 
 ```json
 [
   {
     "district": "District 1",
     "goods": [
-      {"good": "Water", "importOption": "Allowed", "exportThreshold": 50},
-      {"good": "Log", "importOption": "None", "exportThreshold": 0}
+      {"good": "Water", "importOption": "Allowed", "exportThreshold": 50.0},
+      {"good": "Log", "importOption": "None", "exportThreshold": 0.0}
     ]
   }
 ]
@@ -598,9 +598,9 @@ Each building includes all applicable fields (absent fields mean the component d
 | Field | Type | Description |
 |-------|------|-------------|
 | id | int | Unity instance ID (ephemeral per session) |
-| name | string | Building name (cleaned of faction suffix) |
+| name | string | Faction-qualified building name (for example `FarmHouse.IronTeeth`) |
 | x, y, z | int | Origin coordinates |
-| orientation | int | 0=south, 1=west, 2=north, 3=east |
+| orientation | string | `"south"`, `"west"`, `"north"`, or `"east"` |
 | finished | bool | Construction complete |
 | pausable | bool | Can be paused |
 | paused | bool | Currently paused |
@@ -748,9 +748,9 @@ Supports server-side pagination (`?limit=10`) and filtering (`?name=Bot`). See [
 |------|-------------|
 | `detail=basic` (default) | Active needs only, compact |
 | `detail=full` | All needs (active + inactive) with `group` category field |
-| `detail=id:<id>` | Single beaver/bot by ID, all needs with `group` field |
+| `id=<id>` | Single beaver/bot by ID, all needs with `group` field |
 
-**CLI:** `timberbot.py beavers detail:full` | `timberbot.py beavers detail:id:-12345`
+**CLI:** `timberbot.py beavers detail:full` | `timberbot.py beavers id:-12345`
 
 Bots always show all 3 needs (Energy, ControlTower, Grease) regardless of detail mode.
 
@@ -1074,7 +1074,7 @@ Unlock a building using science points. Matches the exact UI flow (cost deductio
 
 Pause or unpause a building.
 
-**CLI:** `timberbot.py pause_building building_id:12340` | `timberbot.py unpause_building building_id:12340`
+**CLI:** `timberbot.py pause_building id:12340` | `timberbot.py unpause_building id:12340`
 
 #### Request Body
 
@@ -1105,7 +1105,7 @@ Pause or unpause a building.
 
 Engage or disengage a clutch on a building.
 
-**CLI:** `timberbot.py set_clutch building_id:12340 engaged:true`
+**CLI:** `timberbot.py set_clutch id:12340 engaged:true`
 
 #### Request Body
 
@@ -1126,7 +1126,7 @@ Engage or disengage a clutch on a building.
 
 Remove a building from the world.
 
-**CLI:** `timberbot.py demolish_building building_id:12340`
+**CLI:** `timberbot.py demolish_building id:12340`
 
 #### Request Body
 
@@ -1152,7 +1152,7 @@ Remove a building from the world.
 
 Remove a planted crop entity from the world.
 
-**CLI:** `timberbot.py demolish_crop crop_id:12340`
+**CLI:** `timberbot.py demolish_crop id:12340`
 
 #### Request Body
 
@@ -1274,7 +1274,7 @@ Water buildings (pumps) sort by: waterDepth (deepest first). Others sort by: non
 
 Set floodgate water gate height. Value is clamped to max.
 
-**CLI:** `timberbot.py set_floodgate building_id:12340 height:1.5`
+**CLI:** `timberbot.py set_floodgate id:12340 height:1.5`
 
 #### Request Body
 
@@ -1301,7 +1301,7 @@ Set floodgate water gate height. Value is clamped to max.
 
 Set construction or workplace priority.
 
-**CLI:** `timberbot.py set_priority building_id:12340 priority:VeryHigh`
+**CLI:** `timberbot.py set_priority id:12340 priority:VeryHigh`
 
 #### Request Body
 
@@ -1333,7 +1333,7 @@ Set construction or workplace priority.
 
 Set desired worker count for a workplace.
 
-**CLI:** `timberbot.py set_workers building_id:12340 count:2`
+**CLI:** `timberbot.py set_workers id:12340 count:2`
 
 #### Request Body
 
@@ -1360,7 +1360,7 @@ Set desired worker count for a workplace.
 
 Prioritize hauling deliveries to a building.
 
-**CLI:** `timberbot.py set_haul_priority building_id:12340 prioritized:true`
+**CLI:** `timberbot.py set_haul_priority id:12340 prioritized:true`
 
 #### Request Body
 
@@ -1387,7 +1387,7 @@ Prioritize hauling deliveries to a building.
 
 Set which recipe a manufactory produces.
 
-**CLI:** `timberbot.py set_recipe building_id:12340 recipe:PlankRecipe`
+**CLI:** `timberbot.py set_recipe id:12340 recipe:PlankRecipe`
 
 #### Request Body
 
@@ -1418,7 +1418,7 @@ Set which recipe a manufactory produces.
 
 Prioritize planting or harvesting for a farmhouse.
 
-**CLI:** `timberbot.py set_farmhouse_action building_id:12340 action:planting`
+**CLI:** `timberbot.py set_farmhouse_action id:12340 action:planting`
 
 #### Request Body
 
@@ -1453,7 +1453,7 @@ Prioritize planting or harvesting for a farmhouse.
 
 Prioritize which tree/resource type a forester plants.
 
-**CLI:** `timberbot.py set_plantable_priority building_id:12340 plantable:Pine`
+**CLI:** `timberbot.py set_plantable_priority id:12340 plantable:Pine`
 
 #### Request Body
 
@@ -1484,7 +1484,7 @@ Prioritize which tree/resource type a forester plants.
 
 Set maximum capacity on a stockpile.
 
-**CLI:** `timberbot.py set_capacity building_id:12340 capacity:100`
+**CLI:** `timberbot.py set_capacity id:12340 capacity:100`
 
 #### Request Body
 
@@ -1505,7 +1505,7 @@ Set maximum capacity on a stockpile.
 
 Set which good a single-good stockpile accepts.
 
-**CLI:** `timberbot.py set_good building_id:12340 good:Log`
+**CLI:** `timberbot.py set_good id:12340 good:Log`
 
 #### Request Body
 
@@ -1608,15 +1608,15 @@ Clear planting marks from an area.
 
 Find valid planting spots in an area or within a building's work range.
 
-**CLI:** `timberbot.py find_planting crop:Kohlrabi building_id:-514366` or `timberbot.py find_planting crop:Kohlrabi x1:68 y1:128 x2:72 y2:132 z:2`
+**CLI:** `timberbot.py find_planting crop:Kohlrabi id:-514366` or `timberbot.py find_planting crop:Kohlrabi x1:68 y1:128 x2:72 y2:132 z:2`
 
 #### Request Body
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | crop | string | yes | Crop name (Kohlrabi, Pine, Birch, etc.) |
-| building_id | int | no | Farmhouse/forester ID -- returns spots within building range |
-| x1, y1, x2, y2, z | int | no | Area scan (used when building_id is 0) |
+| id | int | no | Farmhouse/forester ID -- returns spots within building range |
+| x1, y1, x2, y2, z | int | no | Area scan (used when id is 0) |
 
 #### Response
 
@@ -1636,7 +1636,7 @@ Find valid planting spots in an area or within a building's work range.
 
 Get the work range tiles for a building. Same green circle the player sees when selecting a farmhouse, lumberjack, forester, gatherer, scavenger, or district center.
 
-**CLI:** `timberbot.py building_range building_id:-514366`
+**CLI:** `timberbot.py building_range id:-514366`
 
 #### Request Body
 
@@ -1756,7 +1756,7 @@ Webhooks deliver batched JSON arrays (one POST per flush, default every 200ms):
 
 Remove a webhook by ID.
 
-**CLI:** `timberbot.py unregister_webhook webhook_id:wh_1`
+**CLI:** `timberbot.py unregister_webhook id:wh_1`
 
 #### Request Body
 
@@ -2014,3 +2014,5 @@ Coordinates always refer to the bottom-left corner of the footprint regardless o
     `POST /api/building/place` may create ghost buildings on invalid spots. The `Place()` callback fires and creates an entity even when placement is invalid. Python-side validation blocks most cases, but multi-tile overlaps or bad terrain can still ghost.
 
     **Never test placement carelessly** -- every failed `Place()` may create a ghost that needs manual cleanup.
+
+

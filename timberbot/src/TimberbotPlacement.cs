@@ -267,9 +267,9 @@ namespace Timberbot
 
             var validationError = validateError?.Invoke(ec);
             if (validationError != null)
-                return Jw.Error(validationError, ("id", id), ("name", TimberbotEntityRegistry.CleanName(ec.GameObject.name)));
+                return Jw.Error(validationError, ("id", id), ("name", TimberbotEntityRegistry.CanonicalName(ec.GameObject.name)));
 
-            var name = TimberbotEntityRegistry.CleanName(ec.GameObject.name);
+            var name = TimberbotEntityRegistry.CanonicalName(ec.GameObject.name);
             _entityService.Delete(ec);
             return Jw.Result(("id", id), ("name", name), ("demolished", true));
         }
@@ -283,7 +283,7 @@ namespace Timberbot
             {
                 if (ec.GetComponent<LivingNaturalResource>() == null)
                     return "invalid_type: not a natural resource";
-                var name = TimberbotEntityRegistry.CleanName(ec.GameObject.name);
+                var name = TimberbotEntityRegistry.CanonicalName(ec.GameObject.name);
                 return TimberbotEntityRegistry.CropSpecies.Contains(name) ? null : "invalid_type: not a crop";
             });
 
@@ -2186,7 +2186,7 @@ namespace Timberbot
                 var ec = entity.GetComponent<EntityComponent>();
                 if (ec != null)
                     placedId = _cache.GetLegacyId(ec);
-                placedName = TimberbotEntityRegistry.CleanName(entity.GameObject.name);
+                placedName = TimberbotEntityRegistry.CanonicalName(entity.GameObject.name);
             });
 
             if (placedId == 0)
@@ -2297,4 +2297,5 @@ namespace Timberbot
         }
     }
 }
+
 

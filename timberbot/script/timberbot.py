@@ -172,9 +172,9 @@ class Timberbot:
             data["events"] = events
         return self._post("/api/webhooks", data)
 
-    def unregister_webhook(self, webhook_id):
+    def unregister_webhook(self, id):
         """Unregister a webhook by ID."""
-        return self._post("/api/webhooks/delete", {"id": webhook_id})
+        return self._post("/api/webhooks/delete", {"id": id})
 
     def list_webhooks(self):
         """List all registered webhooks."""
@@ -206,17 +206,21 @@ class Timberbot:
         """Districts: [{name, population: {adults, children, bots}, resources: {...}}]."""
         return self._get("/api/districts")
 
-    def buildings(self, limit=0, offset=0, detail="basic"):
-        """All buildings. detail: basic (compact), full (all fields), id:<id> (single building).
+    def buildings(self, limit=0, offset=0, detail="basic", id=0):
+        """All buildings. detail: basic (compact), full (all fields). id selects a single building.
         Server defaults to limit=100. CLI passes limit=0 (unlimited) by default."""
         params = {"limit": limit, "offset": offset}
+        if id:
+            params["id"] = id
         if detail != "basic":
             params["detail"] = detail
         return self._get("/api/buildings", params=params)
 
-    def buildings_v2(self, limit=0, offset=0, detail="basic"):
+    def buildings_v2(self, limit=0, offset=0, detail="basic", id=0):
         """Compatibility alias for the native /api/buildings snapshot path."""
         params = {"limit": limit, "offset": offset}
+        if id:
+            params["id"] = id
         if detail != "basic":
             params["detail"] = detail
         return self._get("/api/buildings", params=params)
@@ -233,9 +237,11 @@ class Timberbot:
         """All gatherable resources (berry bushes etc): [{id, name, x, y, z, alive}]."""
         return self._get("/api/gatherables", params={"limit": limit, "offset": offset})
 
-    def beavers(self, limit=0, offset=0, detail="basic"):
-        """All beavers with wellbeing and needs. detail:full shows all needs with group category."""
+    def beavers(self, limit=0, offset=0, detail="basic", id=0):
+        """All beavers with wellbeing and needs. detail:full shows all needs with group category. id selects a single beaver."""
         params = {"limit": limit, "offset": offset}
+        if id:
+            params["id"] = id
         if detail != "basic":
             params["detail"] = detail
         return self._get("/api/beavers", params=params)
@@ -307,45 +313,45 @@ class Timberbot:
         """Set game speed. 0=pause, 1=normal, 2=fast, 3=fastest."""
         return self._post("/api/speed", {"speed": speed})
 
-    def pause_building(self, building_id):
+    def pause_building(self, id):
         """Pause a building."""
-        return self._post("/api/building/pause", {"id": building_id, "paused": True})
+        return self._post("/api/building/pause", {"id": id, "paused": True})
 
-    def unpause_building(self, building_id):
+    def unpause_building(self, id):
         """Unpause a building."""
-        return self._post("/api/building/pause", {"id": building_id, "paused": False})
+        return self._post("/api/building/pause", {"id": id, "paused": False})
 
-    def set_clutch(self, building_id, engaged):
+    def set_clutch(self, id, engaged):
         """Engage or disengage a clutch. engaged: True/False."""
-        return self._post("/api/building/clutch", {"id": building_id, "engaged": engaged})
+        return self._post("/api/building/clutch", {"id": id, "engaged": engaged})
 
-    def set_priority(self, building_id, priority, type=""):
+    def set_priority(self, id, priority, type=""):
         """Set building priority. Values: VeryLow, Normal, VeryHigh. Type: workplace (finished) or construction (building)."""
-        return self._post("/api/building/priority", {"id": building_id, "priority": priority, "type": type})
+        return self._post("/api/building/priority", {"id": id, "priority": priority, "type": type})
 
-    def set_haul_priority(self, building_id, prioritized=True):
+    def set_haul_priority(self, id, prioritized=True):
         """Set hauler priority on a building. Haulers will deliver goods here first."""
-        return self._post("/api/building/hauling", {"id": building_id, "prioritized": prioritized})
+        return self._post("/api/building/hauling", {"id": id, "prioritized": prioritized})
 
-    def set_recipe(self, building_id, recipe):
+    def set_recipe(self, id, recipe):
         """Set manufactory recipe. Use 'none' to clear. Lists available recipes on error."""
-        return self._post("/api/building/recipe", {"id": building_id, "recipe": recipe})
+        return self._post("/api/building/recipe", {"id": id, "recipe": recipe})
 
-    def set_farmhouse_action(self, building_id, action):
+    def set_farmhouse_action(self, id, action):
         """Set farmhouse priority action: 'planting' or 'harvesting'."""
-        return self._post("/api/building/farmhouse", {"id": building_id, "action": action})
+        return self._post("/api/building/farmhouse", {"id": id, "action": action})
 
-    def set_plantable_priority(self, building_id, plantable):
+    def set_plantable_priority(self, id, plantable):
         """Set prioritized plantable on forester/gatherer. Use 'none' to clear."""
-        return self._post("/api/building/plantable", {"id": building_id, "plantable": plantable})
+        return self._post("/api/building/plantable", {"id": id, "plantable": plantable})
 
-    def set_workers(self, building_id, count):
+    def set_workers(self, id, count):
         """Set desired worker count (0 to maxWorkers)."""
-        return self._post("/api/building/workers", {"id": building_id, "count": count})
+        return self._post("/api/building/workers", {"id": id, "count": count})
 
-    def set_floodgate(self, building_id, height):
+    def set_floodgate(self, id, height):
         """Set floodgate height (clamped to min/max)."""
-        return self._post("/api/building/floodgate", {"id": building_id, "height": height})
+        return self._post("/api/building/floodgate", {"id": id, "height": height})
 
     def debug(self, target="help", **kwargs):
         """Generic live debug surface. Targets include help, roots, get, fields, describe, call, compare, assert, validate, validate_all."""
@@ -364,13 +370,13 @@ class Timberbot:
             "orientation": str(orientation).lower()
         })
 
-    def demolish_building(self, building_id):
+    def demolish_building(self, id):
         """Demolish a building. Get IDs from buildings()."""
-        return self._post("/api/building/demolish", {"id": building_id})
+        return self._post("/api/building/demolish", {"id": id})
 
-    def demolish_crop(self, crop_id):
+    def demolish_crop(self, id):
         """Demolish a planted crop entity by ID. Get IDs from crops()."""
-        return self._post("/api/crop/demolish", {"id": crop_id})
+        return self._post("/api/crop/demolish", {"id": id})
 
     def mark_trees(self, x1, y1, x2, y2, z):
         """Mark a rectangular area for tree cutting."""
@@ -384,16 +390,16 @@ class Timberbot:
             "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z, "crop": crop
         })
 
-    def find_planting(self, crop, building_id=0, x1=0, y1=0, x2=0, y2=0, z=0):
-        """Find valid planting spots. Use building_id for farmhouse range, or x1/y1/x2/y2/z for area."""
+    def find_planting(self, crop, id=0, x1=0, y1=0, x2=0, y2=0, z=0):
+        """Find valid planting spots. Use id for farmhouse range, or x1/y1/x2/y2/z for area."""
         return self._post("/api/planting/find", {
-            "crop": crop, "building_id": building_id,
+            "crop": crop, "id": id,
             "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z
         })
 
-    def building_range(self, building_id):
+    def building_range(self, id):
         """Get work range tiles for a building (farmhouse, lumberjack, forester)."""
-        return self._post("/api/building/range", {"id": building_id})
+        return self._post("/api/building/range", {"id": id})
 
     def clear_planting(self, x1, y1, x2, y2, z):
         """Clear planting marks from a rectangular area."""
@@ -407,13 +413,13 @@ class Timberbot:
             "x1": x1, "y1": y1, "x2": x2, "y2": y2, "z": z, "marked": False
         })
 
-    def set_capacity(self, building_id, capacity):
+    def set_capacity(self, id, capacity):
         """Set stockpile capacity."""
-        return self._post("/api/stockpile/capacity", {"id": building_id, "capacity": capacity})
+        return self._post("/api/stockpile/capacity", {"id": id, "capacity": capacity})
 
-    def set_good(self, building_id, good):
+    def set_good(self, id, good):
         """Set allowed good on a single-good stockpile."""
-        return self._post("/api/stockpile/good", {"id": building_id, "good": good})
+        return self._post("/api/stockpile/good", {"id": id, "good": good})
 
     def place_path(self, x1, y1, x2, y2, z=0, style="direct", sections=0, timings=False):
         """Route a path using A* to avoid obstacles, with auto-stairs at z-level changes. z param ignored. style: 'direct' (staircase) or 'straight' (minimize turns). sections: 0=all, N=place N stair crossings then stop."""

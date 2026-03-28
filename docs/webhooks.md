@@ -36,7 +36,7 @@ Each POST contains an array of events that accumulated during the batch window. 
 
 ```bash
 timberbot.py list_webhooks                         # GET /api/webhooks
-timberbot.py unregister_webhook webhook_id:wh_1    # POST /api/webhooks/delete
+timberbot.py unregister_webhook id:wh_1    # POST /api/webhooks/delete
 ```
 
 Webhooks are stored in memory -- they reset on game restart. Re-register on startup.

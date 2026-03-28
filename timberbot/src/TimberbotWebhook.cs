@@ -190,7 +190,7 @@ namespace Timberbot
         }
 
         // helpers for building data JSON without anonymous objects
-        private static string CleanName(string name) => TimberbotEntityRegistry.CleanName(name);
+        private static string CanonicalName(string name) => TimberbotEntityRegistry.CanonicalName(name);
 
         public string DataInt(string key, int val) =>
             _jw.BeginObj().Key(key).Int(val).CloseObj().ToString();
@@ -218,7 +218,7 @@ namespace Timberbot
         [OnEvent] public void OnNightStart(Timberborn.TimeSystem.NighttimeStartEvent e) { if (_webhooks.Count > 0) PushEvent("night.start", DataInt("day", _dayNightCycle.DayNumber)); }
 
         // buildings
-        [OnEvent] public void OnBuildingFinished(EnteredFinishedStateEvent e) { try { var go = e.BlockObject?.GetComponent<EntityComponent>()?.GameObject; PushEvent("building.finished", DataEntity(go?.GetInstanceID() ?? 0, go != null ? CleanName(go.name) : "")); } catch (Exception _ex) { TimberbotLog.Error("webhook.building_finished", _ex); } }
+        [OnEvent] public void OnBuildingFinished(EnteredFinishedStateEvent e) { try { var go = e.BlockObject?.GetComponent<EntityComponent>()?.GameObject; PushEvent("building.finished", DataEntity(go?.GetInstanceID() ?? 0, go != null ? CanonicalName(go.name) : "")); } catch (Exception _ex) { TimberbotLog.Error("webhook.building_finished", _ex); } }
         [OnEvent] public void OnDistrictChanged(Timberborn.GameDistricts.DistrictCenterRegistryChangedEvent e) => PushEvent("district.changed");
 
         // population
@@ -316,3 +316,4 @@ namespace Timberbot
         [OnEvent] public void OnConstructionMode(Timberborn.ConstructionMode.ConstructionModeChangedEvent e) => PushEvent("construction.mode.changed", null);
     }
 }
+

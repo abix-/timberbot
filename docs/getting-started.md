@@ -139,7 +139,7 @@ Commands that change game state use `key:value` arguments:
 
 ```bash
 timberbot.py place_building prefab:Path x:120 y:130 z:2 orientation:south
-timberbot.py set_priority building_id:12340 priority:VeryHigh
+timberbot.py set_priority id:12340 priority:VeryHigh
 timberbot.py plant_crop x1:110 y1:130 x2:115 y2:135 z:2 crop:Carrot
 timberbot.py mark_trees x1:100 y1:120 x2:110 y2:130 z:2
 ```
