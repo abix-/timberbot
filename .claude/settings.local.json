@@ -27,7 +27,14 @@
       "Bash(ilspycmd C:/Games/Steam/steamapps/common/Timberborn/Timberborn_Data/Managed/Timberborn.GameSaveRepositorySystemUI.dll)",
       "Bash(ilspycmd C:/Games/Steam/steamapps/common/Timberborn/Timberborn_Data/Managed/Timberborn.GameSceneLoading.dll)",
       "Skill(rtfm)",
-      "Bash(ilspycmd:*)"
+      "Bash(ilspycmd:*)",
+      "Bash(grep -c '//\\\\|///\\\\|/\\\\*' C:/code/timberborn/timberbot/src/*.cs)",
+      "Bash(sort -t: -k2 -n)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//c/code/timberborn/timberbot/src/**)",
+      "Bash(done)",
+      "Bash(wc:*)"
     ]
   }
 }
