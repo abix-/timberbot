@@ -48,7 +48,7 @@ curl -X POST http://localhost:8085/api/speed -d '{"speed": 3}'
 - **Write job system** -- budgeted frame execution, no spikes
 - **Debug endpoint** -- reflection inspector with chaining and validation
 - **Webhooks** -- subscribe to game events over HTTP
-- **Zero-alloc hot path** -- 0 GC0 across all read endpoints
+- **Zero-alloc hot path** -- no garbage collection pressure on read endpoints
 
 ## Docs
 
