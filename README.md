@@ -19,7 +19,7 @@ timberbot.py buildings                            # list all buildings
 timberbot.py beavers                              # beaver wellbeing + critical needs
 timberbot.py map x1:110 y1:130 x2:130 y2:150     # ASCII map with terrain + blockers
 timberbot.py place_building prefab:Path x:100 y:130 z:2 orientation:south
-timberbot.py place_path x1:110 y1:130 x2:130 y2:150 z:2  # A* pathfinding
+timberbot.py place_path x1:110 y1:130 x2:130 y2:150       # A* pathfinding with auto-stairs
 timberbot.py set_speed speed:3                    # fast forward
 timberbot.py science                              # science points + unlockable buildings
 timberbot.py distribution                         # import/export settings per district
