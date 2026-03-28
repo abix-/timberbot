@@ -43,6 +43,7 @@ namespace Timberbot
             public int ConsecutiveFailures;
             public bool Disabled;
             public bool InFlight;
+            public DateTime RetryAfterUtc = DateTime.MinValue;
         }
         private readonly object _webhooksLock = new object();
         private readonly List<WebhookRegistration> _webhooks = new List<WebhookRegistration>();
@@ -175,7 +176,7 @@ namespace Timberbot
                 int count = 0;
                 lock (wh.Sync)
                 {
-                    if (wh.Disabled || wh.InFlight || wh.PendingPayloads.Count == 0) continue;
+                    if (wh.Disabled || wh.InFlight || wh.PendingPayloads.Count == 0 || wh.RetryAfterUtc > DateTime.UtcNow) continue;
                     _webhookSb.Clear();
                     var sb = _webhookSb;
                     sb.Append('[');
@@ -211,6 +212,7 @@ namespace Timberbot
                             {
                                 whRef.ConsecutiveFailures = 0;
                                 whRef.InFlight = false;
+                                whRef.RetryAfterUtc = DateTime.MinValue;
                             }
                             TimberbotLog.Info($"wh.delivery.done delivery={deliveryId} webhook={whRef.Id} status={(int)response.StatusCode} activeDeliveries={activeNow} {ThreadPoolState()}");
                             return;
@@ -223,6 +225,7 @@ namespace Timberbot
                             whRef.ConsecutiveFailures++;
                             whRef.InFlight = false;
                             whRef.Disabled = whRef.ConsecutiveFailures >= threshold;
+                            whRef.RetryAfterUtc = DateTime.MinValue;
                             failures = whRef.ConsecutiveFailures;
                             disabled = whRef.Disabled;
                         }
@@ -241,6 +244,7 @@ namespace Timberbot
                             whRef.ConsecutiveFailures++;
                             whRef.InFlight = false;
                             whRef.Disabled = whRef.ConsecutiveFailures >= threshold;
+                            whRef.RetryAfterUtc = DateTime.UtcNow + _webhookClient.Timeout;
                             failures = whRef.ConsecutiveFailures;
                             disabled = whRef.Disabled;
                         }
