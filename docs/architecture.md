@@ -1,32 +1,20 @@
 # Architecture
 
-How Timberbot works after the native `ReadV2` cutover.
+How Timberbot works internally. For migration history, see [`fresh-on-request-snapshots.md`](fresh-on-request-snapshots.md).
 
-This document describes the current live architecture, not the historical double-buffer design. For the migration rationale and validation history, see [`fresh-on-request-snapshots.md`](fresh-on-request-snapshots.md).
+## Components
 
-## Current state
+The mod has one read stack and one write stack:
 
-Timberbot now has one live read stack:
-
-- canonical read surface: `/api/*`
-- read implementation: [`TimberbotReadV2`](../timberbot/src/TimberbotReadV2.cs)
-- write implementation: [`TimberbotWrite`](../timberbot/src/TimberbotWrite.cs)
-- entity lookup / compatibility layer: [`TimberbotEntityRegistry`](../timberbot/src/TimberbotEntityRegistry.cs)
-
-Removed:
-
-- `TimberbotRead`
-- `/api/v1/*`
-- the old public split between legacy and v2 routes
-
-Still present:
-
-- `TimberbotEntityRegistry` still keeps some older cache/index state for debug/benchmark support code
-
-So the important distinction is:
-
-- **the public read API is no longer served by the old read class**
-- **the registry still contains transitional support/index responsibilities**
+- read: [`TimberbotReadV2`](../timberbot/src/TimberbotReadV2.cs) -- all GET endpoints, projection snapshots
+- write: [`TimberbotWrite`](../timberbot/src/TimberbotWrite.cs) -- all POST mutations
+- entity lookup: [`TimberbotEntityRegistry`](../timberbot/src/TimberbotEntityRegistry.cs) -- GUID/numeric ID bridge
+- placement: [`TimberbotPlacement`](../timberbot/src/TimberbotPlacement.cs) -- building placement, A* path routing
+- HTTP: [`TimberbotHttpServer`](../timberbot/src/TimberbotHttpServer.cs) -- background listener, routing
+- webhooks: [`TimberbotWebhook`](../timberbot/src/TimberbotWebhook.cs) -- batched push notifications
+- debug: [`TimberbotDebug`](../timberbot/src/TimberbotDebug.cs) -- reflection inspector, benchmark
+- orchestrator: [`TimberbotService`](../timberbot/src/TimberbotService.cs) -- lifecycle, settings, per-frame dispatch
+- write jobs: [`ITimberbotWriteJob`](../timberbot/src/ITimberbotWriteJob.cs) -- budgeted write execution
 
 ## Thread model
 
@@ -57,231 +45,167 @@ UpdateSingleton() [every frame]             ListenLoop() [blocking accept]
 | Location | Thread | Blocks game? |
 |---|---|---|
 | HTTP listener accept/GET response | background | no |
-| Canonical GET endpoints | background | no |
+| GET endpoints | background | no |
 | POST endpoints | main thread via `DrainRequests()` | yes, for duration |
 | `ReadV2.ProcessPendingRefresh()` | main thread | yes, bounded by capture budget |
 | `ProcessWriteJobs()` | main thread | yes, bounded by `writeBudgetMs` (default 2ms) |
 | Webhook flush scheduling | main thread | negligible |
 
-## High-level pieces
-
-### `TimberbotService`
+## TimberbotService
 
 [`TimberbotService`](../timberbot/src/TimberbotService.cs) is the singleton orchestrator.
 
 It owns:
 
-- settings load
+- settings load from `settings.json`
 - HTTP server lifetime
 - event bus registration
 - `Registry.BuildAllIndexes()`
 - `ReadV2.BuildAll()`
-- per-frame:
+- per-frame dispatch:
   - `DrainRequests()`
   - `ReadV2.ProcessPendingRefresh(now)`
   - `_server.ProcessWriteJobs(now, writeBudgetMs)`
   - `WebhookMgr.FlushWebhooks(now)`
 
-### `TimberbotReadV2`
+## TimberbotReadV2
 
-[`TimberbotReadV2`](../timberbot/src/TimberbotReadV2.cs) is now the only read service.
+[`TimberbotReadV2`](../timberbot/src/TimberbotReadV2.cs) is the read service for all GET endpoints.
 
 It owns:
 
-- staged fresh-on-request projection snapshots
-- staged value stores for singleton/aggregate endpoints
+- fresh-on-request projection snapshots for entity collections
+- value stores for singleton/aggregate endpoints
 - collection/value/paged route helpers
-- native serialization for `/api/*`
-- a private background finalize worker for snapshot publish work
-- some direct use of explicit Timberborn thread-safe services:
-  - terrain
-  - water
-  - soil moisture / contamination safety-wrapped reads
+- native serialization via `TimberbotJw`
+- a private background finalize thread for snapshot publish work
+- direct use of explicit Timberborn thread-safe services (terrain, water, soil)
+- field-level reusable collections for derived endpoints (clusters, tiles, alerts, power, wellbeing)
 
-Important rule:
+Thread safety rule:
 
 - listener-thread reads must come from published DTO snapshots or explicitly thread-safe game services
 - listener-thread code must not walk live Timberborn entity/component graphs
 
-### `TimberbotEntityRegistry`
+## TimberbotEntityRegistry
 
-[`TimberbotEntityRegistry`](../timberbot/src/TimberbotEntityRegistry.cs) is the compatibility and lookup layer.
+[`TimberbotEntityRegistry`](../timberbot/src/TimberbotEntityRegistry.cs) is the entity lookup and ID translation layer.
 
-It currently owns:
+It owns:
 
-- entity lifecycle tracking via Timberborn events
-- legacy numeric ID compatibility
+- entity lifecycle tracking via Timberborn `EventBus`
 - GUID-backed identity mapping over Timberborn `EntityRegistry`
 - `FindEntity(...)` for writes and placement
-- static/tracked support data still used by debug/benchmark paths
+- shared constants (faction suffix, species lists, priority names)
 
-Internal identity model:
+Identity model:
 
-- canonical internal entity key: Timberborn `EntityComponent.EntityId` (`Guid`)
-- public API entity key: legacy numeric `id`
+- canonical internal key: Timberborn `EntityComponent.EntityId` (`Guid`)
+- public API key: numeric `id` (Unity `GameObject.GetInstanceID()`)
+- mapping: `int <-> Guid` in both directions
 
-That split exists because:
+The public API uses short numeric IDs for human usability. The registry translates to GUIDs internally.
 
-- Timberborn’s real registry is GUID-based
-- the public API is still intentionally human-usable with short numeric IDs
-
-### `TimberbotWrite`
+## TimberbotWrite
 
 [`TimberbotWrite`](../timberbot/src/TimberbotWrite.cs) handles all mutations on the main thread.
 
 Write flow:
 
-- HTTP listener parses request
-- request is queued
-- `DrainRequests()` executes on Unity thread
+- HTTP listener parses request body (background thread)
+- request queued to `ConcurrentQueue`
+- `DrainRequests()` dequeues on Unity main thread
 - write resolves numeric `id` through `TimberbotEntityRegistry`
 - mutation runs against live game services/components
 
-### `TimberbotPlacement`
+## TimberbotPlacement
 
 [`TimberbotPlacement`](../timberbot/src/TimberbotPlacement.cs) handles:
 
-- `find_placement`
-- `place_building`
-- `demolish_building`
-- path routing helpers
+- `find_placement` -- search region for valid building spots with reachability/power/flood scoring
+- `place_building` -- origin-correct, validate via `PreviewFactory`, place via `BlockObjectPlacerService`
+- `demolish_building` / `demolish_crop`
+- `route_path` -- A* pathfinding with auto-stairs across z-levels, budgeted execution via `RoutePathJob`
+- `collect_prefabs` -- list building templates
 
-It still uses registry/state helpers and explicit thread-safe terrain/water services where appropriate.
-
-### `TimberbotWebhook`
+## TimberbotWebhook
 
 [`TimberbotWebhook`](../timberbot/src/TimberbotWebhook.cs) batches event pushes and sends them out-of-band.
 
+- events accumulate on the main thread via `[OnEvent]` handlers
+- `FlushWebhooks()` sends batches on a configurable cadence (default 200ms)
+- dispatch via `ThreadPool` (non-blocking)
+- circuit breaker: N consecutive failures disables the webhook
+
+Settings: `webhooksEnabled`, `webhookBatchMs`, `webhookCircuitBreaker`.
+
 ## Read architecture
 
-There are three main read patterns inside `ReadV2`.
+There are three read patterns inside `ReadV2`.
 
 ### 1. Projection-backed collections
 
-Used for entity-style endpoints like:
-
-- `buildings`
-- `beavers`
-- `trees`
-- `crops`
-- `gatherables`
+Used for entity-style endpoints: `buildings`, `beavers`, `trees`, `crops`, `gatherables`.
 
 Shape:
 
-- main-thread tracked refs
-- staged capture buffers
-- published DTO snapshot
-- listener-thread filtering / pagination / serialization
-
-For buildings specifically, `ReadV2` uses a fresh-on-request `ProjectionSnapshot<BuildingDefinition, BuildingState, BuildingDetailState>`.
-
-Properties:
-
-- requests ask for fresh data
-- main thread coalesces waiting readers
-- main thread captures live state into DTO buffers under a per-frame budget
-- background worker finalizes and publishes immutable snapshots
-- one publish satisfies multiple readers
-- responses serialize from the published snapshot off-thread
+- main-thread tracked refs (added/removed via `EventBus` lifecycle events)
+- `ProjectionSnapshot<TDef, TState, TDetail>` with double-buffered capture arrays
+- main thread captures live state into DTO buffers under a per-frame budget (~1ms)
+- background finalize thread publishes immutable snapshots
+- `CollectionRoute` handles format/pagination/filtering/serialization from published data
+- concurrent readers coalesce onto shared publishes
 
 ### 2. Value stores
 
-Used for singleton-ish endpoints like:
-
-- `settlement`
-- `time`
-- `weather`
-- `speed`
-- `workhours`
-- `science`
-- `distribution`
+Used for singleton endpoints: `settlement`, `time`, `weather`, `speed`, `workhours`, `science`, `distribution`.
 
 Shape:
 
-- main-thread capture produces a typed DTO/capture payload
-- background finalize turns that into the published snapshot where useful
-- waiting readers block until the next publish for that store
-- listener thread serializes the published result
+- `ValueStore<TCapture, TSnapshot>` with capture/finalize/publish pipeline
+- main-thread capture produces a typed DTO
+- background finalize converts to published snapshot where useful
+- `ValueRoute` handles serialization from published data
 
 ### 3. Derived reads
 
-Used for aggregate endpoints like:
+Used for aggregate endpoints: `summary`, `alerts`, `power`, `wellbeing`, `districts`, `resources`, `population`, `tree_clusters`, `food_clusters`.
 
-- `summary`
-- `alerts`
-- `power`
-- `wellbeing`
-- `districts`
-- `resources`
-- `population`
-- `tree_clusters`
-- `food_clusters`
-
-These are built from:
-
-- published snapshots
-- explicit thread-safe surfaces
-- a small amount of safe direct service data where needed
+Built from published snapshots and explicit thread-safe surfaces. Use field-level reusable collections (dicts, lists, arrays) that are cleared-in-place per request for zero steady-state allocation.
 
 ## Fresh-on-request behavior
 
-The fresh-read contract is:
+The read contract:
 
 - a GET may wait across one or more frames for the next publish
 - the returned data is fresh as of the frame that serviced the request
-- concurrent readers are intended to coalesce onto shared publishes when possible
-
-This is different from the old always-on cache mirror:
-
-- old model: continuously refresh a mirrored read graph
-- current model: publish snapshots when readers need them
-
-Current state:
-
-- `ReadV2` owns the live read contract
-- there is no cadence-driven read refresh in the main update loop
-- `ProcessPendingRefresh()` is now a bounded capture scheduler, not a full publish loop
-- expensive finalize/publish work can run on `ReadV2`'s internal background worker
+- concurrent readers coalesce onto shared publishes
+- there is no cadence-driven refresh -- snapshots publish only when readers need them
+- `ProcessPendingRefresh()` is a bounded capture scheduler, not a periodic loop
+- expensive finalize/publish work runs on `ReadV2`'s dedicated background thread
 
 ## ID model
 
-Timberbot uses two ID forms.
-
 ### Public ID
 
-- numeric `id`
-- exposed in GET payloads
-- accepted by write endpoints
+- numeric `id` (Unity `GameObject.GetInstanceID()`)
+- exposed in GET payloads, accepted by write endpoints
 - easy for humans and scripts to type
-
-Source:
-
-- Unity-style instance handle associated with the entity’s `GameObject`
 
 ### Internal ID
 
-- `Guid`
-- Timberborn `EntityComponent.EntityId`
+- `Guid` (Timberborn `EntityComponent.EntityId`)
+- used for canonical identity and bridging into Timberborn `EntityRegistry`
 
-Used for:
+Compatibility mapping lives in `TimberbotEntityRegistry`: `int <-> Guid`.
 
-- canonical internal entity identity
-- bridging into Timberborn `EntityRegistry`
-
-Compatibility mapping lives in `TimberbotEntityRegistry`:
-
-- `int -> Guid`
-- `Guid -> int`
-
-This lets the mod align with Timberborn internally without forcing GUIDs into the public API.
-
-## Current request flow
+## Request flow
 
 ### GET
 
 ```
 HTTP GET
-  -> ListenLoop()
+  -> ListenLoop() [background thread]
   -> RouteRequest()
   -> ReadV2 endpoint method
      -> request fresh snapshot/value if needed
@@ -294,10 +218,10 @@ HTTP GET
 
 ```
 HTTP POST
-  -> ListenLoop()
+  -> ListenLoop() [background thread]
   -> parse JSON body
   -> enqueue PendingRequest
-  -> [next frame] DrainRequests()
+  -> [next frame] DrainRequests() [main thread]
   -> RouteRequest()
   -> Write/Placement/Webhook mutation
   -> Respond()
@@ -305,82 +229,35 @@ HTTP POST
 
 ## Serialization
 
-`TimberbotJw` is still the core JSON writer.
+`TimberbotJw` is the core JSON writer. Zero-alloc fluent API that writes directly to a reusable `StringBuilder`.
 
-Current usage pattern:
+Usage pattern:
 
-- each live request/build path owns its own writer instance
-- `Reset()` per request/build
+- each request/build path owns its own writer instance
+- `Reset()` per request
 - staged finalize paths avoid reusing main-thread writers across threads
 
-Major live writers:
-
-- `ReadV2` main collection/value writer
-- smaller dedicated builders inside `ReadV2` for science/distribution
-- `Write`
-- `Placement`
-- `Webhook`
-- `HttpServer` for small error responses
+Major writers: `ReadV2` (main + science/distribution builders), `Write`, `Placement`, `Webhook`, `HttpServer` (error responses).
 
 ## Spatial reads
 
-`/api/tiles` is now served by `ReadV2`.
+`/api/tiles` reads from:
 
-It uses:
+- `IThreadSafeWaterMap` -- water depth and contamination
+- `IThreadSafeColumnTerrainMap` -- terrain height
+- safe-wrapped `ISoilContaminationService` / `ISoilMoistureService`
+- published building/resource snapshots for occupant data
+- field-level reusable occupant lists (cleared-in-place per request)
 
-- `IThreadSafeWaterMap`
-- `IThreadSafeColumnTerrainMap`
-- safe-wrapped soil reads
-- registry-backed cached building/resource occupancy data
-
-That means tile queries no longer depend on the removed legacy read class.
-
-## Data freshness and staleness
-
-Not all data in Timberbot is fresh for the same reason.
+## Data freshness
 
 ### Fresh-on-request
 
-Examples:
+Projection snapshots and value stores. Request-triggered, waits for publish, best freshness guarantee.
 
-- buildings collection snapshots
-- value-store-backed singleton endpoints
+### Event-driven
 
-Properties:
-
-- request-triggered
-- waits for publish
-- best freshness guarantee
-
-### Registry support data
-
-Examples:
-
-- GUID-to-legacy-ID compatibility maps
-- webhook lifecycle hooks
-- tree-cutting and goods helper accessors
-
-Properties:
-
-- event-driven, not cadence-driven
-- used for entity lookup and compatibility only
-- no published read DTO buffers live in the registry anymore
-
-## Webhooks
-
-Webhooks remain event-driven and batched.
-
-Behavior:
-
-- events accumulate on the main thread
-- `FlushWebhooks()` sends batches on a configurable cadence
-- dispatch happens through background work items
-
-Settings:
-
-- `webhooksEnabled`
-- `webhookBatchMs`
-- `webhookCircuitBreaker`
+Registry data (GUID-to-ID maps, webhook lifecycle hooks). Updated on `EntityInitializedEvent`/`EntityDeletedEvent`. Used for entity lookup and compatibility only.
 
 ## Settings
 
@@ -399,57 +276,19 @@ Settings:
 
 ## Test posture
 
-The live harness is now [`test_v2.py`](../timberbot/script/test_v2.py), despite the old name.
+Primary harness: [`test_v2.py`](../timberbot/script/test_v2.py). Validates the `/api/*` surface against a running game.
 
-It now validates the current `/api/*` surface directly.
+Modes: `smoke`, `freshness`, `write_to_read`, `performance`, `concurrency`, `all`.
 
-Main modes:
+## Known debt
 
-- `smoke`
-- `freshness`
-- `write_to_read`
-- `performance`
-- `concurrency`
-- `all`
+- `/api/debug` and benchmark surfaces are evolving
+- capture budgeting is intentionally conservative and may need tuning per domain
+- `BuildAlertsFromBuildings` and `BuildPowerFromBuildings` still allocate `.ToArray()` per call (1 array each)
 
-Historical oracle data was preserved before legacy removal:
+## Related docs
 
-- final live `v1` parity run
-- full dumped legacy fixtures under `timberbot/test-results/v1-fixtures/`
-
-## Transitional debt still present
-
-The architecture is much cleaner than before, but it is not fully finished.
-
-Still transitional:
-
-- `/api/debug` and benchmark surfaces are still evolving around the new `ReadV2` vocabulary
-- some docs and historical notes still reference the removed cache architecture
-- fixture/history artifacts still describe the legacy migration path because they are preserved intentionally
-- capture budgeting is intentionally conservative and may still need tuning per domain
-
-The likely endstate from here is:
-
-- keep `TimberbotEntityRegistry` as a thin lookup/identity adapter
-- keep all published read data and debug snapshot access in `ReadV2`
-- continue hardening write-to-read freshness and concurrency validation
-
-## File map
-
-Core runtime files:
-
-- [`TimberbotService.cs`](../timberbot/src/TimberbotService.cs)
-- [`TimberbotReadV2.cs`](../timberbot/src/TimberbotReadV2.cs)
-- [`TimberbotEntityRegistry.cs`](../timberbot/src/TimberbotEntityRegistry.cs)
-- [`TimberbotWrite.cs`](../timberbot/src/TimberbotWrite.cs)
-- [`TimberbotPlacement.cs`](../timberbot/src/TimberbotPlacement.cs)
-- [`TimberbotHttpServer.cs`](../timberbot/src/TimberbotHttpServer.cs)
-- [`TimberbotWebhook.cs`](../timberbot/src/TimberbotWebhook.cs)
-- [`TimberbotDebug.cs`](../timberbot/src/TimberbotDebug.cs)
-- [`ITimberbotWriteJob.cs`](../timberbot/src/ITimberbotWriteJob.cs)
-
-Related docs:
-
-- [`fresh-on-request-snapshots.md`](fresh-on-request-snapshots.md)
-- [`thread-safe-surfaces.md`](thread-safe-surfaces.md)
-- [`developing.md`](developing.md)
+- [`fresh-on-request-snapshots.md`](fresh-on-request-snapshots.md) -- migration rationale and validation history
+- [`thread-safe-surfaces.md`](thread-safe-surfaces.md) -- Timberborn thread-safety guidance
+- [`developing.md`](developing.md) -- build, test, file structure
+- [`performance.md`](performance.md) -- allocation audit, benchmarks, open issues
