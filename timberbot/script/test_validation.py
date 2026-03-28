@@ -2435,9 +2435,12 @@ class TestRunner:
 
         # spin up a tiny HTTP server to receive webhook events
         import threading
-        from http.server import HTTPServer, BaseHTTPRequestHandler
+        from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 
         received_events = []
+        slow_state = {"active": 0, "max_active": 0, "requests": 0}
+        fail_state = {"requests": 0}
+        state_lock = threading.Lock()
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
@@ -2458,11 +2461,65 @@ class TestRunner:
             def log_message(self, *args):
                 pass  # silence logs
 
+        class SlowHandler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", 0))
+                if length:
+                    self.rfile.read(length)
+                with state_lock:
+                    slow_state["active"] += 1
+                    slow_state["requests"] += 1
+                    slow_state["max_active"] = max(slow_state["max_active"], slow_state["active"])
+                try:
+                    time.sleep(6)
+                    self.send_response(200)
+                    self.end_headers()
+                    try:
+                        self.wfile.write(b"slow")
+                    except Exception:
+                        pass
+                finally:
+                    with state_lock:
+                        slow_state["active"] -= 1
+            def log_message(self, *args):
+                pass
+
+        class FailHandler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", 0))
+                if length:
+                    self.rfile.read(length)
+                with state_lock:
+                    fail_state["requests"] += 1
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(b"fail")
+            def log_message(self, *args):
+                pass
+
+        def webhook_value(obj, key, default=None):
+            if not isinstance(obj, dict):
+                return default
+            for k, v in obj.items():
+                if str(k).lower() == key.lower():
+                    return v
+            return default
+
         server = HTTPServer(("127.0.0.1", 19876), Handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
+        slow_server = ThreadingHTTPServer(("127.0.0.1", 19877), SlowHandler)
+        slow_thread = threading.Thread(target=slow_server.serve_forever, daemon=True)
+        slow_thread.start()
+        fail_server = ThreadingHTTPServer(("127.0.0.1", 19878), FailHandler)
+        fail_thread = threading.Thread(target=fail_server.serve_forever, daemon=True)
+        fail_thread.start()
 
         try:
+            orig_speed_info = self.bot.speed()
+            orig_speed = orig_speed_info.get("speed", 1) if isinstance(orig_speed_info, dict) else 1
+            alt_speed = 2 if orig_speed != 2 else 1
+
             # register webhook for building events
             result = self.bot.register_webhook("http://127.0.0.1:19876/test", ["building.placed", "building.demolished"])
             self.check("register webhook", self.has(result, "id"),
@@ -2554,6 +2611,45 @@ class TestRunner:
             if self.has(bad, "id"):
                 self.bot.unregister_webhook(bad["id"])
 
+            # --- test: slow endpoint stays single-flight while timing out ---
+            slow = self.bot.register_webhook("http://127.0.0.1:19877/slow", ["speed.changed"])
+            self.check("register slow webhook", self.has(slow, "id"))
+            if self.has(slow, "id"):
+                for i in range(6):
+                    self.bot.set_speed(alt_speed if i % 2 == 0 else orig_speed)
+                    time.sleep(0.35)
+                time.sleep(6.5)
+                self.check("slow webhook received requests", slow_state["requests"] > 0,
+                           f"requests={slow_state['requests']}")
+                self.check("slow webhook max concurrency", slow_state["max_active"] == 1,
+                           f"max_active={slow_state['max_active']}, requests={slow_state['requests']}")
+                self.bot.unregister_webhook(slow["id"])
+                self.bot.set_speed(orig_speed)
+
+            # --- test: non-2xx responses count toward circuit breaker ---
+            failing = self.bot.register_webhook("http://127.0.0.1:19878/fail", ["speed.changed"])
+            self.check("register failing webhook", self.has(failing, "id"))
+            if self.has(failing, "id"):
+                for i in range(32):
+                    self.bot.set_speed(alt_speed if i % 2 == 0 else orig_speed)
+                    time.sleep(0.3)
+                time.sleep(1)
+                failing_list = self.bot.list_webhooks()
+                failing_entry = next((w for w in failing_list
+                                      if str(webhook_value(w, "id", "")) == failing["id"]), None) if isinstance(failing_list, list) else None
+                self.check("failing webhook listed", failing_entry is not None,
+                           json.dumps(failing_list)[:200] if not failing_entry else "")
+                self.check("failing webhook disabled after non-2xx",
+                           bool(webhook_value(failing_entry, "disabled", False)),
+                           json.dumps(failing_entry)[:200] if failing_entry else "missing")
+                self.check("failing webhook tracked failures",
+                           int(webhook_value(failing_entry, "failures", 0) or 0) >= 30,
+                           json.dumps(failing_entry)[:200] if failing_entry else "missing")
+                self.check("failing webhook received requests", fail_state["requests"] >= 30,
+                           f"requests={fail_state['requests']}")
+                self.bot.unregister_webhook(failing["id"])
+                self.bot.set_speed(orig_speed)
+
             # --- test: payload data accuracy ---
             received_events.clear()
             accurate = self.bot.register_webhook("http://127.0.0.1:19876/accurate", ["building.placed"])
@@ -2584,6 +2680,8 @@ class TestRunner:
 
         finally:
             server.shutdown()
+            slow_server.shutdown()
+            fail_server.shutdown()
 
     def test_building_detail(self):
         print("\n=== building detail ===\n")

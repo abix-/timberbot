@@ -35,25 +35,34 @@ namespace Timberbot
 
         private class WebhookRegistration
         {
+            public readonly object Sync = new object();
+            public readonly List<string> PendingPayloads = new List<string>();
             public string Id;
             public string Url;
             public HashSet<string> Events;
             public int ConsecutiveFailures;
             public bool Disabled;
+            public bool InFlight;
         }
+        private readonly object _webhooksLock = new object();
         private readonly List<WebhookRegistration> _webhooks = new List<WebhookRegistration>();
         private static readonly System.Net.Http.HttpClient _webhookClient = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(5) };
         private int _webhookIdCounter = 0;
 
-        // batching
-        private readonly List<(string name, string payload)> _pendingEvents = new List<(string, string)>();
         private readonly System.Text.StringBuilder _webhookSb = new System.Text.StringBuilder(1024);
         private readonly TimberbotJw _jw = new TimberbotJw(512);
         private float _lastWebhookFlush = 0f;
         private int _activeDeliveries = 0;
         private int _deliveryIdCounter = 0;
 
-        public int Count => _webhooks.Count;
+        public int Count
+        {
+            get
+            {
+                lock (_webhooksLock)
+                    return _webhooks.Count;
+            }
+        }
 
         public TimberbotWebhook(
             IDayNightCycle dayNightCycle,
@@ -77,23 +86,37 @@ namespace Timberbot
             if (!Enabled) return _jw.Error("disabled: webhooks disabled in settings.json");
             var id = $"wh_{System.Threading.Interlocked.Increment(ref _webhookIdCounter)}";
             var reg = new WebhookRegistration { Id = id, Url = url, Events = events != null && events.Count > 0 ? new HashSet<string>(events) : null };
-            _webhooks.Add(reg);
+            lock (_webhooksLock)
+                _webhooks.Add(reg);
             return _jw.BeginObj().Prop("id", id).Prop("url", url).Prop("events", reg.Events != null ? (object)events : "all").CloseObj().ToString();
         }
 
         public object UnregisterWebhook(string id)
         {
-            TimberbotLog.Info($"wh.unregister.start id={id} hooks={_webhooks.Count} pendingEvents={_pendingEvents.Count} activeDeliveries={_activeDeliveries} {ThreadPoolState()}");
-            int removed = _webhooks.RemoveAll(w => w.Id == id);
-            TimberbotLog.Info($"wh.unregister.done id={id} removed={removed} hooks={_webhooks.Count} pendingEvents={_pendingEvents.Count} activeDeliveries={_activeDeliveries} {ThreadPoolState()}");
+            TimberbotLog.Info($"wh.unregister.start id={id} hooks={Count} pendingEvents={PendingEventCount()} activeDeliveries={_activeDeliveries} {ThreadPoolState()}");
+            int removed;
+            lock (_webhooksLock)
+                removed = _webhooks.RemoveAll(w => w.Id == id);
+            TimberbotLog.Info($"wh.unregister.done id={id} removed={removed} hooks={Count} pendingEvents={PendingEventCount()} activeDeliveries={_activeDeliveries} {ThreadPoolState()}");
             return _jw.Result(("id", id), ("removed", (removed > 0)));
         }
 
         public object ListWebhooks()
         {
             var result = new List<object>();
-            foreach (var w in _webhooks)
-                result.Add(new { w.Id, w.Url, events = w.Events != null ? (object)new List<string>(w.Events) : "all", w.Disabled, failures = w.ConsecutiveFailures });
+            var webhooks = SnapshotWebhooks();
+            for (int i = 0; i < webhooks.Length; i++)
+            {
+                var w = webhooks[i];
+                bool disabled;
+                int failures;
+                lock (w.Sync)
+                {
+                    disabled = w.Disabled;
+                    failures = w.ConsecutiveFailures;
+                }
+                result.Add(new { w.Id, w.Url, events = w.Events != null ? (object)new List<string>(w.Events) : "all", disabled, failures });
+            }
             return result;
         }
 
@@ -101,27 +124,27 @@ namespace Timberbot
         // no data -- most events
         public void PushEvent(string eventName)
         {
-            if (_webhooks.Count == 0) return;
+            if (Count == 0) return;
             var payload = _jw.BeginObj()
                 .Prop("event", eventName)
                 .Prop("day", _dayNightCycle.DayNumber)
                 .Prop("timestamp", DateTimeOffset.UtcNow.ToUnixTimeSeconds())
                 .Key("data").Null()
                 .CloseObj().ToString();
-            _pendingEvents.Add((eventName, payload));
+            QueueEventForMatchingWebhooks(eventName, payload);
         }
 
         // with pre-built data JSON string
         public void PushEvent(string eventName, string dataJson)
         {
-            if (_webhooks.Count == 0) return;
+            if (Count == 0) return;
             var payload = _jw.BeginObj()
                 .Prop("event", eventName)
                 .Prop("day", _dayNightCycle.DayNumber)
                 .Prop("timestamp", DateTimeOffset.UtcNow.ToUnixTimeSeconds())
                 .RawProp("data", dataJson)
                 .CloseObj().ToString();
-            _pendingEvents.Add((eventName, payload));
+            QueueEventForMatchingWebhooks(eventName, payload);
         }
 
         // Flush all pending events to registered webhooks.
@@ -137,36 +160,39 @@ namespace Timberbot
         //    the game from accumulating thousands of failed HTTP requests
         public void FlushWebhooks(float now)
         {
-            if (_pendingEvents.Count == 0) return;
             if (BatchSeconds > 0 && now - _lastWebhookFlush < BatchSeconds) return;
+            var webhooks = SnapshotWebhooks();
+            if (webhooks.Length == 0) return;
+            int pendingEvents = PendingEventCount(webhooks);
+            if (pendingEvents == 0) return;
             _lastWebhookFlush = now;
-            TimberbotLog.Info($"wh.flush pendingEvents={_pendingEvents.Count} hooks={_webhooks.Count} activeDeliveries={_activeDeliveries} {ThreadPoolState()}");
+            TimberbotLog.Info($"wh.flush pendingEvents={pendingEvents} hooks={webhooks.Length} activeDeliveries={_activeDeliveries} {ThreadPoolState()}");
 
-            for (int i = 0; i < _webhooks.Count; i++)
+            for (int i = 0; i < webhooks.Length; i++)
             {
-                var wh = _webhooks[i];
-                if (wh.Disabled) continue; // circuit breaker tripped
-
-                // build batched JSON array: [event1, event2, ...]
-                // reuse _webhookSb to avoid allocation
-                _webhookSb.Clear();
-                var sb = _webhookSb;
-                sb.Append('[');
+                var wh = webhooks[i];
+                string batchPayload = null;
                 int count = 0;
-                for (int j = 0; j < _pendingEvents.Count; j++)
+                lock (wh.Sync)
                 {
-                    var ev = _pendingEvents[j];
-                    // filter: if webhook registered for specific events, skip non-matching
-                    if (wh.Events != null && !wh.Events.Contains(ev.name)) continue;
-                    if (count > 0) sb.Append(',');
-                    sb.Append(ev.payload);  // pre-serialized JSON from PushEvent()
-                    count++;
+                    if (wh.Disabled || wh.InFlight || wh.PendingPayloads.Count == 0) continue;
+                    _webhookSb.Clear();
+                    var sb = _webhookSb;
+                    sb.Append('[');
+                    count = wh.PendingPayloads.Count;
+                    for (int j = 0; j < count; j++)
+                    {
+                        if (j > 0) sb.Append(',');
+                        sb.Append(wh.PendingPayloads[j]);
+                    }
+                    sb.Append(']');
+                    batchPayload = sb.ToString();
+                    wh.PendingPayloads.Clear();
+                    wh.InFlight = true;
                 }
-                sb.Append(']');
-                if (count == 0) continue; // no matching events for this webhook
+                if (count == 0) continue;
 
                 // send on ThreadPool thread -- never block the game's main thread
-                var batchPayload = sb.ToString();
                 var url = wh.Url;
                 var whRef = wh;
                 var threshold = CircuitBreakerThreshold;
@@ -178,31 +204,95 @@ namespace Timberbot
                     try
                     {
                         TimberbotLog.Info($"wh.delivery.start delivery={deliveryId} webhook={whRef.Id} events={count} activeDeliveries={activeNow} {ThreadPoolState()}");
-                        _webhookClient.PostAsync(url, new System.Net.Http.StringContent(batchPayload, System.Text.Encoding.UTF8, "application/json")).Wait();
-                        whRef.ConsecutiveFailures = 0; // success resets the counter
-                        TimberbotLog.Info($"wh.delivery.done delivery={deliveryId} webhook={whRef.Id} activeDeliveries={activeNow} {ThreadPoolState()}");
+                        using var response = _webhookClient.PostAsync(url, new System.Net.Http.StringContent(batchPayload, System.Text.Encoding.UTF8, "application/json")).GetAwaiter().GetResult();
+                        if (response.IsSuccessStatusCode)
+                        {
+                            lock (whRef.Sync)
+                            {
+                                whRef.ConsecutiveFailures = 0;
+                                whRef.InFlight = false;
+                            }
+                            TimberbotLog.Info($"wh.delivery.done delivery={deliveryId} webhook={whRef.Id} status={(int)response.StatusCode} activeDeliveries={activeNow} {ThreadPoolState()}");
+                            return;
+                        }
+
+                        int failures;
+                        bool disabled;
+                        lock (whRef.Sync)
+                        {
+                            whRef.ConsecutiveFailures++;
+                            whRef.InFlight = false;
+                            whRef.Disabled = whRef.ConsecutiveFailures >= threshold;
+                            failures = whRef.ConsecutiveFailures;
+                            disabled = whRef.Disabled;
+                        }
+                        TimberbotLog.Info($"wh.delivery.fail delivery={deliveryId} webhook={whRef.Id} failures={failures} activeDeliveries={activeNow} status={(int)response.StatusCode} reason={response.ReasonPhrase} {ThreadPoolState()}");
+                        if (disabled)
+                            TimberbotLog.Info($"webhook {whRef.Id} disabled after {threshold} failures: {url} status={(int)response.StatusCode}");
+                        else
+                            TimberbotLog.Info($"webhook.post status={(int)response.StatusCode} webhook={whRef.Id} url={url}");
                     }
                     catch (Exception _ex)
                     {
-                        whRef.ConsecutiveFailures++;
-                        TimberbotLog.Info($"wh.delivery.fail delivery={deliveryId} webhook={whRef.Id} failures={whRef.ConsecutiveFailures} activeDeliveries={activeNow} ex={_ex.GetType().Name}:{_ex.Message} {ThreadPoolState()}");
-                        if (whRef.ConsecutiveFailures >= threshold)
+                        int failures;
+                        bool disabled;
+                        lock (whRef.Sync)
                         {
-                            // circuit breaker: disable this webhook permanently (until re-registered)
-                            whRef.Disabled = true;
-                            TimberbotLog.Error($"webhook {whRef.Id} disabled after {threshold} failures: {url}", _ex);
+                            whRef.ConsecutiveFailures++;
+                            whRef.InFlight = false;
+                            whRef.Disabled = whRef.ConsecutiveFailures >= threshold;
+                            failures = whRef.ConsecutiveFailures;
+                            disabled = whRef.Disabled;
                         }
+                        TimberbotLog.Info($"wh.delivery.fail delivery={deliveryId} webhook={whRef.Id} failures={failures} activeDeliveries={activeNow} ex={_ex.GetType().Name}:{_ex.Message} {ThreadPoolState()}");
+                        if (disabled)
+                            TimberbotLog.Error($"webhook {whRef.Id} disabled after {threshold} failures: {url}", _ex);
                         else
                             TimberbotLog.Error("webhook.post", _ex);
                     }
                     finally
                     {
+                        lock (whRef.Sync)
+                            whRef.InFlight = false;
                         int activeAfter = System.Threading.Interlocked.Decrement(ref _activeDeliveries);
                         TimberbotLog.Info($"wh.delivery.end delivery={deliveryId} webhook={whRef.Id} activeDeliveries={activeAfter} {ThreadPoolState()}");
                     }
                 });
             }
-            _pendingEvents.Clear();
+        }
+
+        private WebhookRegistration[] SnapshotWebhooks()
+        {
+            lock (_webhooksLock)
+                return _webhooks.ToArray();
+        }
+
+        private void QueueEventForMatchingWebhooks(string eventName, string payload)
+        {
+            var webhooks = SnapshotWebhooks();
+            for (int i = 0; i < webhooks.Length; i++)
+            {
+                var wh = webhooks[i];
+                lock (wh.Sync)
+                {
+                    if (wh.Disabled) continue;
+                    if (wh.Events != null && !wh.Events.Contains(eventName)) continue;
+                    wh.PendingPayloads.Add(payload);
+                }
+            }
+        }
+
+        private int PendingEventCount() => PendingEventCount(SnapshotWebhooks());
+
+        private static int PendingEventCount(WebhookRegistration[] webhooks)
+        {
+            int pending = 0;
+            for (int i = 0; i < webhooks.Length; i++)
+            {
+                lock (webhooks[i].Sync)
+                    pending += webhooks[i].PendingPayloads.Count;
+            }
+            return pending;
         }
 
         private static string ThreadPoolState()

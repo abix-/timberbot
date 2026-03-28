@@ -205,6 +205,7 @@ namespace Timberbot
                 HttpListenerContext ctx;
                 try
                 {
+                    if (_debugEnabled) TimberbotLog.Info($"listen.waiting {ThreadPoolState()}");
                     ctx = _listener.GetContext();
                 }
                 catch
@@ -215,6 +216,7 @@ namespace Timberbot
 
                 var path = ctx.Request.Url.AbsolutePath.TrimEnd('/').ToLowerInvariant();
                 var method = ctx.Request.HttpMethod.ToUpperInvariant();
+                if (_debugEnabled) TimberbotLog.Info($"listen.accepted path={path} method={method} {ThreadPoolState()}");
 
                 if (path == "/api/ping")
                 {
@@ -274,11 +276,13 @@ namespace Timberbot
                 {
                     try
                     {
+                        if (_debugEnabled) TimberbotLog.Info($"listen.body.read path={path}");
                         using (var reader = new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding))
                         {
                             var raw = reader.ReadToEnd();
                             body = JObject.Parse(raw);
                         }
+                        if (_debugEnabled) TimberbotLog.Info($"listen.body.done path={path}");
                     }
                     catch
                     {
@@ -291,13 +295,13 @@ namespace Timberbot
                 // (body takes priority over query string)
                 format = body?.Value<string>("format") ?? format;
                 detail = body?.Value<string>("detail") ?? detail;
-                if (body?["id"] != null) id = body.Value<int>("id");
-                if (body?["limit"] != null) limit = body.Value<int>("limit");
-                if (body?["offset"] != null) offset = body.Value<int>("offset");
+                if (TryReadBodyInt(body, "id", out int bodyId)) id = bodyId;
+                if (TryReadBodyInt(body, "limit", out int bodyLimit)) limit = bodyLimit;
+                if (TryReadBodyInt(body, "offset", out int bodyOffset)) offset = bodyOffset;
                 if (body?["name"] != null) filterName = body.Value<string>("name");
-                if (body?["x"] != null) filterX = body.Value<int>("x");
-                if (body?["y"] != null) filterY = body.Value<int>("y");
-                if (body?["radius"] != null) filterRadius = body.Value<int>("radius");
+                if (TryReadBodyInt(body, "x", out int bodyX)) filterX = bodyX;
+                if (TryReadBodyInt(body, "y", out int bodyY)) filterY = bodyY;
+                if (TryReadBodyInt(body, "radius", out int bodyRadius)) filterRadius = bodyRadius;
 
                 var req = new PendingRequest
                 {
@@ -518,6 +522,21 @@ namespace Timberbot
                 ? (System.Diagnostics.Stopwatch.GetTimestamp() - req.QueuedAtTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency
                 : 0;
             TimberbotLog.Info($"{phase} id={req.RequestId} route={req.Route} frame={UnityEngine.Time.frameCount} ageMs={ageMs:F1} {ThreadPoolState()}" + (string.IsNullOrEmpty(extra) ? "" : $" {extra}"));
+        }
+
+        private static bool TryReadBodyInt(JObject body, string key, out int value)
+        {
+            value = 0;
+            var token = body?[key];
+            if (token == null) return false;
+            if (token.Type == JTokenType.Integer)
+            {
+                value = token.Value<int>();
+                return true;
+            }
+            if (token.Type == JTokenType.String)
+                return int.TryParse(token.Value<string>(), out value);
+            return false;
         }
     }
 }
