@@ -26,7 +26,7 @@ def run(cmd, **kwargs):
     print(f"  > {cmd}")
     subprocess.check_call(cmd, shell=True, **kwargs)
 
-PRESERVE_MOD_FILES = {"settings.json", "workshop_data.json"}
+PRESERVE_MOD_FILES = {"settings.json", "workshop_data.json", "memory", "autoload.json"}
 
 
 def clean_mod_dir():
