@@ -168,12 +168,11 @@ python timberbot/script/test_validation.py --benchmark -n 10000
 
 ### In-game benchmark
 
-`/api/benchmark` (POST, requires `debugEndpointEnabled: true` in settings.json) runs micro-benchmarks with GC0 tracking:
+`/api/benchmark` (POST, requires `debugEndpointEnabled: true` in settings.json) runs micro-benchmarks with GC0 tracking. It is queued and stepped under the main-thread write budget, so the request may take multiple frames to complete.
 
 - Collection iteration patterns (foreach vs for-loop, enumerator boxing)
 - Game API alloc checks (GetNeeds, Inventories, BreedingPod.Nutrients)
-- String interpolation and concat patterns
-- All endpoint profiling (CollectSummary, CollectBuildings, etc. in both json and toon formats)
+- Lightweight internal helpers like prefab collection
 
 Results include per-test GC0 count, ms/call, and pass/fail. See [performance.md](performance.md#benchmarks) for recorded results.
 

@@ -4,7 +4,7 @@
 // ---------------
 // Some write operations (like placing a long A* path) can take many milliseconds.
 // Running them all in one frame stalls the game. Write jobs spread the work across
-// multiple frames with a configurable per-frame budget (default 2ms).
+// multiple frames with a configurable per-frame budget (default 1ms).
 //
 // HOW IT WORKS
 // ------------

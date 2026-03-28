@@ -3619,8 +3619,9 @@ def main():
         # call the in-game benchmark endpoint directly
         import requests
         print(f"Running in-game benchmark ({args.iterations} iterations)...\n")
+        benchmark_timeout = 300
         r = requests.post("http://localhost:8085/api/benchmark",
-                          json={"iterations": args.iterations}, timeout=60)
+                          json={"iterations": args.iterations}, timeout=benchmark_timeout)
         data = r.json()
         benchmarks = data.get("benchmarks", [])
         print(f"  {'test':<35} {'ms/call':>8} {'total ms':>10} {'gc0':>5} {'items':>6} {'pass':>5}")

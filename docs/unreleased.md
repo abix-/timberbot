@@ -8,13 +8,13 @@
 - [feature] auto-load: timberbot.py launch settlement:<name> via autoload.json + steam:// protocol
 - [feature] debug endpoint: generic reflection inspector (get, fields, call with $ chaining, validate, validate_all)
 - [feature] debug endpoint: assertion targets (eq, ne, null, contains, gt, gte, lt, lte, assert, compare, describe, roots)
-- [feature] benchmark endpoint: /api/benchmark with GC0 tracking, micro-benchmarks, endpoint profiling, toon variants
+- [feature] benchmark endpoint: /api/benchmark with GC0 tracking and internal micro-benchmarks, now stepped incrementally across frames
 - [feature] summary: added speed field
 - [feature] science/distribution endpoints pre-built on main thread via RefreshMainThreadData
 - [feature] ReadV2: staged capture with per-frame budget, background finalize/publish, concurrent reader coalescing
 - [feature] off-thread finalize: expensive snapshot publish work runs on ReadV2's internal background worker
 - [feature] write job system: ITimberbotWriteJob + ProcessWriteJobs for budgeted main-thread write execution
-- [feature] writeBudgetMs setting (default 2ms) for per-frame write budget
+- [feature] writeBudgetMs setting (default 1ms) for per-frame write budget
 - [feature] place_path timings param: detailed timing breakdown (snapshot, graph, astar, placement)
 - [feature] blocker tracking: ruins, MapEditorObjects, MapEditorWater, Wood now visible in /api/tiles and block pathing/placement
 - [feature] blocker name resolution: placement errors name the blocking entity instead of "unknown"

@@ -137,7 +137,7 @@ namespace Timberbot
         }
 
         // Called every frame. Steps the active write job forward until it completes
-        // or the per-frame budget (default 2ms) runs out. When the job completes,
+        // or the per-frame budget (default 1ms) runs out. When the job completes,
         // sends the HTTP response back to the waiting client.
         public void ProcessWriteJobs(float now, double budgetMs)
         {
@@ -421,11 +421,11 @@ namespace Timberbot
                             debugArgs[prop.Name] = prop.Value?.ToString() ?? "";
                     return _service.DebugTool.DebugInspect(req.Body?.Value<string>("target") ?? "help", debugArgs);
                 }, 0)),
-                Queued("/api/benchmark", req => new LambdaWriteJob(req.Route, () =>
+                Queued("/api/benchmark", req =>
                 {
-                    if (!_debugEnabled) return _jw.Error("disabled: benchmark endpoint");
-                    return _service.DebugTool.RunBenchmark(req.Body?.Value<int>("iterations") ?? 100);
-                }, 0)),
+                    if (!_debugEnabled) return new LambdaWriteJob(req.Route, () => _jw.Error("disabled: benchmark endpoint"), 0);
+                    return _service.DebugTool.CreateBenchmarkJob(req.Body?.Value<int>("iterations") ?? 100);
+                }),
                 Queued("/api/path/place", req => _service.Placement.CreateRoutePathJob(req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<string>("style") ?? "direct", req.Body?.Value<int>("sections") ?? 0, req.Body?.Value<bool?>("timings") ?? false, req.QueuedAtTicks, req.QueuedAtFrame)),
                 Queued("/api/placement/find", req => _service.Placement.CreateFindPlacementJob(req.Body?.Value<string>("prefab") ?? "", req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0)),
                 Queued("/api/building/place", req => new LambdaWriteJob(req.Route, () => _service.Placement.PlaceBuilding(req.Body?.Value<string>("prefab") ?? "", req.Body?.Value<int>("x") ?? 0, req.Body?.Value<int>("y") ?? 0, req.Body?.Value<int>("z") ?? 0, req.Body?.Value<string>("orientation") ?? "south").ToJson(_service.Placement.Jw))),

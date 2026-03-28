@@ -48,7 +48,7 @@ UpdateSingleton() [every frame]             ListenLoop() [blocking accept]
 | GET endpoints | background | no |
 | POST endpoints | main thread via `DrainRequests()` | yes, for duration |
 | `ReadV2.ProcessPendingRefresh()` | main thread | yes, bounded by capture budget |
-| `ProcessWriteJobs()` | main thread | yes, bounded by `writeBudgetMs` (default 2ms) |
+| `ProcessWriteJobs()` | main thread | yes, bounded by `writeBudgetMs` (default 1ms) |
 | Webhook flush scheduling | main thread | negligible |
 
 ## TimberbotService
@@ -270,7 +270,7 @@ Registry data (GUID-to-ID maps, webhook lifecycle hooks). Updated on `EntityInit
   "webhooksEnabled": true,
   "webhookBatchMs": 200,
   "webhookCircuitBreaker": 30,
-  "writeBudgetMs": 2.0
+  "writeBudgetMs": 1.0
 }
 ```
 

@@ -85,7 +85,7 @@ Edit settings.json in your mod folder (Documents/Timberborn/Mods/Timberbot/):
   "webhookBatchMs": 200,
   "webhookCircuitBreaker": 30,
   "httpPort": 8085,
-  "writeBudgetMs": 2.0
+  "writeBudgetMs": 1.0
 }
 [/code]
 
@@ -96,5 +96,4 @@ Edit settings.json in your mod folder (Documents/Timberborn/Mods/Timberbot/):
 [url=https://abix-.github.io/TimberbornMods/features/]Features[/url] Full compatibility matrix (40 game systems)
 [url=https://abix-.github.io/TimberbornMods/webhooks/]Webhooks[/url] 68 push notification events for game automation
 [url=https://github.com/abix-/TimberbornMods]Source Code[/url]
-
 

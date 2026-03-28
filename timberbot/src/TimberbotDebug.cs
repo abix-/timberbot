@@ -22,14 +22,14 @@
 //
 // BENCHMARK (/api/benchmark)
 // --------------------------
-// Profiles every API endpoint and micro-benchmarks hot-path operations:
+// Profiles internal server hot paths and micro-benchmarks gameplay access patterns:
 //   - Measures GC0 collections to detect hidden allocations
-//   - Profiles per-call latency for all Collect* methods
 //   - Tests game API patterns (GetNeeds, Inventories, BreedingPod.Nutrients)
+//   - Benchmarks selected internal operations that do not depend on RequestFresh waits
 //   - Runs warmup iterations to stabilize JIT, then measures
 //
 // This is how we confirmed zero-alloc on the hot path (0 GC0 across 760K calls)
-// and identified which endpoints are slowest.
+// and identified which internal loops are slowest.
 
 using System;
 using System.Collections;
@@ -52,145 +52,397 @@ namespace Timberbot
 
         public TimberbotDebug(PreviewFactory previewFactory) { _previewFactory = previewFactory; }
 
+        internal ITimberbotWriteJob CreateBenchmarkJob(int iterations)
+            => new BenchmarkJob(this, iterations);
+
         public object RunBenchmark(int iterations)
         {
-            float now = Time.realtimeSinceStartup;
+            var job = new BenchmarkJob(this, iterations);
+            while (!job.IsCompleted)
+                job.Step(Time.realtimeSinceStartup, double.MaxValue);
+            return job.Result;
+        }
+
+        private sealed class BenchmarkContext
+        {
+            public int BuildingCount;
+            public int BeaverCount;
+            public int NaturalCount;
+            public IReadOnlyList<TimberbotReadV2.TrackedBuildingRef> TrackedBuildings;
+            public IReadOnlyList<TimberbotReadV2.TrackedBeaverRef> TrackedBeavers;
+            public int Iterations;
+        }
+
+        private interface IBenchmarkCase
+        {
+            bool IsCompleted { get; }
+            void Step(float now, double budgetMs);
+            void Cancel(string error);
+        }
+
+        private sealed class BenchmarkJob : ITimberbotWriteJob
+        {
+            private readonly TimberbotDebug _owner;
+            private readonly int _iterations;
+            private readonly List<object> _results = new List<object>();
+            private List<IBenchmarkCase> _cases;
+            private bool _setupDone;
+            private bool _completed;
+            private int _statusCode = 200;
+            private int _caseIndex;
+            private object _result;
+
+            public BenchmarkJob(TimberbotDebug owner, int iterations)
+            {
+                _owner = owner;
+                _iterations = Math.Max(iterations, 1);
+            }
+
+            public string Name => "/api/benchmark";
+            public bool IsCompleted => _completed;
+            public int StatusCode => _statusCode;
+            public object Result => _result;
+
+            public void Step(float now, double budgetMs)
+            {
+                if (_completed) return;
+
+                var budgetWatch = System.Diagnostics.Stopwatch.StartNew();
+                if (!_setupDone)
+                {
+                    var ctx = _owner.CaptureBenchmarkContext(_iterations, now);
+                    _results.Add(new { test = "_meta", buildings = ctx.BuildingCount, beavers = ctx.BeaverCount, trees = ctx.NaturalCount });
+                    _cases = _owner.BuildBenchmarkCases(ctx, _results);
+                    _setupDone = true;
+                    if (_cases.Count == 0)
+                    {
+                        _result = new { benchmarks = _results };
+                        _completed = true;
+                        return;
+                    }
+                }
+
+                while (_caseIndex < _cases.Count)
+                {
+                    double remainingMs = budgetMs - budgetWatch.Elapsed.TotalMilliseconds;
+                    if (remainingMs <= 0) break;
+
+                    var current = _cases[_caseIndex];
+                    current.Step(now, remainingMs);
+                    if (!current.IsCompleted) break;
+                    _caseIndex++;
+                }
+
+                if (_caseIndex >= _cases.Count)
+                {
+                    _result = new { benchmarks = _results };
+                    _completed = true;
+                }
+            }
+
+            public void Cancel(string error)
+            {
+                if (_completed) return;
+                if (_cases != null && _caseIndex < _cases.Count)
+                    _cases[_caseIndex].Cancel(error);
+                _statusCode = 500;
+                _result = new { error };
+                _completed = true;
+            }
+        }
+
+        private sealed class TimedBenchmarkCase : IBenchmarkCase
+        {
+            private readonly List<object> _results;
+            private readonly int _iterations;
+            private readonly int _warmups;
+            private readonly Func<float, object> _execute;
+            private readonly Func<TimedBenchmarkCase, object> _buildResult;
+            private int _warmupsDone;
+            private int _iterationsDone;
+            private bool _measuring;
+            private long _gcBefore;
+            private long _elapsedTicks;
+
+            public TimedBenchmarkCase(List<object> results, int iterations, int warmups, Func<float, object> execute, Func<TimedBenchmarkCase, object> buildResult)
+            {
+                _results = results;
+                _iterations = Math.Max(iterations, 1);
+                _warmups = Math.Max(warmups, 0);
+                _execute = execute;
+                _buildResult = buildResult;
+            }
+
+            public bool IsCompleted { get; private set; }
+            public object LastResult { get; private set; }
+            public int Iterations => _iterations;
+            public int CompletedIterations => _iterationsDone;
+            public long Gc0 => _measuring ? GC.CollectionCount(0) - _gcBefore : 0;
+            public double TotalMs => _elapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+
+            public void Step(float now, double budgetMs)
+            {
+                if (IsCompleted) return;
+
+                var budgetWatch = System.Diagnostics.Stopwatch.StartNew();
+                while (!IsCompleted && budgetWatch.Elapsed.TotalMilliseconds < budgetMs)
+                {
+                    if (_warmupsDone < _warmups)
+                    {
+                        _execute(now);
+                        _warmupsDone++;
+                        continue;
+                    }
+
+                    if (!_measuring)
+                    {
+                        _gcBefore = GC.CollectionCount(0);
+                        _measuring = true;
+                    }
+
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    LastResult = _execute(now);
+                    sw.Stop();
+                    _elapsedTicks += sw.ElapsedTicks;
+                    _iterationsDone++;
+
+                    if (_iterationsDone >= _iterations)
+                    {
+                        _results.Add(_buildResult(this));
+                        IsCompleted = true;
+                    }
+                }
+            }
+
+            public void Cancel(string error)
+            {
+                if (IsCompleted) return;
+                _results.Add(new { test = "cancelled", error });
+                IsCompleted = true;
+            }
+        }
+
+        private sealed class QueuedJobBenchmarkCase : IBenchmarkCase
+        {
+            private readonly List<object> _results;
+            private readonly int _iterations;
+            private readonly int _warmups;
+            private readonly Func<ITimberbotWriteJob> _createJob;
+            private readonly Func<object, object> _buildResult;
+            private int _warmupsDone;
+            private int _iterationsDone;
+            private bool _measuring;
+            private long _gcBefore;
+            private long _elapsedTicks;
+            private ITimberbotWriteJob _job;
+            private object _lastResult;
+
+            public QueuedJobBenchmarkCase(List<object> results, int iterations, int warmups, Func<ITimberbotWriteJob> createJob, Func<object, object> buildResult)
+            {
+                _results = results;
+                _iterations = Math.Max(iterations, 1);
+                _warmups = Math.Max(warmups, 0);
+                _createJob = createJob;
+                _buildResult = buildResult;
+            }
+
+            public bool IsCompleted { get; private set; }
+
+            public void Step(float now, double budgetMs)
+            {
+                if (IsCompleted) return;
+
+                var budgetWatch = System.Diagnostics.Stopwatch.StartNew();
+                while (!IsCompleted && budgetWatch.Elapsed.TotalMilliseconds < budgetMs)
+                {
+                    if (_job == null)
+                    {
+                        if (!_measuring && _warmupsDone >= _warmups)
+                        {
+                            _gcBefore = GC.CollectionCount(0);
+                            _measuring = true;
+                        }
+                        _job = _createJob();
+                    }
+
+                    double remainingMs = budgetMs - budgetWatch.Elapsed.TotalMilliseconds;
+                    if (remainingMs <= 0) break;
+
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    _job.Step(now, remainingMs);
+                    sw.Stop();
+                    if (_measuring)
+                        _elapsedTicks += sw.ElapsedTicks;
+
+                    if (!_job.IsCompleted) break;
+
+                    _lastResult = _job.Result;
+                    _job = null;
+
+                    if (_warmupsDone < _warmups)
+                    {
+                        _warmupsDone++;
+                        continue;
+                    }
+
+                    _iterationsDone++;
+                    if (_iterationsDone >= _iterations)
+                    {
+                        _results.Add(_buildResult(new
+                        {
+                            iterations = _iterations,
+                            totalMs = _elapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency,
+                            perCallMs = (_elapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency) / _iterations,
+                            gc0 = GC.CollectionCount(0) - _gcBefore,
+                            result = _lastResult
+                        }));
+                        IsCompleted = true;
+                    }
+                }
+            }
+
+            public void Cancel(string error)
+            {
+                if (_job != null) _job.Cancel(error);
+                if (IsCompleted) return;
+                _results.Add(new { test = "cancelled", error });
+                IsCompleted = true;
+            }
+        }
+
+        private BenchmarkContext CaptureBenchmarkContext(int iterations, float now)
+        {
             var buildingSnapshot = Service.ReadV2.EnsureBuildingsFreshNow(now, true);
             var beaverSnapshot = Service.ReadV2.EnsureBeaversFreshNow(now, true);
             var naturalSnapshot = Service.ReadV2.EnsureNaturalResourcesFreshNow(now);
             Service.ReadV2.EnsureDistrictsFreshNow(now);
 
-            var trackedBuildings = Service.ReadV2.TrackedBuildings;
-            var trackedBeavers = Service.ReadV2.TrackedBeavers;
-            var results = new List<object>();
+            return new BenchmarkContext
+            {
+                BuildingCount = buildingSnapshot.Count,
+                BeaverCount = beaverSnapshot.Count,
+                NaturalCount = naturalSnapshot.Count,
+                TrackedBuildings = Service.ReadV2.TrackedBuildings,
+                TrackedBeavers = Service.ReadV2.TrackedBeavers,
+                Iterations = Math.Max(iterations, 1)
+            };
+        }
 
-            var breedingPods = trackedBuildings.Where(t => t.BreedingPod != null).ToList();
+        private List<IBenchmarkCase> BuildBenchmarkCases(BenchmarkContext ctx, List<object> results)
+        {
+            var cases = new List<IBenchmarkCase>();
+            double inventoriesForeachMs = 0;
+
+            var breedingPods = ctx.TrackedBuildings.Where(t => t.BreedingPod != null).ToList();
             if (breedingPods.Count > 0)
             {
-                for (int w = 0; w < 10; w++)
-                    for (int i = 0; i < breedingPods.Count; i++)
-                        foreach (var ga in breedingPods[i].BreedingPod.Nutrients) { var _ = ga.Amount; }
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                long gcBefore = GC.CollectionCount(0);
-                for (int iter = 0; iter < iterations; iter++)
-                    for (int i = 0; i < breedingPods.Count; i++)
-                        foreach (var ga in breedingPods[i].BreedingPod.Nutrients) { var _ = ga.Amount; }
-                sw.Stop();
-                results.Add(new { test = "BreedingPod.Nutrients", count = breedingPods.Count, iterations, totalMs = ToMs(sw), perCallMs = ToMs(sw) / iterations, gc0 = GC.CollectionCount(0) - gcBefore });
+                cases.Add(new TimedBenchmarkCase(
+                    results,
+                    ctx.Iterations,
+                    3,
+                    _ =>
+                    {
+                        for (int i = 0; i < breedingPods.Count; i++)
+                            foreach (var ga in breedingPods[i].BreedingPod.Nutrients) { var _unused = ga.Amount; }
+                        return null;
+                    },
+                    c => new { test = "BreedingPod.Nutrients", count = breedingPods.Count, iterations = c.Iterations, totalMs = c.TotalMs, perCallMs = c.TotalMs / c.Iterations, gc0 = c.Gc0 }));
             }
 
-            var withInventories = trackedBuildings.Where(t => t.Inventories != null).ToList();
+            var withInventories = ctx.TrackedBuildings.Where(t => t.Inventories != null).ToList();
             if (withInventories.Count > 0)
             {
-                for (int w = 0; w < 10; w++)
-                    for (int bi = 0; bi < withInventories.Count; bi++)
-                        foreach (var inv in withInventories[bi].Inventories.AllInventories)
-                            foreach (var ga in inv.Stock) { var _ = ga.Amount; }
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                long gcBefore = GC.CollectionCount(0);
-                for (int iter = 0; iter < iterations; iter++)
-                    for (int bi = 0; bi < withInventories.Count; bi++)
-                        foreach (var inv in withInventories[bi].Inventories.AllInventories)
-                            foreach (var ga in inv.Stock) { var _ = ga.Amount; }
-                sw.Stop();
-                double foreachMs = ToMs(sw);
-                long gcForeach = GC.CollectionCount(0) - gcBefore;
-
-                sw.Restart();
-                gcBefore = GC.CollectionCount(0);
-                for (int iter = 0; iter < iterations; iter++)
-                    for (int bi = 0; bi < withInventories.Count; bi++)
+                cases.Add(new TimedBenchmarkCase(
+                    results,
+                    ctx.Iterations,
+                    3,
+                    _ =>
                     {
-                        var allInv = withInventories[bi].Inventories.AllInventories;
-                        for (int ii = 0; ii < allInv.Count; ii++)
-                        {
-                            var stock = allInv[ii].Stock;
-                            for (int si = 0; si < stock.Count; si++) { var _ = stock[si].Amount; }
-                        }
-                    }
-                sw.Stop();
-                double forMs = ToMs(sw);
-                long gcFor = GC.CollectionCount(0) - gcBefore;
+                        for (int bi = 0; bi < withInventories.Count; bi++)
+                            foreach (var inv in withInventories[bi].Inventories.AllInventories)
+                                foreach (var ga in inv.Stock) { var _unused = ga.Amount; }
+                        return null;
+                    },
+                    c =>
+                    {
+                        inventoriesForeachMs = c.TotalMs;
+                        return new { test = "Inventories.foreach", count = withInventories.Count, iterations = c.Iterations, totalMs = c.TotalMs, perCallMs = c.TotalMs / c.Iterations, gc0 = c.Gc0 };
+                    }));
 
-                results.Add(new { test = "Inventories.foreach", count = withInventories.Count, iterations, totalMs = foreachMs, perCallMs = foreachMs / iterations, gc0 = gcForeach });
-                results.Add(new { test = "Inventories.forLoop", count = withInventories.Count, iterations, totalMs = forMs, perCallMs = forMs / iterations, gc0 = gcFor, speedup = forMs > 0 ? foreachMs / forMs : 0 });
+                cases.Add(new TimedBenchmarkCase(
+                    results,
+                    ctx.Iterations,
+                    3,
+                    _ =>
+                    {
+                        for (int bi = 0; bi < withInventories.Count; bi++)
+                        {
+                            var allInv = withInventories[bi].Inventories.AllInventories;
+                            for (int ii = 0; ii < allInv.Count; ii++)
+                            {
+                                var stock = allInv[ii].Stock;
+                                for (int si = 0; si < stock.Count; si++) { var _unused = stock[si].Amount; }
+                            }
+                        }
+                        return null;
+                    },
+                    c => new { test = "Inventories.forLoop", count = withInventories.Count, iterations = c.Iterations, totalMs = c.TotalMs, perCallMs = c.TotalMs / c.Iterations, gc0 = c.Gc0, speedup = c.TotalMs > 0 ? inventoriesForeachMs / c.TotalMs : 0 }));
             }
 
-            var beaversWithNeeds = trackedBeavers.Where(t => t.NeedMgr != null).ToList();
-            int n = Math.Max(iterations, 10);
+            var beaversWithNeeds = ctx.TrackedBeavers.Where(t => t.NeedMgr != null).ToList();
             if (beaversWithNeeds.Count > 0)
             {
-                for (int w = 0; w < 3; w++)
-                    for (int bi = 0; bi < beaversWithNeeds.Count; bi++)
-                        foreach (var ns in beaversWithNeeds[bi].NeedMgr.GetNeeds()) { var _ = ns.Id; }
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                long gcBefore = GC.CollectionCount(0);
-                for (int iter = 0; iter < n; iter++)
-                    for (int bi = 0; bi < beaversWithNeeds.Count; bi++)
-                        foreach (var ns in beaversWithNeeds[bi].NeedMgr.GetNeeds()) { var _ = ns.Id; }
-                sw.Stop();
-                double needsMs = ToMs(sw);
-                long needsGc = GC.CollectionCount(0) - gcBefore;
-
-                sw.Restart();
-                gcBefore = GC.CollectionCount(0);
-                for (int iter = 0; iter < n; iter++)
-                    for (int bi = 0; bi < beaversWithNeeds.Count; bi++)
+                cases.Add(new TimedBenchmarkCase(
+                    results,
+                    ctx.Iterations,
+                    3,
+                    _ =>
                     {
-                        var mgr = beaversWithNeeds[bi].NeedMgr;
-                        foreach (var ns in mgr.GetNeeds())
+                        for (int bi = 0; bi < beaversWithNeeds.Count; bi++)
+                            foreach (var ns in beaversWithNeeds[bi].NeedMgr.GetNeeds()) { var _unused = ns.Id; }
+                        return null;
+                    },
+                    c => new { test = "NeedMgr.GetNeeds.foreach", count = beaversWithNeeds.Count, iterations = c.Iterations, totalMs = c.TotalMs, perCallMs = c.TotalMs / c.Iterations, gc0 = c.Gc0 }));
+
+                cases.Add(new TimedBenchmarkCase(
+                    results,
+                    ctx.Iterations,
+                    0,
+                    _ =>
+                    {
+                        for (int bi = 0; bi < beaversWithNeeds.Count; bi++)
                         {
-                            var need = mgr.GetNeed(ns.Id);
-                            var wb = mgr.GetNeedWellbeing(ns.Id);
-                            var _ = need.Points + wb;
+                            var mgr = beaversWithNeeds[bi].NeedMgr;
+                            foreach (var ns in mgr.GetNeeds())
+                            {
+                                var need = mgr.GetNeed(ns.Id);
+                                var wb = mgr.GetNeedWellbeing(ns.Id);
+                                var _unused = need.Points + wb;
+                            }
                         }
-                    }
-                sw.Stop();
-                results.Add(new { test = "NeedMgr.GetNeeds.foreach", count = beaversWithNeeds.Count, iterations = n, totalMs = needsMs, perCallMs = needsMs / n, gc0 = needsGc });
-                results.Add(new { test = "NeedMgr.FullNeedLoop", count = beaversWithNeeds.Count, iterations = n, totalMs = ToMs(sw), perCallMs = ToMs(sw) / n, gc0 = GC.CollectionCount(0) - gcBefore });
+                        return null;
+                    },
+                    c => new { test = "NeedMgr.FullNeedLoop", count = beaversWithNeeds.Count, iterations = c.Iterations, totalMs = c.TotalMs, perCallMs = c.TotalMs / c.Iterations, gc0 = c.Gc0 }));
             }
 
-            object BenchCall(string name, int iters, Func<object> fn, int knownItems = -1)
-            {
-                object result = null;
-                for (int w = 0; w < 3; w++) result = fn();
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                long gcBefore = GC.CollectionCount(0);
-                for (int i = 0; i < iters; i++) result = fn();
-                sw.Stop();
-                int items = knownItems >= 0 ? knownItems : result is IList list ? list.Count : result != null ? 1 : 0;
-                bool pass = !(result is Dictionary<string, object> dict && dict.ContainsKey("error"));
-                return new { test = name, iterations = iters, totalMs = ToMs(sw), perCallMs = ToMs(sw) / iters, gc0 = GC.CollectionCount(0) - gcBefore, items, pass };
-            }
+            cases.Add(MakeEndpointCase(results, "CollectPrefabs", ctx.Iterations, 3, _ => Service.Placement.CollectPrefabs()));
 
-            int nHeavy = Math.Max(n / 10, 1);
-            results.Add(BenchCall("CollectSummary", n, () => Service.ReadV2.CollectSummary("json")));
-            results.Add(BenchCall("CollectBuildings", n, () => Service.ReadV2.CollectBuildings("json", "basic"), buildingSnapshot.Count));
-            results.Add(BenchCall("CollectBuildings.full", nHeavy, () => Service.ReadV2.CollectBuildings("json", "full"), buildingSnapshot.Count));
-            results.Add(BenchCall("CollectBeavers", n, () => Service.ReadV2.CollectBeavers("json", "basic"), beaverSnapshot.Count));
-            results.Add(BenchCall("CollectBeavers.full", nHeavy, () => Service.ReadV2.CollectBeavers("json", "full"), beaverSnapshot.Count));
-            results.Add(BenchCall("CollectTrees", n, () => Service.ReadV2.CollectTrees(), naturalSnapshot.Count));
-            results.Add(BenchCall("CollectCrops", n, () => Service.ReadV2.CollectCrops(), naturalSnapshot.Count));
-            results.Add(BenchCall("CollectGatherables", n, () => Service.ReadV2.CollectGatherables()));
-            results.Add(BenchCall("CollectPowerNetworks", n, () => Service.ReadV2.CollectPowerNetworks()));
-            results.Add(BenchCall("CollectAlerts", n, () => Service.ReadV2.CollectAlerts()));
-            results.Add(BenchCall("CollectWellbeing", n, () => Service.ReadV2.CollectWellbeing(), beaverSnapshot.Count));
-            results.Add(BenchCall("CollectScience", n, () => Service.ReadV2.CollectScience()));
-            results.Add(BenchCall("CollectResources", n, () => Service.ReadV2.CollectResources("json")));
-            results.Add(BenchCall("CollectPopulation", n, () => Service.ReadV2.CollectPopulation(), beaverSnapshot.Count));
-            results.Add(BenchCall("CollectDistricts", n, () => Service.ReadV2.CollectDistricts("json")));
-            results.Add(BenchCall("CollectDistribution", n, () => Service.ReadV2.CollectDistribution()));
-            results.Add(BenchCall("CollectTime", n, () => Service.ReadV2.CollectTime()));
-            results.Add(BenchCall("CollectWeather", n, () => Service.ReadV2.CollectWeather()));
-            results.Add(BenchCall("CollectSpeed", n, () => Service.ReadV2.CollectSpeed()));
-            results.Add(BenchCall("CollectWorkHours", n, () => Service.ReadV2.CollectWorkHours()));
-            results.Add(BenchCall("CollectNotifications", n, () => Service.ReadV2.CollectNotifications()));
-            results.Add(BenchCall("CollectTreeClusters", nHeavy, () => Service.ReadV2.CollectTreeClusters()));
-            results.Add(BenchCall("CollectPrefabs", nHeavy, () => Service.Placement.CollectPrefabs()));
-            results.Add(BenchCall("CollectTiles.20x20", nHeavy, () => Service.ReadV2.CollectTiles("toon", 120, 130, 140, 150), 400));
-            results.Add(BenchCall("FindPlacement", nHeavy, () => Service.Placement.FindPlacement("Path", 120, 135, 130, 145)));
+            return cases;
+        }
 
-            return new { benchmarks = results };
+        private static TimedBenchmarkCase MakeEndpointCase(List<object> results, string name, int iterations, int warmups, Func<float, object> fn, int knownItems = -1)
+        {
+            return new TimedBenchmarkCase(
+                results,
+                iterations,
+                warmups,
+                fn,
+                c =>
+                {
+                    int items = knownItems >= 0 ? knownItems : c.LastResult is IList list ? list.Count : c.LastResult != null ? 1 : 0;
+                    bool pass = !(c.LastResult is Dictionary<string, object> dict && dict.ContainsKey("error"));
+                    return new { test = name, iterations = c.Iterations, totalMs = c.TotalMs, perCallMs = c.TotalMs / c.Iterations, gc0 = c.Gc0, items, pass };
+                });
         }
 
         public object DebugInspect(string target, Dictionary<string, string> args = null)

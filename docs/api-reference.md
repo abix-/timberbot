@@ -1821,7 +1821,7 @@ Reflection-based inspector for game internals. Navigates object graphs, lists fi
 
 ### POST /api/benchmark
 
-Profile all endpoints and hot paths. Requires `debugEndpointEnabled: true` in settings.json.
+Profile internal hot paths and server micro-benchmarks. Requires `debugEndpointEnabled: true` in settings.json.
 
 **CLI:** `timberbot.py benchmark iterations:100`
 
@@ -1829,11 +1829,11 @@ Profile all endpoints and hot paths. Requires `debugEndpointEnabled: true` in se
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| iterations | int | no | Number of iterations per endpoint (default 100) |
+| iterations | int | no | Number of measured iterations per benchmark case (default 100) |
 
 #### Response
 
-Returns per-endpoint timing and GC allocation counts. Confirmed zero-alloc on hot paths (0 GC0 across 760K calls).
+Returns per-case timing and GC allocation counts for internal micro-benchmarks. Benchmark work is queued and advanced incrementally across frames so the request may take longer wall-clock time without monopolizing one frame.
 
 !!! warning "Debug only"
     Requires `debugEndpointEnabled: true`. Returns `{"error": "disabled: benchmark endpoint"}` when disabled.
