@@ -33,6 +33,7 @@ namespace Timberbot
         public readonly TimberbotWrite Write;
         public readonly TimberbotPlacement Placement;
         public readonly TimberbotDebug DebugTool;
+        public TimberbotAgent Agent;
         private TimberbotHttpServer _server;
 
         // settings (loaded from settings.json in mod folder)
@@ -92,6 +93,7 @@ namespace Timberbot
             Placement.DetectFaction();          // detect faction suffix -- must run before BuildAllIndexes
             Registry.BuildAllIndexes();        // populate indexes from existing entities
             ReadV2.BuildAll();          // populate v2 building trackers from existing entities
+            Agent = new TimberbotAgent();
             _server = new TimberbotHttpServer(_httpPort, this, _debugEnabled);
             TimberbotLog.Info($"HTTP server started on port {_httpPort}");
         }
@@ -140,6 +142,7 @@ namespace Timberbot
             ReadV2.Unregister();
             Registry.Unregister();
             WebhookMgr.Unregister();
+            Agent?.Stop();
             _eventBus.Unregister(this);
             _server?.Stop();
             _server = null;

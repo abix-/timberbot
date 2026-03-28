@@ -804,6 +804,18 @@ class Timberbot:
         _save_brain_file(brain)
         return {"cleared": before - len(brain["tasks"]), "remaining": len(brain["tasks"])}
 
+    # ------------------------------------------------------------------
+    # Agent control
+    # ------------------------------------------------------------------
+
+    def agent_status(self):
+        """Get AI agent loop status."""
+        return self._get("/api/agent/status")
+
+    def agent_stop(self):
+        """Stop AI agent loop."""
+        return self._post("/api/agent/stop", {})
+
     def find(self, source, name=None, x=None, y=None, radius=20, limit=0):
         """Find entities from a source (buildings/trees/gatherables/beavers). Filters server-side."""
         params = {"limit": limit}
@@ -1221,6 +1233,81 @@ def _cast(a):
 _SAVES_DIR = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Saves")
 
 
+def _start_agent(args):
+    """Start AI agent loop via the mod's HTTP API.
+
+    Usage: timberbot.py start binary:claude [turns:5] [model:MODEL] [interval:10] [timeout:120]
+    """
+    binary = "claude"
+    turns = 5
+    model = None
+    interval = 10
+    proc_timeout = 120
+
+    for a in args:
+        if ":" in a:
+            key, val = a.split(":", 1)
+            if key == "binary":
+                binary = val
+            elif key == "turns":
+                try: turns = int(val)
+                except ValueError: pass
+            elif key == "model":
+                model = val
+            elif key == "interval":
+                try: interval = int(val)
+                except ValueError: pass
+            elif key == "timeout":
+                try: proc_timeout = int(val)
+                except ValueError: pass
+
+    bot = Timberbot(json_mode=True)
+    if not bot.ping():
+        print(f"  {_RED}error: game not reachable. launch first with: timberbot.py launch settlement:<name>{_RST}", file=sys.stderr)
+        sys.exit(1)
+
+    data = {"binary": binary, "turns": turns, "interval": interval, "timeout": proc_timeout}
+    if model:
+        data["model"] = model
+
+    try:
+        result = bot._post("/api/agent/start", data)
+    except TimberbotError as e:
+        print(f"  {_RED}error: {e.error}{_RST}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"  {_BGRN}started{_RST} binary={binary} turns={turns} interval={interval}s")
+
+    # poll status until done
+    print(f"  {_DIM}polling agent status...{_RST}")
+    while True:
+        time.sleep(3)
+        try:
+            status = bot._get_json("/api/agent/status")
+            s = status.get("status", "unknown")
+            turn = status.get("turn", 0)
+            total = status.get("totalTurns", 0)
+            print(f"  turn {turn}/{total}  status: {s}", end="\r")
+
+            if s in ("done", "error", "idle"):
+                print()
+                if s == "error":
+                    print(f"  {_RED}error: {status.get('lastError', 'unknown')}{_RST}", file=sys.stderr)
+                elif s == "done":
+                    print(f"  {_BGRN}done{_RST} completed {turn}/{total} turns")
+                else:
+                    print(f"  {_BYEL}stopped{_RST}")
+                break
+        except KeyboardInterrupt:
+            print(f"\n  {_DIM}stopping agent...{_RST}")
+            try: bot._post("/api/agent/stop", {})
+            except Exception: pass
+            break
+        except Exception as e:
+            print(f"  {_RED}poll error: {e}{_RST}", file=sys.stderr)
+            break
+
+
 def _launch(args):
     """Launch Timberborn and auto-load a save.
 
@@ -1354,6 +1441,7 @@ def main():
         print(f"\n  {'top':30s} live colony dashboard")
         print(f"  {'manager':30s} auto-manage haulers (keep 1-4 idle)")
         print(f"  {'launch':30s} launch game and auto-load a save")
+        print(f"  {'start':30s} start AI agent loop (binary:claude turns:5)")
         sys.exit(1)
 
     json_mode = "--json" in sys.argv
@@ -1386,6 +1474,10 @@ def main():
 
     if method_name == "launch":
         _launch(args)
+        return
+
+    if method_name == "start":
+        _start_agent(args)
         return
 
     bot = Timberbot(host=host_override, port=port_override, json_mode=json_mode)
