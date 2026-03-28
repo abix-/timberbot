@@ -1,5 +1,7 @@
 - [breaking] ReadV2 cutover: all GET endpoints now served by TimberbotReadV2 with fresh-on-request projection snapshots
 - [breaking] removed TimberbotRead, TimberbotDoubleBuffer, TimberbotEntityCache -- replaced by TimberbotReadV2 + TimberbotEntityRegistry
+- [breaking] entity-targeting standardized on `id`: single-entity reads now use `id=<id>`, entity POST bodies/docs/CLI use `id` instead of `building_id`/`crop_id`/`webhook_id`
+- [breaking] buildable-entity `name` fields are now canonical faction-qualified names (for example `FarmHouse.IronTeeth`) instead of cleaned display names
 - [feature] A* pathfinding for place_path: edge-based cost grid, pre-computed stair edges, auto-stairs across z-levels, obstacle/water avoidance, existing path reuse, style and sections params
 - [feature] A* stair orientation toward destination, overhang avoidance
 - [feature] map: show topmost occupant (highest z) for correct top-down view
@@ -37,6 +39,7 @@
 - [test] new tests: blocker_tracking, path_sections, demolish_crop
 - [docs] architecture.md rewritten for native ReadV2 stack, removed all double-buffer references
 - [docs] architecture.md: thread model table, reusable collections, main-thread cached endpoints
+- [docs] api-reference.md updated for canonical `name` contract and `id` entity-targeting contract
 - [docs] performance.md: full audit (3 high, 8 medium, 11 low), all high+medium fixed
 - [docs] developing.md: owns file structure, testing, build instructions
 - [docs] webhooks.md: authoritative for events/setup
