@@ -14,17 +14,23 @@ Python client
 
 ```bash
 # with Timberborn running + mod loaded
-timberbot.py summary                              # full colony snapshot
+timberbot.py summary                              # colony snapshot
 timberbot.py buildings                            # list all buildings
-timberbot.py set_speed speed:3                    # fast forward
-timberbot.py place_building prefab:Path x:100 y:130 z:2 orientation:south
 timberbot.py beavers                              # beaver wellbeing + critical needs
+timberbot.py map x1:110 y1:130 x2:130 y2:150     # ASCII map with terrain + blockers
+timberbot.py place_building prefab:Path x:100 y:130 z:2 orientation:south
+timberbot.py place_path x1:110 y1:130 x2:130 y2:150 z:2  # A* pathfinding
+timberbot.py set_speed speed:3                    # fast forward
+timberbot.py science                              # science points + unlockable buildings
 timberbot.py distribution                         # import/export settings per district
-timberbot.py science                               # science points + unlockable buildings
-timberbot.py tree_clusters                         # find densest tree clusters
-timberbot.py map x1:110 y1:130 x2:130 y2:150        # ASCII map with terrain height
 timberbot.py top                                  # live colony dashboard
 timberbot.py                                      # list all methods
+```
+
+Auto-launch a save directly:
+
+```bash
+timberbot.py launch settlement:MyCastle save:day5
 ```
 
 Or use raw HTTP -- no Python needed:
@@ -34,14 +40,40 @@ curl http://localhost:8085/api/summary
 curl -X POST http://localhost:8085/api/speed -d '{"speed": 3}'
 ```
 
+## Features
+
+- **A* pathfinding** -- `place_path` routes around obstacles, water, and ruins with auto-stairs
+- **Fresh-on-request reads** -- no stale data, zero cost when idle
+- **Blocker tracking** -- ruins and editor objects visible in /api/tiles and placement errors
+- **Write job system** -- budgeted frame execution, no spikes
+- **Debug endpoint** -- reflection inspector with chaining and validation
+- **Webhooks** -- subscribe to game events over HTTP
+- **Zero-alloc hot path** -- 0 GC0 across all read endpoints
+
 ## Docs
 
-- [Getting Started](docs/getting-started.md). Install, first steps, examples
-- [API Reference](docs/api-reference.md). All HTTP endpoints
-- [Timberbot AI](docs/timberbot.md). Single authoritative AI guide for agents playing Timberborn
-- [Developing](docs/developing.md). Build from source, add endpoints, Workshop publishing
+- [Getting Started](docs/getting-started.md) -- install, first steps, examples
+- [API Reference](docs/api-reference.md) -- all HTTP endpoints
+- [Timberbot AI](docs/timberbot.md) -- AI guide for agents playing Timberborn
+- [Architecture](docs/architecture.md) -- internals, thread model, read/write pipeline
+- [Developing](docs/developing.md) -- build from source, add endpoints, Workshop publishing
 
-Claude Code entrypoint: `skill/timberbot.md`
+## Settings
+
+Drop a `settings.json` in your mod folder (`Documents/Timberborn/Mods/Timberbot/`):
+
+```json
+{
+  "httpPort": 8085,
+  "debugEndpointEnabled": true,
+  "webhooksEnabled": true,
+  "webhookBatchMs": 200,
+  "webhookCircuitBreaker": 30,
+  "writeBudgetMs": 1.0
+}
+```
+
+All fields are optional -- missing keys use defaults.
 
 ## Requirements
 
