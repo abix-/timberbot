@@ -44,10 +44,13 @@ namespace Timberbot
         private string _binary;
         private string _model;
         private string _prompt;
+        private string _goal;
         private int _totalTurns;
         private int _intervalSeconds;
         private int _processTimeoutSeconds;
         private string _timberbotCmd;
+
+        private const string DEFAULT_GOAL = "survive and grow the colony. keep beavers fed and watered. expand housing and production as resources allow.";
 
         private int _currentTurn;
         private AgentStatus _status = AgentStatus.Idle;
@@ -61,7 +64,7 @@ namespace Timberbot
         private readonly TimberbotJw _jw = new TimberbotJw(1024);
         private readonly TimberbotJw _statusJw = new TimberbotJw(4096);
 
-        public string Start(string binary, int turns, string model, int interval, string prompt, int timeout)
+        public string Start(string binary, int turns, string model, int interval, string prompt, int timeout, string goal)
         {
             if (_status != AgentStatus.Idle && _status != AgentStatus.Done && _status != AgentStatus.Error)
                 return _jw.Error("agent_busy", ("status", _status.ToString().ToLowerInvariant()), ("turn", _currentTurn), ("totalTurns", _totalTurns));
@@ -71,6 +74,7 @@ namespace Timberbot
             _model = model;
             _intervalSeconds = interval > 0 ? interval : 10;
             _processTimeoutSeconds = timeout > 0 ? timeout : 120;
+            _goal = string.IsNullOrEmpty(goal) ? DEFAULT_GOAL : goal;
             _prompt = LoadPrompt(prompt);
             _timberbotCmd = ResolveTimberbotCommand();
             _currentTurn = 0;
@@ -111,6 +115,7 @@ namespace Timberbot
                 .Prop("totalTurns", _totalTurns)
                 .Prop("binary", _binary ?? "")
                 .Prop("model", _model ?? "")
+                .Prop("goal", JsonEscape(_goal))
                 .Prop("currentCmd", JsonEscape(_currentCmd))
                 .Prop("lastError", JsonEscape(_lastError));
 
@@ -162,10 +167,11 @@ namespace Timberbot
                     var turnStart = System.Diagnostics.Stopwatch.StartNew();
                     var rec = new TurnRecord { Turn = turn };
 
-                    // 1. Get brain state (TOON format)
+                    // 1. Get brain state (TOON format) -- set goal on first turn
                     _status = AgentStatus.GatheringState;
-                    _currentCmd = "brain";
-                    var (brainOk, brainOut) = RunProcess(_timberbotCmd, "brain", null, _processTimeoutSeconds);
+                    var brainArgs = turn == 1 ? "brain \"goal:" + _goal.Replace("\"", "'") + "\"" : "brain";
+                    _currentCmd = brainArgs;
+                    var (brainOk, brainOut) = RunProcess(_timberbotCmd, brainArgs, null, _processTimeoutSeconds);
                     if (!brainOk)
                     {
                         _lastError = "brain failed: " + brainOut;
@@ -183,8 +189,9 @@ namespace Timberbot
                     // 2. Spawn binary with state on stdin
                     _status = AgentStatus.Thinking;
                     _currentCmd = "thinking...";
-                    var message = "Current game state:\n\n" + brainOut +
-                        "\n\nRespond with timberbot.py commands, one per line. " +
+                    var message = "GOAL: " + _goal + "\n\nTURN: " + turn + "/" + _totalTurns +
+                        "\n\nCurrent game state:\n\n" + brainOut +
+                        "\n\nRespond ONLY with timberbot.py commands, one per line. NO prose, NO explanations, NO markdown.\n" +
                         "Example: place_building prefab:LumberjackFlag.IronTeeth x:120 y:130 z:2\n" +
                         "Example: set_speed speed:2\n" +
                         "Example: mark_trees x1:100 y1:100 x2:110 y2:110 z:2\n" +

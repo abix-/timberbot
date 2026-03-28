@@ -1115,7 +1115,10 @@ def _top_render(summary, wellbeing_data=None, trees_data=None, crops_data=None, 
             cur_cmd = agent_data.get("currentCmd", "")
             turn_bar = _bar(turn, total, 16) if total > 0 else ""
             model_short = model.replace("claude-", "").replace("-20251001", "") if model else binary
+            goal = agent_data.get("goal", "")
             print(_row(f"{_BMAG}{_BOLD}AGENT{_RST}  {sc}{_BOLD}{s}{_RST}  turn {_BOLD}{turn}{_RST}/{total}  {turn_bar}", f"{_DIM}{model_short}{_RST}"))
+            if goal:
+                print(_row(f"  {_DIM}goal:{_RST} {_BOLD}{goal[:65]}{_RST}"))
 
             # show what's happening right now
             if cur_cmd and s in ("gatheringstate", "thinking", "executing"):
@@ -1348,13 +1351,14 @@ _SAVES_DIR = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "S
 def _start_agent(args):
     """Start AI agent loop via the mod's HTTP API.
 
-    Usage: timberbot.py start binary:claude [turns:5] [model:MODEL] [interval:10] [timeout:120]
+    Usage: timberbot.py start binary:claude [turns:5] [model:MODEL] [interval:10] [timeout:120] [goal:"survive and grow"]
     """
     binary = "claude"
     turns = 5
     model = None
     interval = 10
     proc_timeout = 120
+    goal = None
 
     for a in args:
         if ":" in a:
@@ -1372,6 +1376,8 @@ def _start_agent(args):
             elif key == "timeout":
                 try: proc_timeout = int(val)
                 except ValueError: pass
+            elif key == "goal":
+                goal = val
 
     bot = Timberbot(json_mode=True)
     if not bot.ping():
@@ -1381,6 +1387,8 @@ def _start_agent(args):
     data = {"binary": binary, "turns": turns, "interval": interval, "timeout": proc_timeout}
     if model:
         data["model"] = model
+    if goal:
+        data["goal"] = goal
 
     try:
         result = bot._post("/api/agent/start", data)
