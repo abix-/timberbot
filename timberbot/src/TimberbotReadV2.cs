@@ -182,6 +182,8 @@ namespace Timberbot
         private readonly Dictionary<string, string> _needToGroup = new Dictionary<string, string>();
         private readonly Dictionary<string, float> _groupMaxPerBeaver = new Dictionary<string, float>();
         private readonly Dictionary<string, float> _wbGroupTotals = new Dictionary<string, float>();
+        private readonly Dictionary<string, List<NeedSpec>> _wbGroupNeeds = new Dictionary<string, List<NeedSpec>>();
+        private readonly Dictionary<string, float> _wbGroupMaxTotals = new Dictionary<string, float>();
         private readonly Dictionary<string, float[]> _districtWb = new Dictionary<string, float[]>();
         private readonly Dictionary<string, int> _resourceTotals = new Dictionary<string, int>();
         private readonly Dictionary<long, int[]> _clusterCells = new Dictionary<long, int[]>();
@@ -832,7 +834,8 @@ namespace Timberbot
             ProjectionSnapshot<NaturalResourceDefinition, NaturalResourceState, NoDetail>.Snapshot snapshot;
             try { snapshot = _naturalResourceSnapshot.RequestFresh(false, 2000); }
             catch (TimeoutException) { return _jw.Error("refresh_timeout"); }
-            _clusterCells.Clear(); _clusterSpecies.Clear();
+            foreach (var kv in _clusterCells) { kv.Value[0] = 0; kv.Value[1] = 0; }
+            foreach (var kv in _clusterSpecies) kv.Value.Clear();
             var cells = _clusterCells;
             var cellSpecies = _clusterSpecies;
             for (int i = 0; i < snapshot.Count; i++)
@@ -844,8 +847,9 @@ namespace Timberbot
                 int cx = nr.X / cellSize * cellSize + cellSize / 2;
                 int cy = nr.Y / cellSize * cellSize + cellSize / 2;
                 long key = (long)cx * 100000 + cy;
-                if (!cells.ContainsKey(key))
-                { cells[key] = new int[] { 0, 0, cx, cy, nr.Z }; cellSpecies[key] = new Dictionary<string, int>(); }
+                if (!cells.TryGetValue(key, out var cell))
+                { cell = new int[] { 0, 0, cx, cy, nr.Z }; cells[key] = cell; cellSpecies[key] = new Dictionary<string, int>(); }
+                else { cell[0] = 0; cell[1] = 0; cell[2] = cx; cell[3] = cy; cell[4] = nr.Z; }
                 cells[key][1]++;
                 cellSpecies[key][d.Name] = cellSpecies[key].GetValueOrDefault(d.Name) + 1;
                 if (nr.Grown != 0) cells[key][0]++;
@@ -869,7 +873,8 @@ namespace Timberbot
             ProjectionSnapshot<NaturalResourceDefinition, NaturalResourceState, NoDetail>.Snapshot snapshot;
             try { snapshot = _naturalResourceSnapshot.RequestFresh(false, 2000); }
             catch (TimeoutException) { return _jw.Error("refresh_timeout"); }
-            _clusterCells.Clear(); _clusterSpecies.Clear();
+            foreach (var kv in _clusterCells) { kv.Value[0] = 0; kv.Value[1] = 0; }
+            foreach (var kv in _clusterSpecies) kv.Value.Clear();
             var cells = _clusterCells;
             var cellSpecies = _clusterSpecies;
             for (int i = 0; i < snapshot.Count; i++)
@@ -881,8 +886,9 @@ namespace Timberbot
                 int cx = nr.X / cellSize * cellSize + cellSize / 2;
                 int cy = nr.Y / cellSize * cellSize + cellSize / 2;
                 long key = (long)cx * 100000 + cy;
-                if (!cells.ContainsKey(key))
-                { cells[key] = new int[] { 0, 0, cx, cy, nr.Z }; cellSpecies[key] = new Dictionary<string, int>(); }
+                if (!cells.TryGetValue(key, out var cell))
+                { cell = new int[] { 0, 0, cx, cy, nr.Z }; cells[key] = cell; cellSpecies[key] = new Dictionary<string, int>(); }
+                else { cell[0] = 0; cell[1] = 0; cell[2] = cx; cell[3] = cy; cell[4] = nr.Z; }
                 cells[key][1]++;
                 cellSpecies[key][d.Name] = cellSpecies[key].GetValueOrDefault(d.Name) + 1;
                 if (nr.Grown != 0) cells[key][0]++;
@@ -998,19 +1004,23 @@ namespace Timberbot
                 try { beavers = _beaverSnapshot.RequestFresh(true, 2000); }
                 catch (TimeoutException) { return _jw.Error("refresh_timeout"); }
                 var beaverNeeds = _factionNeedService.GetBeaverNeeds();
-                var groupNeeds = new Dictionary<string, List<NeedSpec>>();
+                foreach (var kv in _wbGroupNeeds) kv.Value.Clear();
+                _wbGroupMaxTotals.Clear();
+                _needToGroup.Clear();
+                _wbGroupTotals.Clear();
+                var groupNeeds = _wbGroupNeeds;
                 foreach (var ns in beaverNeeds)
                 {
                     var groupId = ns.NeedGroupId;
                     if (string.IsNullOrEmpty(groupId)) continue;
-                    if (!groupNeeds.ContainsKey(groupId))
-                        groupNeeds[groupId] = new List<NeedSpec>();
-                    groupNeeds[groupId].Add(ns);
+                    if (!groupNeeds.TryGetValue(groupId, out var list))
+                    { list = new List<NeedSpec>(); groupNeeds[groupId] = list; }
+                    list.Add(ns);
                 }
                 int beaverCount = 0;
-                var groupTotals = new Dictionary<string, float>();
-                var groupMaxTotals = new Dictionary<string, float>();
-                var needToGroup = new Dictionary<string, string>();
+                var groupTotals = _wbGroupTotals;
+                var groupMaxTotals = _wbGroupMaxTotals;
+                var needToGroup = _needToGroup;
                 foreach (var kvp in groupNeeds)
                     foreach (var ns in kvp.Value)
                         needToGroup[ns.Id] = kvp.Key;
@@ -1075,7 +1085,7 @@ namespace Timberbot
             x2 = Mathf.Clamp(x2, 0, size.x - 1);
             y2 = Mathf.Clamp(y2, 0, size.y - 1);
 
-            _tileOccupants.Clear();
+            foreach (var kv in _tileOccupants) kv.Value.Clear();
             _tileEntrances.Clear();
             _tileSeedlings.Clear();
             _tileDeadTiles.Clear();
@@ -1103,9 +1113,9 @@ namespace Timberbot
                     if (tile.x >= x1 && tile.x <= x2 && tile.y >= y1 && tile.y <= y2)
                     {
                         long key = (long)tile.x * 100000 + tile.y;
-                        if (!occupants.ContainsKey(key))
-                            occupants[key] = new List<(string, int)>();
-                        occupants[key].Add((c.Name, tile.z));
+                        if (!occupants.TryGetValue(key, out var occList))
+                        { occList = new List<(string, int)>(); occupants[key] = occList; }
+                        occList.Add((c.Name, tile.z));
                     }
                 }
                 if (c.HasEntrance != 0 && c.EntranceX >= x1 && c.EntranceX <= x2 && c.EntranceY >= y1 && c.EntranceY <= y2)
@@ -1120,9 +1130,9 @@ namespace Timberbot
                 long key = (long)c.X * 100000 + c.Y;
                 if (c.Grown == 0 && c.Alive != 0) seedlings.Add(key);
                 if (c.Alive == 0) deadTiles.Add(key);
-                if (!occupants.ContainsKey(key))
-                    occupants[key] = new List<(string, int)>();
-                occupants[key].Add((d.Name, c.Z));
+                if (!occupants.TryGetValue(key, out var nrOccList))
+                { nrOccList = new List<(string, int)>(); occupants[key] = nrOccList; }
+                nrOccList.Add((d.Name, c.Z));
             }
 
             for (int i = 0; i < _trackedBlockers.Count; i++)
@@ -1134,9 +1144,9 @@ namespace Timberbot
                     if (tile.x >= x1 && tile.x <= x2 && tile.y >= y1 && tile.y <= y2)
                     {
                         long key = (long)tile.x * 100000 + tile.y;
-                        if (!occupants.ContainsKey(key))
-                            occupants[key] = new List<(string, int)>();
-                        occupants[key].Add((b.Name, tile.z));
+                        if (!occupants.TryGetValue(key, out var blkOccList))
+                        { blkOccList = new List<(string, int)>(); occupants[key] = blkOccList; }
+                        blkOccList.Add((b.Name, tile.z));
                     }
                 }
             }
@@ -1407,10 +1417,12 @@ namespace Timberbot
             }
         }
 
+        private readonly List<AlertItem> _alertBuffer = new List<AlertItem>();
         private AlertItem[] BuildAlertsFromBuildings()
         {
             var snapshot = _snapshot.RequestFresh(false, 2000);
-            var alerts = new List<AlertItem>();
+            _alertBuffer.Clear();
+            var alerts = _alertBuffer;
             for (int i = 0; i < snapshot.Count; i++)
             {
                 var d = snapshot.Definitions[i];
@@ -1433,10 +1445,12 @@ namespace Timberbot
             return alerts.ToArray();
         }
 
+        private readonly Dictionary<int, PowerNetworkBuilder> _powerNetworks = new Dictionary<int, PowerNetworkBuilder>();
         private PowerNetworkItem[] BuildPowerFromBuildings()
         {
             var snapshot = _snapshot.RequestFresh(false, 2000);
-            var networks = new Dictionary<int, PowerNetworkBuilder>();
+            _powerNetworks.Clear();
+            var networks = _powerNetworks;
             for (int i = 0; i < snapshot.Count; i++)
             {
                 var d = snapshot.Definitions[i];
