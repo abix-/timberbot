@@ -178,6 +178,7 @@ namespace Timberbot
         private readonly Dictionary<string, int[]> _cropSpecies = new Dictionary<string, int[]>();
         private readonly Dictionary<string, int> _roleCounts = new Dictionary<string, int>();
         private readonly Dictionary<string, int[]> _districtStats = new Dictionary<string, int[]>();
+        private readonly Dictionary<string, int> _alertCounts = new Dictionary<string, int>();
         private readonly Dictionary<string, (int x, int y, int z, string orientation, int entranceX, int entranceY)> _districtDCs = new Dictionary<string, (int, int, int, string, int, int)>();
         private readonly Dictionary<string, string> _needToGroup = new Dictionary<string, string>();
         private readonly Dictionary<string, float> _groupMaxPerBeaver = new Dictionary<string, float>();
@@ -567,7 +568,8 @@ namespace Timberbot
             int totalVacancies = 0, assignedWorkers = 0;
             float totalWellbeing = 0f;
             int beaverCount = 0;
-            int alertUnstaffed = 0, alertUnpowered = 0, alertUnreachable = 0;
+            _alertCounts.Clear();
+            var alertCounts = _alertCounts;
             int miserable = 0, critical = 0;
 
             for (int i = 0; i < naturalSnapshot.Count; i++)
@@ -609,7 +611,7 @@ namespace Timberbot
                 var d = buildingSnapshot.Definitions[i];
                 var c = buildingSnapshot.States[i];
                 var dname = c.District ?? "_unknown";
-                if (!districtStats.TryGetValue(dname, out var ds)) { ds = new int[7]; districtStats[dname] = ds; }
+                if (!districtStats.TryGetValue(dname, out var ds)) { ds = new int[4]; districtStats[dname] = ds; }
                 occupiedBeds += c.Dwellers;
                 totalBeds += c.MaxDwellers;
                 ds[0] += c.Dwellers;
@@ -618,9 +620,14 @@ namespace Timberbot
                 totalVacancies += c.DesiredWorkers;
                 ds[2] += c.AssignedWorkers;
                 ds[3] += c.DesiredWorkers;
-                if (c.DesiredWorkers > 0 && c.AssignedWorkers < c.DesiredWorkers) { alertUnstaffed++; ds[4]++; }
-                if (d.IsConsumer != 0 && c.Powered == 0) { alertUnpowered++; ds[5]++; }
-                if (c.Unreachable != 0) { alertUnreachable++; ds[6]++; }
+                if (!string.IsNullOrEmpty(c.StatusAlerts))
+                {
+                    foreach (var alert in c.StatusAlerts.Split(','))
+                    {
+                        var a = alert.Trim();
+                        if (a.Length > 0) alertCounts[a] = alertCounts.GetValueOrDefault(a) + 1;
+                    }
+                }
                 if (d.Name != null && d.Name.Contains("DistrictCenter"))
                 {
                     var dcOri = d.Orientation ?? "south";
@@ -741,7 +748,9 @@ namespace Timberbot
                 }
                 jj.CloseArr().CloseObj();
                 jj.Prop("science", _scienceService.SciencePoints);
-                jj.Obj("alerts").Prop("unstaffed", alertUnstaffed).Prop("unpowered", alertUnpowered).Prop("unreachable", alertUnreachable).CloseObj();
+                jj.Obj("alerts");
+                foreach (var kv in alertCounts) jj.Prop(kv.Key, kv.Value);
+                jj.CloseObj();
                 jj.Obj("buildings");
                 foreach (var kv in roleCounts) jj.Prop(kv.Key, kv.Value);
                 jj.CloseObj();
@@ -809,12 +818,11 @@ namespace Timberbot
             jw.Prop("critical", critical);
             jw.Prop("science", _scienceService.SciencePoints);
             string alertStr = "none";
-            if (alertUnstaffed > 0 || alertUnpowered > 0 || alertUnreachable > 0)
+            if (alertCounts.Count > 0)
             {
                 var parts = new List<string>();
-                if (alertUnstaffed > 0) parts.Add($"{alertUnstaffed} unstaffed");
-                if (alertUnpowered > 0) parts.Add($"{alertUnpowered} unpowered");
-                if (alertUnreachable > 0) parts.Add($"{alertUnreachable} unreachable");
+                foreach (var kv in alertCounts)
+                    parts.Add($"{kv.Value} {kv.Key}");
                 alertStr = string.Join(", ", parts);
             }
             jw.Prop("alerts", alertStr);
@@ -1427,20 +1435,23 @@ namespace Timberbot
             {
                 var d = snapshot.Definitions[i];
                 var s = snapshot.States[i];
-                if (s.DesiredWorkers > 0 && s.AssignedWorkers < s.DesiredWorkers)
+                if (!string.IsNullOrEmpty(s.StatusAlerts))
                 {
-                    alerts.Add(new AlertItem
+                    foreach (var alert in s.StatusAlerts.Split(','))
                     {
-                        Type = "unstaffed",
-                        Id = d.Id,
-                        Name = d.Name,
-                        Workers = $"{s.AssignedWorkers}/{s.DesiredWorkers}"
-                    });
+                        var a = alert.Trim();
+                        if (a.Length > 0)
+                        {
+                            alerts.Add(new AlertItem
+                            {
+                                Type = a,
+                                Id = d.Id,
+                                Name = d.Name,
+                                Workers = s.MaxWorkers > 0 ? $"{s.AssignedWorkers}/{s.DesiredWorkers}" : ""
+                            });
+                        }
+                    }
                 }
-                if (d.IsConsumer != 0 && s.Powered == 0)
-                    alerts.Add(new AlertItem { Type = "unpowered", Id = d.Id, Name = d.Name });
-                if (s.Unreachable != 0)
-                    alerts.Add(new AlertItem { Type = "unreachable", Id = d.Id, Name = d.Name });
             }
             return alerts.ToArray();
         }
@@ -1600,6 +1611,25 @@ namespace Timberbot
                     }
                 }
                 catch (Exception ex) { TimberbotLog.Error("readv2.stock", ex); }
+            }
+            s.StatusAlerts = "";
+            if (t.Status != null)
+            {
+                try
+                {
+                    var active = t.Status.ActiveStatuses;
+                    if (active.Count > 0)
+                    {
+                        var sb = new StringBuilder(64);
+                        for (int si = 0; si < active.Count; si++)
+                        {
+                            if (si > 0) sb.Append(',');
+                            sb.Append(active[si].StatusDescription);
+                        }
+                        s.StatusAlerts = sb.ToString();
+                    }
+                }
+                catch (Exception ex) { TimberbotLog.Error("readv2.status", ex); }
             }
         }
 
@@ -2239,6 +2269,7 @@ namespace Timberbot
             public int ReadyToProduce;
             public int NeedsNutrients, Nutrients;
             public int Stock, Capacity;
+            public string StatusAlerts;
         }
 
         internal sealed class BuildingDetailState
@@ -2758,6 +2789,7 @@ namespace Timberbot
                 {
                     jw.Prop("priority", s.ConstructionPriority ?? "")
                         .Prop("workers", s.MaxWorkers > 0 ? $"{s.AssignedWorkers}/{s.DesiredWorkers}" : "")
+                        .Prop("alerts", s.StatusAlerts ?? "")
                         .CloseObj();
                     return;
                 }
@@ -2795,7 +2827,8 @@ namespace Timberbot
                     .Prop("nutrients", s.Nutrients)
                     .Prop("effectRadius", d.EffectRadius)
                     .Prop("isWonder", d.HasWonder)
-                    .Prop("wonderActive", s.WonderActive);
+                    .Prop("wonderActive", s.WonderActive)
+                    .Prop("alerts", s.StatusAlerts ?? "");
 
                 if (format == "toon")
                 {
