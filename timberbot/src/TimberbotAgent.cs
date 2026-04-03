@@ -35,6 +35,7 @@ namespace Timberbot
         private readonly string _terminal;  // terminal command prefix from settings.json
         private string _binary;
         private string _model;
+        private string _effort;
         private string _goal;
         private int _processTimeoutSeconds;
 
@@ -58,17 +59,19 @@ namespace Timberbot
         public string CurrentCommand => _currentCmd;
         public string LastError => _lastError;
         public string Binary => _binary;
+        public string Effort => _effort;
 
         private readonly TimberbotJw _jw = new TimberbotJw(1024);
         private readonly TimberbotJw _statusJw = new TimberbotJw(4096);
 
-        public string Start(string binary, string model, int timeout, string goal)
+        public string Start(string binary, string model, string effort, int timeout, string goal)
         {
             if (_status != AgentStatus.Idle && _status != AgentStatus.Done && _status != AgentStatus.Error)
                 return _jw.Error("agent_busy", ("status", _status.ToString().ToLowerInvariant()));
 
             _binary = binary ?? "claude";
             _model = model;
+            _effort = effort;
             _processTimeoutSeconds = timeout > 0 ? timeout : 120;
             _goal = string.IsNullOrEmpty(goal) ? DEFAULT_GOAL : goal;
             _lastError = null;
@@ -135,6 +138,8 @@ namespace Timberbot
                     args.Append("--system-prompt-file \"").Append(skillFile).Append("\"");
                 if (!string.IsNullOrEmpty(_model))
                     args.Append(" --model ").Append(_model);
+                if (!string.IsNullOrEmpty(_effort))
+                    args.Append(" --effort ").Append(_effort);
                 // initial message is just the player's goal
                 args.Append(" \"").Append(_goal.Replace("\"", "'")).Append("\"");
 

@@ -1,13 +1,6 @@
 // TimberbotPanel.cs -- In-game UI for agent start/stop/status.
 //
-// Collapsible top-right panel using native Timberborn UI patterns:
-//   - UILayout.AddTopRight() for placement in game layout
-//   - NineSlice* variants (Button, Label, TextField, VisualElement) for backgrounds
-//   - Game CSS classes (top-right-item, button-game, text-field, etc.)
-//   - VisualElementInitializer for click sounds and localization hooks
-//   - Wrapper element with top-right-item__wrapper for proper spacing
-//
-// Collapsed: one-line status badge in top-right strip with + button.
+// Collapsed: one-line status badge in bottom-right strip with + button.
 // Expanded: absolute-positioned panel with status + controls.
 //
 // Reads agent state directly from TimberbotAgent properties (no HTTP).
@@ -27,25 +20,52 @@ namespace Timberbot
         private readonly TimberbotService _service;
         private readonly VisualElementInitializer _veInit;
 
-        // collapsed bar (in top-right strip)
+        // collapsed bar
         private VisualElement _collapsedWrapper;
         private Label _statusBarLabel;
 
-        // expanded panel (absolute overlay)
+        // expanded panel
         private VisualElement _expanded;
         private Label _statusLabel;
         private Label _goalLabel;
         private Label _cmdLabel;
         private TextField _binaryField;
         private TextField _modelField;
-        private NineSliceButton _modelDropBtn;
         private VisualElement _modelDropdown;
+        private TextField _effortField;
+        private VisualElement _effortDropdown;
         private TextField _goalField;
         private NineSliceButton _startBtn;
         private NineSliceButton _stopBtn;
 
         private float _lastUpdate;
         private bool _isExpanded;
+
+        private static readonly string[][] ModelChoices = new[]
+        {
+            // aliases (latest of each tier)
+            new[] { "sonnet", "sonnet - balanced (latest)" },
+            new[] { "opus", "opus - smartest, slow (latest)" },
+            new[] { "haiku", "haiku - fast, cheap (latest)" },
+            // current generation
+            new[] { "claude-sonnet-4-6", "sonnet 4.6 - current best value" },
+            new[] { "claude-sonnet-4-5", "sonnet 4.5" },
+            new[] { "claude-opus-4-6", "opus 4.6 - strongest model" },
+            new[] { "claude-opus-4-5", "opus 4.5" },
+            new[] { "claude-opus-4-1", "opus 4.1" },
+            new[] { "claude-haiku-4-5", "haiku 4.5 - cheapest viable" },
+            // older
+            new[] { "claude-sonnet-3-7", "sonnet 3.7 - older" },
+            new[] { "claude-haiku-3-5", "haiku 3.5 - older, very cheap" },
+        };
+
+        private static readonly string[][] EffortChoices = new[]
+        {
+            new[] { "high", "high - thorough (default)" },
+            new[] { "medium", "medium - faster, routine" },
+            new[] { "low", "low - fastest, simple tasks" },
+            new[] { "max", "max - deep thinking, complex" },
+        };
 
         public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit)
         {
@@ -133,7 +153,7 @@ namespace Timberbot
             _expanded.style.bottom = 60;
             _expanded.style.right = 10;
             _expanded.style.flexDirection = FlexDirection.Column;
-            _expanded.style.width = 260;
+            _expanded.style.width = 310;
             _expanded.style.paddingTop = 6;
             _expanded.style.paddingBottom = 8;
             _expanded.style.paddingLeft = 8;
@@ -169,56 +189,27 @@ namespace Timberbot
             _expanded.Add(_cmdLabel);
 
             // separator
-            var sep = new VisualElement();
-            sep.style.height = 1;
-            sep.style.backgroundColor = new Color(0.4f, 0.36f, 0.28f);
-            sep.style.marginTop = 4;
-            sep.style.marginBottom = 4;
-            _expanded.Add(sep);
+            _expanded.Add(MakeSeparator());
 
-            // input fields
+            // binary field
             _binaryField = MakeTextField("claude");
             _expanded.Add(MakeFieldRow("Binary:", _binaryField));
 
+            // model dropdown
             _modelField = MakeTextField("sonnet");
-            _modelDropBtn = new NineSliceButton { text = "v" };
-            _modelDropBtn.AddToClassList("button-game");
-            _modelDropBtn.style.width = 22;
-            _modelDropBtn.style.height = 22;
-            _modelDropBtn.style.paddingLeft = 0;
-            _modelDropBtn.style.paddingRight = 0;
-            _modelDropBtn.style.paddingTop = 0;
-            _modelDropBtn.style.paddingBottom = 0;
-            _modelDropBtn.style.marginLeft = 2;
-            _modelDropBtn.clicked += ToggleModelDropdown;
-
-            _modelDropdown = new NineSliceVisualElement();
-            _modelDropdown.AddToClassList("bg-sub-box--green");
-            _modelDropdown.style.position = Position.Absolute;
-            _modelDropdown.style.paddingTop = 4;
-            _modelDropdown.style.paddingBottom = 4;
-            _modelDropdown.style.paddingLeft = 4;
-            _modelDropdown.style.paddingRight = 4;
-            _modelDropdown.ToggleDisplayStyle(false);
-
-            var modelChoices = new[] { "sonnet", "opus", "haiku", "sonnet-4", "opus-4" };
-            foreach (var choice in modelChoices)
-            {
-                var item = new NineSliceButton { text = choice };
-                item.AddToClassList("button-game");
-                item.AddToClassList("game-text-normal");
-                item.style.height = 22;
-                item.style.marginBottom = 1;
-                var c = choice;
-                item.clicked += () => { _modelField.value = c; _modelDropdown.ToggleDisplayStyle(false); };
-                _modelDropdown.Add(item);
-            }
-
-            var modelRow = MakeFieldRow("Model:", _modelField);
-            modelRow.Add(_modelDropBtn);
+            _modelDropdown = MakeDropdownPopup(ModelChoices, _modelField);
+            var modelRow = MakeDropdownRow("Model:", _modelField, _modelDropdown);
             _expanded.Add(modelRow);
             _expanded.Add(_modelDropdown);
 
+            // effort dropdown
+            _effortField = MakeTextField("high");
+            _effortDropdown = MakeDropdownPopup(EffortChoices, _effortField);
+            var effortRow = MakeDropdownRow("Effort:", _effortField, _effortDropdown);
+            _expanded.Add(effortRow);
+            _expanded.Add(_effortDropdown);
+
+            // goal field
             _goalField = MakeTextField("survive and grow the colony");
             _goalField.multiline = true;
             _goalField.style.height = 36;
@@ -241,12 +232,6 @@ namespace Timberbot
             _expanded.Add(btnRow);
         }
 
-        private void ToggleModelDropdown()
-        {
-            bool show = _modelDropdown.resolvedStyle.display == DisplayStyle.None;
-            _modelDropdown.ToggleDisplayStyle(show);
-        }
-
         private void ToggleExpanded()
         {
             _isExpanded = !_isExpanded;
@@ -265,10 +250,13 @@ namespace Timberbot
             string model = _modelField.value;
             if (string.IsNullOrWhiteSpace(model)) model = null;
 
+            string effort = _effortField.value;
+            if (string.IsNullOrWhiteSpace(effort)) effort = null;
+
             string goal = _goalField.value;
 
-            agent.Start(binary, model, 120, goal);
-            TimberbotLog.Info($"panel: started agent binary={binary} model={model ?? "default"}");
+            agent.Start(binary, model, effort, 120, goal);
+            TimberbotLog.Info($"panel: started agent binary={binary} model={model ?? "default"} effort={effort ?? "default"}");
         }
 
         private void OnStopClicked()
@@ -277,17 +265,70 @@ namespace Timberbot
             TimberbotLog.Info("panel: stopped agent");
         }
 
+        // --- dropdown helper ---
+
+        private static VisualElement MakeDropdownRow(string label, TextField field, VisualElement dropdown)
+        {
+            var row = MakeFieldRow(label, field);
+
+            var btn = new NineSliceButton { text = "v" };
+            btn.AddToClassList("button-game");
+            btn.style.width = 22;
+            btn.style.height = 22;
+            btn.style.paddingLeft = 0;
+            btn.style.paddingRight = 0;
+            btn.style.paddingTop = 0;
+            btn.style.paddingBottom = 0;
+            btn.style.marginLeft = 2;
+            btn.clicked += () =>
+            {
+                bool show = dropdown.resolvedStyle.display == DisplayStyle.None;
+                dropdown.ToggleDisplayStyle(show);
+            };
+            row.Add(btn);
+
+            return row;
+        }
+
+        private static VisualElement MakeDropdownPopup(string[][] choices, TextField target)
+        {
+            var popup = new NineSliceVisualElement();
+            popup.AddToClassList("bg-sub-box--green");
+            popup.style.paddingTop = 4;
+            popup.style.paddingBottom = 4;
+            popup.style.paddingLeft = 4;
+            popup.style.paddingRight = 4;
+            popup.ToggleDisplayStyle(false);
+
+            foreach (var choice in choices)
+            {
+                var value = choice[0];
+                var label = choice[1];
+                var item = new NineSliceButton { text = label };
+                item.AddToClassList("button-game");
+                item.AddToClassList("game-text-normal");
+                item.style.height = 22;
+                item.style.marginBottom = 1;
+                item.style.paddingLeft = 6;
+                item.clicked += () => { target.value = value; popup.ToggleDisplayStyle(false); };
+                popup.Add(item);
+            }
+
+            return popup;
+        }
+
+        // --- shared helpers ---
+
         private static string FormatStatus(TimberbotAgent agent)
         {
-            var status = agent.CurrentStatus;
-            switch (status)
+            switch (agent.CurrentStatus)
             {
                 case AgentStatus.Idle: return "Idle";
                 case AgentStatus.Done: return "Done";
                 case AgentStatus.Error: return "Error";
                 case AgentStatus.GatheringState: return "Loading...";
                 case AgentStatus.Interactive: return "Interactive";
-                default: return status.ToString();
+                default: return agent.CurrentStatus.ToString();
             }
         }
 
@@ -295,6 +336,16 @@ namespace Timberbot
         {
             if (string.IsNullOrEmpty(s)) return "(none)";
             return s.Length <= max ? s : s.Substring(0, max) + "...";
+        }
+
+        private static VisualElement MakeSeparator()
+        {
+            var sep = new VisualElement();
+            sep.style.height = 1;
+            sep.style.backgroundColor = new Color(0.4f, 0.36f, 0.28f);
+            sep.style.marginTop = 4;
+            sep.style.marginBottom = 4;
+            return sep;
         }
 
         private static NineSliceLabel MakeLabel(string text)
