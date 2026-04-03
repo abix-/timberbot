@@ -41,22 +41,20 @@ namespace Timberbot
         private float _lastUpdate;
         private bool _isExpanded;
 
+        // sorted most expensive to cheapest; $$$$ = ~$15/$75, $$$ = ~$3/$15, $ = ~$0.80/$4 per M in/out tokens
         private static readonly string[][] ModelChoices = new[]
         {
-            // aliases (latest of each tier)
-            new[] { "sonnet", "sonnet - balanced (latest)" },
-            new[] { "opus", "opus - smartest, slow (latest)" },
-            new[] { "haiku", "haiku - fast, cheap (latest)" },
-            // current generation
-            new[] { "claude-sonnet-4-6", "sonnet 4.6 - current best value" },
-            new[] { "claude-sonnet-4-5", "sonnet 4.5" },
-            new[] { "claude-opus-4-6", "opus 4.6 - strongest model" },
-            new[] { "claude-opus-4-5", "opus 4.5" },
-            new[] { "claude-opus-4-1", "opus 4.1" },
-            new[] { "claude-haiku-4-5", "haiku 4.5 - cheapest viable" },
-            // older
-            new[] { "claude-sonnet-3-7", "sonnet 3.7 - older" },
-            new[] { "claude-haiku-3-5", "haiku 3.5 - older, very cheap" },
+            new[] { "opus", "opus (latest) - smartest, slow $$$$" },
+            new[] { "claude-opus-4-6", "opus 4.6 - strongest model $$$$" },
+            new[] { "claude-opus-4-5", "opus 4.5 $$$$" },
+            new[] { "claude-opus-4-1", "opus 4.1 $$$$" },
+            new[] { "sonnet", "sonnet (latest) - balanced $$$" },
+            new[] { "claude-sonnet-4-6", "sonnet 4.6 - best value $$$" },
+            new[] { "claude-sonnet-4-5", "sonnet 4.5 $$$" },
+            new[] { "claude-sonnet-3-7", "sonnet 3.7 - older $$" },
+            new[] { "haiku", "haiku (latest) - fast, light $" },
+            new[] { "claude-haiku-4-5", "haiku 4.5 $" },
+            new[] { "claude-haiku-3-5", "haiku 3.5 - older $" },
         };
 
         private static readonly string[][] EffortChoices = new[]
