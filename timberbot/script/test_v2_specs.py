@@ -1,6 +1,6 @@
 """Test specifications for test_v2.py.
 
-Each EndpointSpec declares the capabilities of an API endpoint -- whether it
+Each EndpointSpec declares the capabilities of an API endpoint. whether it
 supports toon/json format, pagination, filtering, detail levels, etc. The test
 harness uses these specs to auto-generate test cases: it knows which endpoints
 to test with ?format=json, which to test with limit/offset, which to blast

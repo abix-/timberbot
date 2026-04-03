@@ -2,7 +2,7 @@
 
 **Full read/write HTTP API for controlling Timberborn with AI.**
 
-Timberbot API gives Claude, Codex, ChatGPT, or your own scripts complete access to your beaver colony over HTTP -- read game state, place buildings, manage workers, plant crops, and keep your beavers alive.
+Timberbot API gives Claude, Codex, ChatGPT, or your own scripts complete access to your beaver colony over HTTP. read game state, place buildings, manage workers, plant crops, and keep your beavers alive.
 
 ---
 
@@ -48,7 +48,7 @@ Start a game (or load a save). Open a browser to:
 http://localhost:8085/api/ping
 ```
 
-You should see `{"status": "ok", "ready": true}`. The API is only active while a game is loaded -- it won't respond from the main menu.
+You should see `{"status": "ok", "ready": true}`. The API is only active while a game is loaded. it won't respond from the main menu.
 
 ## Preferred AI workflow: in-game Timberbot UI
 
@@ -88,7 +88,7 @@ Add the script directory to your system PATH so you can run `timberbot.py` from 
 1. Add the folder containing `timberbot.py` to your **PATH** environment variable.
    Windows Steam example: `C:\Users\<you>\Documents\Timberborn\Mods\Timberbot`
    macOS example: `~/Documents/Timberborn/Mods/Timberbot`
-2. Add `.PY` to your **PATHEXT** environment variable if it isn't already -- this tells Windows to treat `.py` files as executable without needing to type `python` first
+2. Add `.PY` to your **PATHEXT** environment variable if it isn't already. this tells Windows to treat `.py` files as executable without needing to type `python` first
 
 ```powershell
 # check if .PY is already in PATHEXT
@@ -157,7 +157,7 @@ timberbot.py map x1:110 y1:130 x2:130 y2:150
 timberbot.py top
 ```
 
-Live colony dashboard. Population, resources, weather, drought countdown, wellbeing breakdown, alerts -- all updating in real time.
+Live colony dashboard. Population, resources, weather, drought countdown, wellbeing breakdown, alerts. all updating in real time.
 
 ### Write commands
 
@@ -264,9 +264,9 @@ Some runtime settings are applied on load, so changing them may require reloadin
 
 ---
 
-- [API Reference](api-reference.md) -- every endpoint with request/response examples
-- [Timberbot Guide](timberbot.md) -- full operating guide for gameplay and AI behavior
-- [Features](features.md) -- what's implemented vs gaps
-- [Developing](developing.md) -- build from source
+- [API Reference](api-reference.md). every endpoint with request/response examples
+- [Timberbot Guide](timberbot.md). full operating guide for gameplay and AI behavior
+- [Features](features.md). what's implemented vs gaps
+- [Developing](developing.md). build from source
 
 

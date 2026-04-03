@@ -1,4 +1,4 @@
-# A* Path Building with Stair Placement -- Current State
+# A* Path Building with Stair Placement. Current State
 
 ## What we're building
 
@@ -270,9 +270,9 @@ Keep single-case directional tests, and stop using `placed.paths` as a proxy for
 ## Key files
 
 - `timberbot/src/TimberbotPlacement.cs`
-  - `RoutePath()` -- route emission and connector placement
-  - `BuildCostGrid()` -- connector generation and edge costs
-  - `AStarPath()` -- safe A* search core
+  - `RoutePath()`. route emission and connector placement
+  - `BuildCostGrid()`. connector generation and edge costs
+  - `AStarPath()`. safe A* search core
 - `timberbot/script/test_validation.py`
   - 1z / 2z / diagonal / obstacle validation
 - `timberbot/script/timberbot.py`
@@ -280,7 +280,7 @@ Keep single-case directional tests, and stop using `placed.paths` as a proxy for
 
 ## Research sources
 
-- [Unity multi-level pathfinding](https://forum.unity.com/threads/multi-level-height-pathfinding.373728/) -- model level connections as portal edges
-- [Red Blob Games grid algorithms](https://www.redblobgames.com/pathfinding/grids/algorithms.html) -- edge-based costs and admissible heuristics
-- [Red Blob Games A* introduction](https://www.redblobgames.com/pathfinding/a-star/introduction.html) -- `g`, `h`, `f`, and lower-bound heuristics
-- [A* 3D grid pathfinding](https://answers.unity.com/questions/1096235/using-stairs-in-3d-grid-based-pathfinding-a.html) -- stairs as graph edges
+- [Unity multi-level pathfinding](https://forum.unity.com/threads/multi-level-height-pathfinding.373728/). model level connections as portal edges
+- [Red Blob Games grid algorithms](https://www.redblobgames.com/pathfinding/grids/algorithms.html). edge-based costs and admissible heuristics
+- [Red Blob Games A* introduction](https://www.redblobgames.com/pathfinding/a-star/introduction.html). `g`, `h`, `f`, and lower-bound heuristics
+- [A* 3D grid pathfinding](https://answers.unity.com/questions/1096235/using-stairs-in-3d-grid-based-pathfinding-a.html). stairs as graph edges

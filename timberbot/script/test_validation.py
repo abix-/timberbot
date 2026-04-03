@@ -1324,7 +1324,7 @@ class TestRunner:
                 existing.add((bx, by, bz))
 
     def _path_place_and_check(self, label, x1, y1, x2, y2, expect_stairs=False, expect_platforms=False):
-        """place a path and verify results -- no cleanup, paths stay for visual inspection"""
+        """place a path and verify results. no cleanup, paths stay for visual inspection"""
         result = self.bot.place_path(x1, y1, x2, y2)
         placed = result.get("placed", {}) if isinstance(result, dict) else {}
         errs = str(result.get("errors", ""))
@@ -1509,7 +1509,7 @@ class TestRunner:
     def test_path_astar_no_route(self):
         """A* returns error or no paths when coords are out of bounds."""
         print("\n=== path routing: A* no route ===\n")
-        # coords well beyond map bounds -- A* grid won't contain valid tiles
+        # coords well beyond map bounds. A* grid won't contain valid tiles
         mx, my = self.map_x + 50, self.map_y + 50
         result = self.bot.place_path(mx, my, mx + 5, my)
         no_route = (self.err(result)
@@ -1522,7 +1522,7 @@ class TestRunner:
     def test_path_sections(self):
         """Verify sections param stops path placement after N connector crossings."""
         print("\n=== path routing: sections limit ===\n")
-        # route a long diagonal path with sections=1 -- should stop after first connector
+        # route a long diagonal path with sections=1. should stop after first connector
         x1, y1 = 0, 0
         x2, y2 = self.map_x - 1, self.map_y - 1
         result = self.bot.place_path(x1, y1, x2, y2, sections=1)
@@ -1587,7 +1587,7 @@ class TestRunner:
             self.skip("blocker placement", "no ruin tiles found to test placement against")
             return
 
-        # try placing on a ruin tile -- should fail with a named blocker, not "unknown"
+        # try placing on a ruin tile. should fail with a named blocker, not "unknown"
         rx, ry, rname = ruin_tiles[0]
         path_prefab = "Path"
         tz = 0
@@ -1607,15 +1607,15 @@ class TestRunner:
                        "unknown" not in err_msg,
                        err_msg[:120])
         else:
-            # placement succeeded (ruin might be overridable) -- that's fine, not a failure
+            # placement succeeded (ruin might be overridable). that's fine, not a failure
             self.check("blockers: placement on ruin tile", True,
                        "placement succeeded (ruin may be overridable)")
 
     def test_overridable_placement(self):
         print("\n=== overridable placement ===\n")
 
-        # find a non-overridable tree (dead standing or alive) -- should block placement
-        # find an overridable entity (empty cut stump) -- should allow placement
+        # find a non-overridable tree (dead standing or alive). should block placement
+        # find an overridable entity (empty cut stump). should allow placement
         # use debug to check BlockObject.Overridable on each
 
         trees = self.bot.trees(limit=500)
@@ -1758,7 +1758,7 @@ class TestRunner:
                        result["remaining"] == expected,
                        f"expected {expected}, got {result['remaining']}")
 
-        # try unlocking same building again -- should say already unlocked, no point change
+        # try unlocking same building again. should say already unlocked, no point change
         points_after = result.get("remaining", 0)
         result2 = self.bot.unlock_building(target["name"])
         self.check("already unlocked returns note",
@@ -1807,7 +1807,7 @@ class TestRunner:
             self.skip("recipe", "no lumber mill found")
             return
 
-        # set recipe -- use invalid name first to see what's available
+        # set recipe. use invalid name first to see what's available
         result = self.bot.set_recipe(mid, "InvalidRecipe")
         self.check("invalid recipe returns error",
                    self.err(result),
@@ -1971,7 +1971,7 @@ class TestRunner:
         dc_id = self.find_building("DistrictCenter")
         if dc_id:
             dc_result = self.bot.building_range(dc_id)
-            # DC may or may not have range -- just check no crash
+            # DC may or may not have range. just check no crash
             self.check("range on DC no crash", not self.err(dc_result) or "invalid_type" in str(dc_result.get("error", "")),
                        json.dumps(dc_result)[:100])
 
@@ -3380,7 +3380,7 @@ class TestRunner:
         for b in items:
             # buildings in full detail have maxDwellers, dwellers, assignedWorkers, desiredWorkers
             bname = b.get("name", "")
-            # skip paths -- they have no district relevance for housing/employment
+            # skip paths. they have no district relevance for housing/employment
             if bname == "Path":
                 continue
             max_d = b.get("maxDwellers", 0)
@@ -3639,13 +3639,13 @@ class TestRunner:
         # ensure brain exists first
         self._subprocess_time(["brain"])
 
-        # ping (baseline -- python startup + minimal HTTP)
+        # ping (baseline. python startup + minimal HTTP)
         ping_times, _, _ = self._bench_subprocess("ping", ["ping"], iterations)
         # summary
         summary_times, _, _ = self._bench_subprocess("summary", ["summary"], iterations)
         # brain cached
         cached_times, _, _ = self._bench_subprocess("brain (cached)", ["brain"], iterations)
-        # brain fresh x5 -- wipe settlement dir contents
+        # brain fresh x5. wipe settlement dir contents
         # _MEMORY_DIR may be base or settlement-specific; find the actual settlement dir
         settlement_dir = _tb._MEMORY_DIR
         if settlement_dir == _tb._MEMORY_BASE:

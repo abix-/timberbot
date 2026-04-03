@@ -1702,7 +1702,7 @@ Find valid planting spots in an area or within a building's work range.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | crop | string | yes | Crop name (Kohlrabi, Pine, Birch, etc.) |
-| id | int | no | Farmhouse/forester ID -- returns spots within building range |
+| id | int | no | Farmhouse/forester ID. returns spots within building range |
 | x1, y1, x2, y2, z | int | no | Area scan (used when id is 0) |
 
 #### Response
@@ -1769,7 +1769,7 @@ Route a path from point A to point B using A* pathfinding over a 3D surface grap
 {"placed": {"paths": 12, "stairs": 1}, "skipped": 0, "connectorEdgesInGrid": 4}
 ```
 
-#### Response (partial -- stopped by sections or error)
+#### Response (partial. stopped by sections or error)
 
 ```json
 {"placed": {"paths": 8, "stairs": 1}, "skipped": 0, "connectorEdgesInGrid": 4, "stoppedAt": "130,142", "errors": [{"error": "stair failed at (130,142,3)"}]}
@@ -1884,7 +1884,7 @@ Reflection-based inspector for game internals. Navigates object graphs, lists fi
 
 ```json
 {
-  "targets": ["help -- this message", "get -- navigate object chain", "fields -- list members", "call -- call method"],
+  "targets": ["help. this message", "get. navigate object chain", "fields. list members", "call. call method"],
   "roots": ["_buildingService", "_entityRegistry", "_districtCenterRegistry", "_navMeshService", "..."],
   "examples": [
     "debug target:fields path:_navMeshService filter:Road",
@@ -2051,7 +2051,7 @@ timberbot.py list_tasks       # show all tasks
 timberbot.py clear_tasks      # remove done tasks
 ```
 
-`brain` returns live summary (always fresh from `/api/summary`) plus persistent state from `memory/brain.toon` (goal, tasks, locations). Summary is never persisted -- only goal, tasks, and locations survive between sessions. Set a persistent goal with `brain goal:"text"`. The built-in in-game agent also uses `brain` internally during startup before it launches Claude/Codex.
+`brain` returns live summary (always fresh from `/api/summary`) plus persistent state from `memory/brain.toon` (goal, tasks, locations). Summary is never persisted. only goal, tasks, and locations survive between sessions. Set a persistent goal with `brain goal:"text"`. The built-in in-game agent also uses `brain` internally during startup before it launches Claude/Codex.
 
 ---
 
@@ -2059,7 +2059,7 @@ timberbot.py clear_tasks      # remove done tasks
 
 ### IDs and Names
 
-- **Building IDs** are Unity `GameObject.GetInstanceID()` -- ephemeral, change every game session. Get current IDs from `GET /api/buildings`.
+- **Building IDs** are Unity `GameObject.GetInstanceID()`. ephemeral, change every game session. Get current IDs from `GET /api/buildings`.
 - **Prefab names** come from `GET /api/prefabs`. Include faction suffix (e.g. `"LumberjackFlag.IronTeeth"`).
 - **Good names** match Timberborn internal names: `Water`, `Log`, `Plank`, `Berries`, `Bread`, etc.
 - **Building names** in responses are cleaned: `(Clone)`, `.IronTeeth`, `.Folktails` suffixes removed.
@@ -2104,6 +2104,6 @@ Coordinates always refer to the bottom-left corner of the footprint regardless o
 !!! bug "Ghost Buildings"
     `POST /api/building/place` may create ghost buildings on invalid spots. The `Place()` callback fires and creates an entity even when placement is invalid. Python-side validation blocks most cases, but multi-tile overlaps or bad terrain can still ghost.
 
-    **Never test placement carelessly** -- every failed `Place()` may create a ghost that needs manual cleanup.
+    **Never test placement carelessly**. every failed `Place()` may create a ghost that needs manual cleanup.
 
 

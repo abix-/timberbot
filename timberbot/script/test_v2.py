@@ -5,12 +5,12 @@ Validates the live /api/* surface against a running game. Requires Timberborn
 running with the Timberbot mod loaded. Works on any save game, any faction.
 
 Test modes:
-    smoke        -- hit every GET endpoint, verify shapes and status codes
-    freshness    -- verify snapshots update after game state changes
-    write_to_read -- POST a change, GET to confirm, restore, GET to confirm restore
-    performance  -- measure latency across all endpoints (use -n for iterations)
-    concurrency  -- blast endpoints from multiple threads, verify no crashes
-    all          -- run every mode
+    smoke       . hit every GET endpoint, verify shapes and status codes
+    freshness   . verify snapshots update after game state changes
+    write_to_read. POST a change, GET to confirm, restore, GET to confirm restore
+    performance . measure latency across all endpoints (use -n for iterations)
+    concurrency . blast endpoints from multiple threads, verify no crashes
+    all         . run every mode
 
 Usage:
     python test_v2.py smoke
@@ -261,7 +261,7 @@ class V2Runner:
             self.skipped += 1
         line = f"  {status:<4} {name}"
         if detail and status != "PASS":
-            line += f" -- {detail}"
+            line += f". {detail}"
         self._write_line(line, echo_error=(status == "FAIL"))
 
     def discover(self) -> DiscoveryState:

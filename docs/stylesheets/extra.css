@@ -4,7 +4,7 @@
    Inspired by the in-game UI: timber planks + brass fixtures
    ============================================================ */
 
-/* -- palette overrides (dark mode = primary experience) -- */
+/*. palette overrides (dark mode = primary experience). */
 
 [data-md-color-scheme="slate"] {
   /* backgrounds: dark wood tones */
@@ -48,7 +48,7 @@
   --md-footer-fg-color--lighter: #887858;
 }
 
-/* -- header: dark timber beam -- */
+/*. header: dark timber beam. */
 
 [data-md-color-scheme="slate"] .md-header {
   background: linear-gradient(180deg, #1a1208 0%, #221810 100%);
@@ -61,7 +61,7 @@
   font-weight: 700;
 }
 
-/* -- navigation sidebar: wood panel -- */
+/*. navigation sidebar: wood panel. */
 
 [data-md-color-scheme="slate"] .md-sidebar {
   background-color: #1a1208;
@@ -86,7 +86,7 @@
   color: #f0a820;
 }
 
-/* -- search bar -- */
+/*. search bar. */
 
 [data-md-color-scheme="slate"] .md-search__input {
   background-color: #2a1f14;
@@ -98,7 +98,7 @@
   color: #887858;
 }
 
-/* -- content area -- */
+/*. content area. */
 
 [data-md-color-scheme="slate"] .md-content {
   background-color: #1e1610;
@@ -130,7 +130,7 @@
   color: #f0c860;
 }
 
-/* -- code blocks: dark heartwood -- */
+/*. code blocks: dark heartwood. */
 
 [data-md-color-scheme="slate"] .md-typeset pre {
   background-color: #120e0a;
@@ -161,7 +161,7 @@
   color: #f0a820;
 }
 
-/* -- tables: plank rows -- */
+/*. tables: plank rows. */
 
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) {
   border: 1px solid #3d2b1a;
@@ -188,7 +188,7 @@
   background-color: rgba(200, 136, 48, 0.08);
 }
 
-/* -- admonitions: timber panels with colored trim -- */
+/*. admonitions: timber panels with colored trim. */
 
 [data-md-color-scheme="slate"] .md-typeset .admonition,
 [data-md-color-scheme="slate"] .md-typeset details {
@@ -238,7 +238,7 @@
   border-color: #c88830;
 }
 
-/* -- tabs: brass fixtures -- */
+/*. tabs: brass fixtures. */
 
 [data-md-color-scheme="slate"] .md-typeset .tabbed-labels > label {
   color: #a89878;
@@ -254,19 +254,19 @@
   border-bottom-color: #f0a820;
 }
 
-/* -- horizontal rules: plank divider -- */
+/*. horizontal rules: plank divider. */
 
 [data-md-color-scheme="slate"] .md-typeset hr {
   border-color: #3d2b1a;
 }
 
-/* -- footer: dark base -- */
+/*. footer: dark base. */
 
 [data-md-color-scheme="slate"] .md-footer {
   border-top: 2px solid #3d2b1a;
 }
 
-/* -- scrollbar: timber -- */
+/*. scrollbar: timber. */
 
 [data-md-color-scheme="slate"] ::-webkit-scrollbar {
   width: 8px;
@@ -285,7 +285,7 @@
   background: #5c3d24;
 }
 
-/* -- back to top button -- */
+/*. back to top button. */
 
 [data-md-color-scheme="slate"] .md-top {
   background-color: #3d2b1a;

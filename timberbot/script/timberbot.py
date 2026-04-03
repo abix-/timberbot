@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Timberbot -- control Timberborn over HTTP.
+"""Timberbot. control Timberborn over HTTP.
 
 CLI for the Timberbot API (port 8085). Talks to the C# mod running inside the game.
 The API does all data processing; this client is a thin wrapper that formats output.
@@ -159,7 +159,7 @@ class Timberbot:
         r.raise_for_status()
         return self._check(r.json())
 
-    # -- connection --
+    #. connection --
 
     def ping(self):
         """True if Timberbot mod is reachable."""
@@ -168,7 +168,7 @@ class Timberbot:
         except (requests.ConnectionError, requests.Timeout):
             return False
 
-    # -- webhooks --
+    #. webhooks --
 
     def register_webhook(self, url, events=None):
         """Register a webhook URL to receive push notifications for game events.
@@ -188,7 +188,7 @@ class Timberbot:
         """List all registered webhooks."""
         return self._get("/api/webhooks")
 
-    # -- read state (nouns) --
+    #. read state (nouns) --
 
     def summary(self):
         """Full snapshot: time + weather + districts with resources and population."""
@@ -315,7 +315,7 @@ class Timberbot:
         """Tile data for a region: terrain, water, occupants, moisture, contamination. No args = map size only."""
         return self._get("/api/tiles", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
 
-    # -- write actions (verb_noun) --
+    #. write actions (verb_noun) --
 
     def set_speed(self, speed):
         """Set game speed. 0=pause, 1=normal, 2=fast, 3=fastest."""
@@ -436,7 +436,7 @@ class Timberbot:
         if timings: body["timings"] = True
         return self._post("/api/path/place", body)
 
-    # -- helpers --
+    #. helpers --
 
     def tree_clusters(self):
         """Find clusters of grown trees. Returns top clusters by grown count."""
@@ -1116,7 +1116,7 @@ def _top_render(summary, wellbeing_data=None, trees_data=None, crops_data=None, 
         r = alert_lines[i] if i < len(alert_lines) else ""
         print(_row(l, r))
 
-    # trees section -- prefer per-species from summary, fall back to full trees_data
+    # trees section. prefer per-species from summary, fall back to full trees_data
     trees_obj = summary.get("trees", {})
     tree_species = trees_obj.get("species", []) if isinstance(trees_obj, dict) else []
     if tree_species:
@@ -1158,7 +1158,7 @@ def _top_render(summary, wellbeing_data=None, trees_data=None, crops_data=None, 
             r = tree_right[i] if i < len(tree_right) else ""
             print(_row(l, r))
 
-    # crops section -- prefer per-species from summary, fall back to full crops_data
+    # crops section. prefer per-species from summary, fall back to full crops_data
     crops_obj = summary.get("crops", {})
     crop_species = crops_obj.get("species", []) if isinstance(crops_obj, dict) else []
     if crop_species:
@@ -1368,7 +1368,7 @@ def _manage():
         print(f"  {_RED}cannot reach Timberbot on port 8085{_RST}")
         sys.exit(1)
 
-    print(f"  {_BOLD}{_BMAG}timberbot manage{_RST}  {_DIM}keeping 1-4 idle haulers -- ctrl+c to stop{_RST}\n")
+    print(f"  {_BOLD}{_BMAG}timberbot manage{_RST}  {_DIM}keeping 1-4 idle haulers. ctrl+c to stop{_RST}\n")
 
     # track what we paused so we unpause in reverse order
     paused_by_us = []
@@ -1597,7 +1597,7 @@ def _launch(args):
     except Exception:
         pass
 
-    # launch via Steam -- try direct exe first, fall back to protocol handler
+    # launch via Steam. try direct exe first, fall back to protocol handler
     print(f"  {_BOLD}launching{_RST} {settlement} / {save_name}")
     steam_exe = r"C:\Games\Steam\steam.exe"
     if os.path.exists(steam_exe):
@@ -1637,7 +1637,7 @@ def _launch(args):
         except Exception:
             time.sleep(3)
 
-    print(f"  {_RED}timeout after {timeout}s -- game may still be loading{_RST}", file=sys.stderr)
+    print(f"  {_RED}timeout after {timeout}s. game may still be loading{_RST}", file=sys.stderr)
     sys.exit(1)
 
 

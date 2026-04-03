@@ -6,17 +6,17 @@ How Timberbot works internally. For migration history, see [`fresh-on-request-sn
 
 The mod has one read stack and one write stack:
 
-- read: [`TimberbotReadV2`](../timberbot/src/TimberbotReadV2.cs) -- all GET endpoints, projection snapshots
-- write: [`TimberbotWrite`](../timberbot/src/TimberbotWrite.cs) -- all POST mutations
-- entity lookup: [`TimberbotEntityRegistry`](../timberbot/src/TimberbotEntityRegistry.cs) -- GUID/numeric ID bridge
-- placement: [`TimberbotPlacement`](../timberbot/src/TimberbotPlacement.cs) -- building placement, A* path routing
-- HTTP: [`TimberbotHttpServer`](../timberbot/src/TimberbotHttpServer.cs) -- background listener, routing
-- webhooks: [`TimberbotWebhook`](../timberbot/src/TimberbotWebhook.cs) -- batched push notifications
-- debug: [`TimberbotDebug`](../timberbot/src/TimberbotDebug.cs) -- reflection inspector, benchmark
-- agent: [`TimberbotAgent`](../timberbot/src/TimberbotAgent.cs) -- interactive Claude/Codex/custom-binary launcher
-- UI: [`TimberbotPanel`](../timberbot/src/TimberbotPanel.cs) -- movable in-game widget + centered settings modal
-- orchestrator: [`TimberbotService`](../timberbot/src/TimberbotService.cs) -- lifecycle, settings, per-frame dispatch
-- write jobs: [`ITimberbotWriteJob`](../timberbot/src/ITimberbotWriteJob.cs) -- budgeted write execution
+- read: [`TimberbotReadV2`](../timberbot/src/TimberbotReadV2.cs). all GET endpoints, projection snapshots
+- write: [`TimberbotWrite`](../timberbot/src/TimberbotWrite.cs). all POST mutations
+- entity lookup: [`TimberbotEntityRegistry`](../timberbot/src/TimberbotEntityRegistry.cs). GUID/numeric ID bridge
+- placement: [`TimberbotPlacement`](../timberbot/src/TimberbotPlacement.cs). building placement, A* path routing
+- HTTP: [`TimberbotHttpServer`](../timberbot/src/TimberbotHttpServer.cs). background listener, routing
+- webhooks: [`TimberbotWebhook`](../timberbot/src/TimberbotWebhook.cs). batched push notifications
+- debug: [`TimberbotDebug`](../timberbot/src/TimberbotDebug.cs). reflection inspector, benchmark
+- agent: [`TimberbotAgent`](../timberbot/src/TimberbotAgent.cs). interactive Claude/Codex/custom-binary launcher
+- UI: [`TimberbotPanel`](../timberbot/src/TimberbotPanel.cs). movable in-game widget + centered settings modal
+- orchestrator: [`TimberbotService`](../timberbot/src/TimberbotService.cs). lifecycle, settings, per-frame dispatch
+- write jobs: [`ITimberbotWriteJob`](../timberbot/src/ITimberbotWriteJob.cs). budgeted write execution
 
 ## Thread model
 
@@ -211,11 +211,11 @@ Write flow:
 
 [`TimberbotPlacement`](../timberbot/src/TimberbotPlacement.cs) handles:
 
-- `find_placement` -- search region for valid building spots with reachability/power/flood scoring
-- `place_building` -- origin-correct, validate via `PreviewFactory`, place via `BlockObjectPlacerService`
+- `find_placement`. search region for valid building spots with reachability/power/flood scoring
+- `place_building`. origin-correct, validate via `PreviewFactory`, place via `BlockObjectPlacerService`
 - `demolish_building` / `demolish_crop`
-- `route_path` -- A* pathfinding with auto-stairs across z-levels, budgeted execution via `RoutePathJob`
-- `collect_prefabs` -- list building templates
+- `route_path`. A* pathfinding with auto-stairs across z-levels, budgeted execution via `RoutePathJob`
+- `collect_prefabs`. list building templates
 
 ## TimberbotWebhook
 
@@ -269,7 +269,7 @@ The read contract:
 - a GET may wait across one or more frames for the next publish
 - the returned data is fresh as of the frame that serviced the request
 - concurrent readers coalesce onto shared publishes
-- there is no cadence-driven refresh -- snapshots publish only when readers need them
+- there is no cadence-driven refresh. snapshots publish only when readers need them
 - `ProcessPendingRefresh()` is a bounded capture scheduler, not a periodic loop
 - expensive finalize/publish work runs on `ReadV2`'s dedicated background thread
 
@@ -342,8 +342,8 @@ Major writers: `ReadV2` (main + science/distribution builders), `Write`, `Placem
 
 `/api/tiles` reads from:
 
-- `IThreadSafeWaterMap` -- water depth and contamination
-- `IThreadSafeColumnTerrainMap` -- terrain height
+- `IThreadSafeWaterMap`. water depth and contamination
+- `IThreadSafeColumnTerrainMap`. terrain height
 - safe-wrapped `ISoilContaminationService` / `ISoilMoistureService`
 - published building/resource snapshots for occupant data
 - field-level reusable occupant lists (cleared-in-place per request)
@@ -421,7 +421,7 @@ Modes: `smoke`, `freshness`, `write_to_read`, `performance`, `concurrency`, `all
 
 ## Related docs
 
-- [`fresh-on-request-snapshots.md`](fresh-on-request-snapshots.md) -- migration rationale and validation history
-- [`thread-safe-surfaces.md`](thread-safe-surfaces.md) -- Timberborn thread-safety guidance
-- [`developing.md`](developing.md) -- build, test, file structure
-- [`performance.md`](performance.md) -- allocation audit, benchmarks, open issues
+- [`fresh-on-request-snapshots.md`](fresh-on-request-snapshots.md). migration rationale and validation history
+- [`thread-safe-surfaces.md`](thread-safe-surfaces.md). Timberborn thread-safety guidance
+- [`developing.md`](developing.md). build, test, file structure
+- [`performance.md`](performance.md). allocation audit, benchmarks, open issues

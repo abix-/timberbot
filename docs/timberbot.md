@@ -18,12 +18,12 @@ Read this first. Use the other docs only when needed:
 
 On the first invocation of `/timberbot` per session, complete `Boot`, then `Brain`, in order. The boot report is not a game action. It proves that you loaded the guide before making changes.
 
-### Boot (rules confirmation -- NO API calls)
+### Boot (rules confirmation. NO API calls)
 
-`timberbot.py` is on PATH. Run it directly -- never use `python` prefix, never `cd` anywhere.
+`timberbot.py` is on PATH. Run it directly. never use `python` prefix, never `cd` anywhere.
 
 1. Read this entire guide top to bottom before calling any game APIs.
-2. Read `api-reference.md` top to bottom. Once in context, use it from context -- do not re-read it.
+2. Read `api-reference.md` top to bottom. Once in context, use it from context. do not re-read it.
 3. Immediately print this boot report in markdown. Replace every placeholder yourself. Use lowercase throughout:
 
 ```md
@@ -40,7 +40,7 @@ On the first invocation of `/timberbot` per session, complete `Boot`, then `Brai
 - **crops** `<required crop planning method>`
 - **mutations** `<mutation execution rule>`
 - **path root** `<what path distance is measured from>`
-- **prefabs** `<prefab naming rule -- include the lookup requirement>`
+- **prefabs** `<prefab naming rule. include the lookup requirement>`
 - **power** `<power routing rule>`
 - **errors** `<error format rule>`
 - **remote** `<remote connection rule>`
@@ -50,15 +50,15 @@ On the first invocation of `/timberbot` per session, complete `Boot`, then `Brai
 
 If boot is `PASSED`, continue immediately to `Brain`.
 If any doc is `MISSING`, any placeholder is left blank, or any fact cannot be stated, boot is `FAILED`. Report the issue, ask the user for guidance, and do not make any game API calls.
-### Brain (pre-loaded -- do NOT call brain again)
+### Brain (pre-loaded. do NOT call brain again)
 
-Colony state was already gathered and injected into your system prompt before this session started. Look for the `## CURRENT COLONY STATE` section in your context. Do NOT run `timberbot.py brain` -- it was already run for you.
+Colony state was already gathered and injected into your system prompt before this session started. Look for the `## CURRENT COLONY STATE` section in your context. Do NOT run `timberbot.py brain`. it was already run for you.
 
 3. Print this readout using the colony state from your system prompt:
 
 ```md
 > **settlement** `<name>` | `<faction>` | <"new" or "loaded">
-> **goal** `<goal text or "none -- awaiting orders">`
+> **goal** `<goal text or "none. awaiting orders">`
 >
 > **day** `<N>` | **speed** `<S>` | **weather** <temperate/drought> `<N>d` remain
 > **pop** `<adults>` adults, `<children>` children | **beds** `<occ>`/`<total>` | **workers** `<assigned>`/`<vacancies>`
@@ -369,12 +369,12 @@ Berries are a bridge to farming, not a long-term food plan.
 ### Water
 
 - Water is the top priority. Beavers die without water faster than without food. Place water pumps and route paths to them BEFORE placing other buildings. Other buildings placed near the water's edge consume waterfront tiles that pumps need.
-- Pumps must straddle the land/water edge. Waterfront tiles are limited and irreplaceable -- once a path or non-pump building occupies a waterfront tile, no pump can go there. Reserve waterfront tiles for pumps.
+- Pumps must straddle the land/water edge. Waterfront tiles are limited and irreplaceable. once a path or non-pump building occupies a waterfront tile, no pump can go there. Reserve waterfront tiles for pumps.
 - Place paths and non-water buildings away from the water's edge. Route paths around waterfront, not along it.
 - Folktails use `WaterPump.Folktails` or `LargeWaterPump.Folktails`.
 - Iron Teeth use `DeepWaterPump.IronTeeth`.
-- Run `find_placement` with the water pump prefab to discover all valid pump locations. Results with `waterDepth > 0` are waterfront tiles with water access. Use these positions for pumps -- they are the only tiles where pumps can function.
-- If valid pump positions are on the same z-level as the DC, prioritize those -- shorter haul distance for water delivery.
+- Run `find_placement` with the water pump prefab to discover all valid pump locations. Results with `waterDepth > 0` are waterfront tiles with water access. Use these positions for pumps. they are the only tiles where pumps can function.
+- If valid pump positions are on the same z-level as the DC, prioritize those. shorter haul distance for water delivery.
 - Rough rule: 2 pumps per 15 beavers, 3 pumps once you are above that and preparing for drought.
 - During drought, water is consumed but not produced; only stored water and aquifer drills help.
 

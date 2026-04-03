@@ -1,12 +1,12 @@
 # Fresh-on-Request Snapshots
 
-Historical design document for the migration from cadence-driven double buffer to demand-driven published snapshots. This migration is complete -- the fresh-on-request architecture is now the live implementation. See [`architecture.md`](architecture.md) for the current design.
+Historical design document for the migration from cadence-driven double buffer to demand-driven published snapshots. This migration is complete. the fresh-on-request architecture is now the live implementation. See [`architecture.md`](architecture.md) for the current design.
 
 Related:
 
-- [`architecture.md`](architecture.md) -- current architecture
-- [`thread-safe-surfaces.md`](thread-safe-surfaces.md) -- what Timberborn exposes as actually thread-safe
-- [`performance.md`](performance.md) -- benchmark baseline
+- [`architecture.md`](architecture.md). current architecture
+- [`thread-safe-surfaces.md`](thread-safe-surfaces.md). what Timberborn exposes as actually thread-safe
+- [`performance.md`](performance.md). benchmark baseline
 
 ## Current status
 

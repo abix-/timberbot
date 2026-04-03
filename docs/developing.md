@@ -217,7 +217,7 @@ Results include per-test GC0 count, ms/call, and pass/fail. See [performance.md]
 2. Launch Timberborn, open Mod Manager from main menu
 3. Find Timberbot API in your local mods, click the upload/publish button
 4. Accept Steam Workshop ToS on first upload
-5. A `workshop_data.json` is generated in your mods folder -- this links your local mod to the Workshop item ID
+5. A `workshop_data.json` is generated in your mods folder. this links your local mod to the Workshop item ID
 
 ### Updating
 

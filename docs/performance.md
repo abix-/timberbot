@@ -30,7 +30,7 @@ For thread model, snapshot pipeline, serialization, and reusable collections see
 
 ## GC pressure
 
-Every heap allocation in a Unity mod contributes to GC pressure. Unity uses a stop-the-world garbage collector -- when enough garbage accumulates, ALL threads pause (0.5-50ms). Our mod runs inside someone else's game. Every allocation we make adds to the pile that triggers the game's GC stutter.
+Every heap allocation in a Unity mod contributes to GC pressure. Unity uses a stop-the-world garbage collector. when enough garbage accumulates, ALL threads pause (0.5-50ms). Our mod runs inside someone else's game. Every allocation we make adds to the pile that triggers the game's GC stutter.
 
 Goal: allocate once at game load, reuse forever. The only per-request allocation should be the final `ToString()` to produce the HTTP response.
 
@@ -67,7 +67,7 @@ Total measured cost: ~0.4ms/sec (0.04% of frame budget at 60fps).
 | `NutrientStock.Clear()` + repopulate | 5 | Same pattern, only breeding pods |
 | `Needs.Clear()` + repopulate | 80 | List allocated once, reused via Clear() |
 | `new CachedNeed{...}` struct | 2400 | Struct = stack alloc, not heap |
-| Inventory for-loop (indexed) | 500 | `for (int ii = 0; ...)` -- no enumerator boxing |
+| Inventory for-loop (indexed) | 500 | `for (int ii = 0; ...)`. no enumerator boxing |
 | District refresh | 1-3 | Reuses existing CachedDistrict objects, clears Dict |
 | Snapshot publish | on demand | Immutable DTO snapshot replaces previous via ref swap |
 
@@ -88,7 +88,7 @@ Total measured cost: ~0.4ms/sec (0.04% of frame budget at 60fps).
 
 | What | Count | Why accepted |
 |---|---|---|
-| `jw.ToString()` | 1 per request, 100-500KB | Unavoidable -- HTTP needs the string |
+| `jw.ToString()` | 1 per request, 100-500KB | Unavoidable. HTTP needs the string |
 | `StreamWriter` internal buffer | 1 per request, ~1KB | .NET runtime |
 | `$"{interpolation}"` in toon endpoints | ~5 per summary | Negligible (low issues #12-14) |
 
@@ -106,7 +106,7 @@ Entity registration in `TimberbotEntityRegistry` + projection buffer slot alloca
 
 ### Serialization A/B test (trees, 2985 items)
 
-Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), StringBuilder **2.0ms** (winner).
+Dictionary 4.7ms, Anonymous objects 13.8ms (worst. Newtonsoft reflection), StringBuilder **2.0ms** (winner).
 
 ### Micro-benchmarks (10K iterations, /api/benchmark)
 
@@ -120,9 +120,9 @@ Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), Str
 | `Inventories.AllInventories.only` | **0** | 0.020 | 522,000 | Just accessing inventories |
 | `Inventories.FullRefreshSim` | **0** | 0.058 | 522,000 | Full production loop |
 | `MathRound.vs.Manual` | **0/0** | 0.010/0.005 | 11,400,000 | 1.8x slower, no alloc |
-| `StringInterpolation` | -- | -- | -- | #12-14: pending benchmark run |
-| `StringConcat.Needs` | -- | -- | -- | #15: pending benchmark run |
-| `GetBeaverNeeds` | -- | -- | -- | #20: pending benchmark run |
+| `StringInterpolation` | - | - | - | #12-14: pending benchmark run |
+| `StringConcat.Needs` | - | - | - | #15: pending benchmark run |
+| `GetBeaverNeeds` | - | - | - | #20: pending benchmark run |
 
 ### Endpoint performance (measured, 522 buildings / 2986 trees / 65 beavers)
 
@@ -145,7 +145,7 @@ Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), Str
 | `wellbeing` | 1 | **0.9** | cached beaver needs |
 | `tree_clusters` | 5 | **0.9** | cached natural resources |
 | `map` (stacking) | varies | ~10 | cached tile footprints |
-| **burst (7 calls)** | -- | **17** | 2ms avg per call |
+| **burst (7 calls)** | - | **17** | 2ms avg per call |
 
 ### Late-game projections
 
@@ -158,9 +158,9 @@ Dictionary 4.7ms, Anonymous objects 13.8ms (worst -- Newtonsoft reflection), Str
 | `beavers` | 65 | 16.9us | 250 | ~4ms |
 | `summary` | 3500+ | 0.26us | 10000 | ~3ms |
 | `map` (region) | varies | region-bounded | larger builds | ~20ms |
-| **Burst (7 calls)** | -- | -- | -- | **~30ms** |
+| **Burst (7 calls)** | - | - | - | **~30ms** |
 
-All scaling is linear with item count. Bot polling at 1/min cadence -- even 30ms burst is imperceptible.
+All scaling is linear with item count. Bot polling at 1/min cadence. even 30ms burst is imperceptible.
 
 ### Late-game risk factors
 
@@ -199,7 +199,7 @@ All scaling is linear with item count. Bot polling at 1/min cadence -- even 30ms
 | # | Issue | Resolution |
 |---|---|---|
 | 1 | Thread-unsafe: `CollectTreeClusters` reads Unity components on background thread | Uses cached `nr.Alive`, `nr.X/Y/Z`, `nr.Grown` |
-| 2 | Thread-unsafe: `CollectFoodClusters` -- same as #1 | Same approach |
+| 2 | Thread-unsafe: `CollectFoodClusters`. same as #1 | Same approach |
 | 3 | `CollectSummary` json: `JsonConvert.DeserializeObject` re-parses cluster JSON | `WriteClustersFiltered` builds inline via JW, zero Newtonsoft |
 | 4 | `CollectSummary`: ~20 temp collections per call | Hoisted to field-level dicts/sets, cleared per call. Static roleMap/cropNames |
 | 5 | `CollectBuildings` full toon: new StringBuilder x2 per building | Reuses field-level `_invSb`/`_recSb`, cleared per building |
@@ -211,35 +211,35 @@ All scaling is linear with item count. Bot polling at 1/min cadence -- even 30ms
 | 26 | `BuildAlertsFromBuildings` `new List` per call | Field-level `_alertBuffer`, cleared per call. `.ToArray()` remains (1 alloc) |
 | 27 | `BuildPowerFromBuildings` `new Dictionary` per call | Field-level `_powerNetworks`, cleared per call. Inner `List`/`.ToArray()` remain |
 | 28 | `CollectWellbeing` 4 new Dicts + N Lists per call | All 4 dicts hoisted to field-level. Inner `List<NeedSpec>` reused via clear-in-place |
-| 17 | `CollectWellbeing`: 4 Dicts + List per group | Superseded by #28 -- all dicts field-level |
+| 17 | `CollectWellbeing`: 4 Dicts + List per group | Superseded by #28. all dicts field-level |
 | 9 | `CollectDistribution` GetComponent on background thread | Pre-built on main thread via `RefreshMainThreadData()` |
 | 10 | `CollectScience` GetSpec on background thread | Pre-built on main thread via `RefreshMainThreadData()` |
 | 11 | District refresh allocates new CachedDistrict + Dict every 1s | Reuses existing CachedDistrict objects, updates in place, clears Dict |
-| 23 | `Math.Round(need.Points, 2)` boxes on Mono | **DISPROVED** -- 0 GC0 across 11.4M calls |
+| 23 | `Math.Round(need.Points, 2)` boxes on Mono | **DISPROVED**. 0 GC0 across 11.4M calls |
 | 29 | `SaveSettingToken` File.Read + JObject.Parse + File.Write per keystroke | `_cachedSettings` JObject in memory, 1s debounce flush via `FlushSettingsIfNeeded()` in `UpdateSingleton()`, flush on `Unload()` |
 | 30 | Selected-object reflection alloc every 0.5s in panel | Removed with the selected-object inspector UI; panel no longer polls selection or reflects `gameObject` accessors |
 | 31 | `new StringBuilder(64)` per building per snapshot for StatusAlerts | `BuildingCompactState.StatusAlerts` changed from `string` to `string[]`, stores game strings directly |
 | 32 | `string.Split(',')` per building in summary alert counting | Consumers iterate `string[]` directly, no Split/Trim/array allocation |
 | 37 | `RegisterTooltipHandlers` 3 closures per settings row (33 total) | Created once in `BuildModal()` at load time, not per-frame. Correct pattern for UI event handlers |
 | 20 | `GetBeaverNeeds()` LINQ iterator alloc on background thread | Decompiled: read-only filter over write-once list, not a thread-safety bug. Cached as `_cachedBeaverNeeds` array at load time, zero alloc on read path |
-| -- | `Priority.ToString()` per building per refresh | Static lookup array |
-| -- | `CleanName()` per employed beaver per refresh | RefChanged pattern (ref compare) |
-| -- | `GetComponent<EntityComponent>()` per beaver per refresh | Cached `Go` field at add-time |
-| -- | Building X/Y/Z/Orientation re-read per refresh | Moved to add-time (immutable) |
-| -- | `foreach Inventories.AllInventories` / `inv.Stock` | Indexed for-loop (no enumerator boxing) |
-| -- | 60fps refresh rate | Cadenced to 1Hz (configurable) |
-| -- | `Formatting.Indented` whitespace bloat | Switched to `Formatting.None` (~30% smaller) |
-| -- | `GetBytes()` byte array alloc per response | `StreamWriter` writes directly to output stream |
-| -- | UTF-8 BOM prefix from StreamWriter | `new UTF8Encoding(false)` |
-| -- | `new StringBuilder(256)` per webhook per flush | Reuses field-level `_webhookSb` |
-| -- | `JsonConvert.SerializeObject` per webhook event | TimberbotJw writes directly |
-| -- | `Key().OpenArr()` double-comma bug | `_hasValue[_depth] = false` after Key() |
-| -- | Value methods missing `AutoSep()` | All value methods now call AutoSep() |
-| -- | `Float(v).ToString(fmt)` string alloc | Zero-alloc digit writing to SB |
-| -- | Partial JSON on prefab cost exception | Collect-then-emit pattern |
-| -- | Webhook rate limiting | 200ms batching window (configurable) |
-| -- | Webhook circuit breaker | 30 consecutive failures disables webhook |
-| -- | TimberbotService monolith | Split into 8 classes with focused DI |
-| -- | RefreshCachedState error isolation | Per-entity try/catch in all 3 loops |
+| - | `Priority.ToString()` per building per refresh | Static lookup array |
+| - | `CleanName()` per employed beaver per refresh | RefChanged pattern (ref compare) |
+| - | `GetComponent<EntityComponent>()` per beaver per refresh | Cached `Go` field at add-time |
+| - | Building X/Y/Z/Orientation re-read per refresh | Moved to add-time (immutable) |
+| - | `foreach Inventories.AllInventories` / `inv.Stock` | Indexed for-loop (no enumerator boxing) |
+| - | 60fps refresh rate | Cadenced to 1Hz (configurable) |
+| - | `Formatting.Indented` whitespace bloat | Switched to `Formatting.None` (~30% smaller) |
+| - | `GetBytes()` byte array alloc per response | `StreamWriter` writes directly to output stream |
+| - | UTF-8 BOM prefix from StreamWriter | `new UTF8Encoding(false)` |
+| - | `new StringBuilder(256)` per webhook per flush | Reuses field-level `_webhookSb` |
+| - | `JsonConvert.SerializeObject` per webhook event | TimberbotJw writes directly |
+| - | `Key().OpenArr()` double-comma bug | `_hasValue[_depth] = false` after Key() |
+| - | Value methods missing `AutoSep()` | All value methods now call AutoSep() |
+| - | `Float(v).ToString(fmt)` string alloc | Zero-alloc digit writing to SB |
+| - | Partial JSON on prefab cost exception | Collect-then-emit pattern |
+| - | Webhook rate limiting | 200ms batching window (configurable) |
+| - | Webhook circuit breaker | 30 consecutive failures disables webhook |
+| - | TimberbotService monolith | Split into 8 classes with focused DI |
+| - | RefreshCachedState error isolation | Per-entity try/catch in all 3 loops |
 
 For test coverage and how to run tests, see [developing.md](developing.md#testing).

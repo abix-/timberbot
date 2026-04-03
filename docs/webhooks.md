@@ -39,7 +39,7 @@ timberbot.py list_webhooks                         # GET /api/webhooks
 timberbot.py unregister_webhook id:wh_1    # POST /api/webhooks/delete
 ```
 
-Webhooks are stored in memory -- they reset on game restart. Re-register on startup.
+Webhooks are stored in memory. they reset on game restart. Re-register on startup.
 
 ## Events (68 total)
 
@@ -197,6 +197,6 @@ Webhooks are stored in memory -- they reset on game restart. Re-register on star
 
 ## Circuit breaker
 
-After 30 consecutive delivery failures (configurable via `webhookCircuitBreaker`), a webhook is automatically disabled. Check status via `GET /api/webhooks` -- disabled webhooks show `"disabled": true` and `"failures": 30`. Re-register to reset.
+After 30 consecutive delivery failures (configurable via `webhookCircuitBreaker`), a webhook is automatically disabled. Check status via `GET /api/webhooks`. disabled webhooks show `"disabled": true` and `"failures": 30`. Re-register to reset.
 
 For webhook internals (batching, threading, circuit breaker implementation) see [architecture.md](architecture.md#webhooks).

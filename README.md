@@ -33,7 +33,7 @@ Auto-launch a save directly:
 timberbot.py launch settlement:MyCastle save:day5
 ```
 
-Or use raw HTTP -- no Python needed:
+Or use raw HTTP. no Python needed:
 
 ```bash
 curl http://localhost:8085/api/summary
@@ -42,21 +42,21 @@ curl -X POST http://localhost:8085/api/speed -d '{"speed": 3}'
 
 ## Features
 
-- **A* pathfinding** -- `place_path` routes around obstacles, water, and ruins with auto-stairs
-- **Fresh-on-request reads** -- no stale data, zero cost when idle
-- **Blocker tracking** -- ruins and editor objects visible in /api/tiles and placement errors
-- **Write job system** -- budgeted frame execution, no spikes
-- **Debug endpoint** -- reflection inspector with chaining and validation
-- **Webhooks** -- subscribe to game events over HTTP
-- **Zero-alloc hot path** -- no garbage collection pressure on read endpoints
+- **A* pathfinding**. `place_path` routes around obstacles, water, and ruins with auto-stairs
+- **Fresh-on-request reads**. no stale data, zero cost when idle
+- **Blocker tracking**. ruins and editor objects visible in /api/tiles and placement errors
+- **Write job system**. budgeted frame execution, no spikes
+- **Debug endpoint**. reflection inspector with chaining and validation
+- **Webhooks**. subscribe to game events over HTTP
+- **Zero-alloc hot path**. no garbage collection pressure on read endpoints
 
 ## Docs
 
-- [Getting Started](docs/getting-started.md) -- install, first steps, examples
-- [API Reference](docs/api-reference.md) -- all HTTP endpoints
-- [Timberbot AI](docs/timberbot.md) -- AI guide for agents playing Timberborn
-- [Architecture](docs/architecture.md) -- internals, thread model, read/write pipeline
-- [Developing](docs/developing.md) -- build from source, add endpoints, Workshop publishing
+- [Getting Started](docs/getting-started.md). install, first steps, examples
+- [API Reference](docs/api-reference.md). all HTTP endpoints
+- [Timberbot AI](docs/timberbot.md). AI guide for agents playing Timberborn
+- [Architecture](docs/architecture.md). internals, thread model, read/write pipeline
+- [Developing](docs/developing.md). build from source, add endpoints, Workshop publishing
 
 ## Settings
 
@@ -73,7 +73,7 @@ Drop a `settings.json` in your mod folder (`Documents/Timberborn/Mods/Timberbot/
 }
 ```
 
-All fields are optional -- missing keys use defaults.
+All fields are optional. missing keys use defaults.
 
 ## Requirements
 
@@ -86,11 +86,11 @@ All fields are optional -- missing keys use defaults.
 
 Learned from these Timberborn modding projects:
 
-- [mechanistry/timberborn-modding](https://github.com/mechanistry/timberborn-modding) -- official modding tools, wiki, and examples
-- [thomaswp/BeaverBuddies](https://github.com/thomaswp/BeaverBuddies) -- `BlockObjectPlacerService.Place()` for building placement, `TemplateInstantiator` + `MarkAsPreviewAndInitialize` + `IsValid()` for game-native placement validation, `BuildingUnlockingService.Unlock()` for science, `WorkingHoursManager` for work schedules
-- [datvm/TimberbornMods](https://github.com/datvm/TimberbornMods) -- `TreeCuttingArea.AddCoordinates()` for tree marking, `IAlertFragment` patterns for building alerts
-- [ihsoft/TimberbornMods](https://github.com/ihsoft/TimberbornMods) -- `Inventories.AllInventories` for building inventory, `BuildingUnlockingService.Unlocked()` for science checks
-- [CordialGnom/timberborn-unity-modding](https://github.com/CordialGnom/timberborn-unity-modding) -- `PlantingService.SetPlantingCoordinates()` for crop planting, `PlantingAreaValidator.CanPlant()` for planting validation
-- [Timberborn-KyP-Mods/TimberPrint](https://github.com/Timberborn-KyP-Mods/TimberPrint) -- `PreviewFactory` + `BlockValidator` patterns for placement validation
-- [toon-format/toon](https://github.com/toon-format/toon) -- Token-Oriented Object Notation for compact AI output
+- [mechanistry/timberborn-modding](https://github.com/mechanistry/timberborn-modding). official modding tools, wiki, and examples
+- [thomaswp/BeaverBuddies](https://github.com/thomaswp/BeaverBuddies). `BlockObjectPlacerService.Place()` for building placement, `TemplateInstantiator` + `MarkAsPreviewAndInitialize` + `IsValid()` for game-native placement validation, `BuildingUnlockingService.Unlock()` for science, `WorkingHoursManager` for work schedules
+- [datvm/TimberbornMods](https://github.com/datvm/TimberbornMods). `TreeCuttingArea.AddCoordinates()` for tree marking, `IAlertFragment` patterns for building alerts
+- [ihsoft/TimberbornMods](https://github.com/ihsoft/TimberbornMods). `Inventories.AllInventories` for building inventory, `BuildingUnlockingService.Unlocked()` for science checks
+- [CordialGnom/timberborn-unity-modding](https://github.com/CordialGnom/timberborn-unity-modding). `PlantingService.SetPlantingCoordinates()` for crop planting, `PlantingAreaValidator.CanPlant()` for planting validation
+- [Timberborn-KyP-Mods/TimberPrint](https://github.com/Timberborn-KyP-Mods/TimberPrint). `PreviewFactory` + `BlockValidator` patterns for placement validation
+- [toon-format/toon](https://github.com/toon-format/toon). Token-Oriented Object Notation for compact AI output
 
