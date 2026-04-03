@@ -38,6 +38,8 @@ namespace Timberbot
         private Label _cmdLabel;
         private TextField _binaryField;
         private TextField _modelField;
+        private NineSliceButton _modelDropBtn;
+        private VisualElement _modelDropdown;
         private TextField _goalField;
         private NineSliceButton _startBtn;
         private NineSliceButton _stopBtn;
@@ -179,7 +181,43 @@ namespace Timberbot
             _expanded.Add(MakeFieldRow("Binary:", _binaryField));
 
             _modelField = MakeTextField("sonnet");
-            _expanded.Add(MakeFieldRow("Model:", _modelField));
+            _modelDropBtn = new NineSliceButton { text = "v" };
+            _modelDropBtn.AddToClassList("button-game");
+            _modelDropBtn.style.width = 22;
+            _modelDropBtn.style.height = 22;
+            _modelDropBtn.style.paddingLeft = 0;
+            _modelDropBtn.style.paddingRight = 0;
+            _modelDropBtn.style.paddingTop = 0;
+            _modelDropBtn.style.paddingBottom = 0;
+            _modelDropBtn.style.marginLeft = 2;
+            _modelDropBtn.clicked += ToggleModelDropdown;
+
+            _modelDropdown = new NineSliceVisualElement();
+            _modelDropdown.AddToClassList("bg-sub-box--green");
+            _modelDropdown.style.position = Position.Absolute;
+            _modelDropdown.style.paddingTop = 4;
+            _modelDropdown.style.paddingBottom = 4;
+            _modelDropdown.style.paddingLeft = 4;
+            _modelDropdown.style.paddingRight = 4;
+            _modelDropdown.ToggleDisplayStyle(false);
+
+            var modelChoices = new[] { "sonnet", "opus", "haiku", "sonnet-4", "opus-4" };
+            foreach (var choice in modelChoices)
+            {
+                var item = new NineSliceButton { text = choice };
+                item.AddToClassList("button-game");
+                item.AddToClassList("game-text-normal");
+                item.style.height = 22;
+                item.style.marginBottom = 1;
+                var c = choice;
+                item.clicked += () => { _modelField.value = c; _modelDropdown.ToggleDisplayStyle(false); };
+                _modelDropdown.Add(item);
+            }
+
+            var modelRow = MakeFieldRow("Model:", _modelField);
+            modelRow.Add(_modelDropBtn);
+            _expanded.Add(modelRow);
+            _expanded.Add(_modelDropdown);
 
             _goalField = MakeTextField("survive and grow the colony");
             _goalField.multiline = true;
@@ -201,6 +239,12 @@ namespace Timberbot
             btnRow.Add(_stopBtn);
 
             _expanded.Add(btnRow);
+        }
+
+        private void ToggleModelDropdown()
+        {
+            bool show = _modelDropdown.resolvedStyle.display == DisplayStyle.None;
+            _modelDropdown.ToggleDisplayStyle(show);
         }
 
         private void ToggleExpanded()
