@@ -1461,11 +1461,19 @@ def _launch(args):
     with open(os.path.join(mod_dir, "autoload.json"), "w") as f:
         json.dump(autoload, f)
 
-    # kill existing Timberborn process if running
+    # kill existing Timberborn process if running, wait until it's gone
     try:
-        subprocess.run(["taskkill", "/f", "/im", "Timberborn.exe"],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(2)  # wait for process to fully exit
+        r = subprocess.run(["taskkill", "/f", "/im", "Timberborn.exe"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if r.returncode == 0:
+            print(f"  {_DIM}waiting for Timberborn to exit...{_RST}")
+            for _ in range(30):
+                time.sleep(1)
+                check = subprocess.run(["tasklist", "/fi", "imagename eq Timberborn.exe"],
+                                       capture_output=True, text=True)
+                if "Timberborn.exe" not in check.stdout:
+                    break
+            time.sleep(2)  # extra buffer for file locks / port release
     except Exception:
         pass
 
