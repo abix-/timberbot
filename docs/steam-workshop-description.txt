@@ -7,7 +7,7 @@ Open the in-game Timberbot widget -> Settings -> choose Claude or Codex -> Start
 Works with Claude Code, OpenAI Codex, ChatGPT, or any AI that speaks HTTP.
 
 [h1]In-game AI panel[/h1]
-Draggable widget in the bottom-right corner. Pick your AI, set a goal, hit Start. Timberbot launches an interactive terminal session. No setup outside the game.
+There's a draggable widget in the bottom-right corner. Pick your AI, set a goal, hit Start. Timberbot opens a terminal session for you. No setup outside the game needed.
 
 - [b]Binary[/b] Claude, Codex, or any custom CLI
 - [b]Model / Effort / Goal[/b] presets or freeform
@@ -16,21 +16,21 @@ Draggable widget in the bottom-right corner. Pick your AI, set a goal, hit Start
 [h1]What the AI can see and do[/h1]
 [b]Every beaver and bot:[/b] position, district, all 38 wellbeing needs, carried goods, workplace, contamination, bot durability.
 
-[b]Every building:[/b] workers, power, production, inventory, recipes, construction status, effect radius. Place and demolish with full game-native validation. Smart placement finder returns entrance coords, path access, power adjacency, flooding, and water depth.
+[b]Every building:[/b] workers, power, production, inventory, recipes, construction status, effect radius. Place and demolish with full game-native validation. The placement finder returns entrance coords, path access, power adjacency, flooding, and water depth.
 
 [b]The whole map:[/b] terrain height, water depth, badwater, moisture, every occupant on every tile including vertical stacking. ASCII map with height shading.
 
 [b]Colony management:[/b] workers, priorities, crops, trees, science, floodgates, stockpiles, distribution, breeding, clutch, work schedule, game speed.
 
-[b]A* pathfinding:[/b] place_path routes between any two points. Auto-stairs, platforms, obstacle avoidance, diagonal routes, multi-level jumps. Reuses existing infrastructure.
+[b]A* pathfinding:[/b] place_path routes between any two points. Auto-stairs, platforms, obstacle avoidance, diagonal routes, multi-level jumps. It reuses existing roads and stairs.
 
 [b]Power networks:[/b] which buildings share a grid, supply vs demand, generator output.
 
-[b]Brain:[/b] one command gives the AI everything -- live colony snapshot plus persistent goal, tasks, and named locations across sessions.
+[b]Brain:[/b] one command gives the AI everything. Live colony snapshot plus persistent goal, tasks, and named locations across sessions.
 
-[b]Webhooks:[/b] 68 push events -- drought, death, construction, game over. React instantly instead of polling.
+[b]Webhooks:[/b] 68 push events. Drought, death, construction, game over. Your scripts react instantly instead of polling.
 
-[b]Live dashboard:[/b] `timberbot.py top` -- real-time colony overview in your terminal.
+[b]Live dashboard:[/b] run timberbot.py top for a real-time colony overview right in your terminal.
 
 [h1]Python client[/h1]
 [code]
@@ -44,7 +44,7 @@ timberbot.py place_path x1:0 y1:0 x2:200 y2:180  # A* path with auto-stairs
 timberbot.py crops                                # growth status
 timberbot.py register_webhook url:http://localhost:9000/events events:drought.start,beaver.died
 [/code]
-Works with any language. Python client is optional. Raw curl works too.
+Works with any language. The Python client is optional. Raw curl works too.
 
 [h1]AI skill setup (optional)[/h1]
 The in-game widget is the easy path. For manual Claude Code setup:
@@ -56,11 +56,11 @@ For Codex, point it at the mod folder. For ChatGPT, paste docs/timberbot.md as t
 
 [h1]Getting started[/h1]
 1. Subscribe and enable in Mod Manager
-2. Start a game -- API starts on port 8085
+2. Start a game. The API starts automatically on port 8085
 3. Open the Timberbot widget, click Settings, choose your AI, click Start
 
 [h1]Settings[/h1]
-Configure everything in-game. All settings persist automatically. Advanced users can edit settings.json directly in Documents/Timberborn/Mods/Timberbot/.
+Configure everything in-game. All settings persist automatically. Advanced users can edit settings.json directly. See [url=https://abix-.github.io/TimberbornMods/getting-started/#settings-and-configuration]Settings docs[/url] for details.
 
 [h1]Docs[/h1]
 [url=https://abix-.github.io/TimberbornMods/getting-started/]Getting Started[/url] Install, first commands, AI setup
