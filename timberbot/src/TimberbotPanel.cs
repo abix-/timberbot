@@ -1,4 +1,4 @@
-// TimberbotPanel.cs -- In-game UI for agent start/stop/status.
+// TimberbotPanel.cs. In-game UI for agent start/stop/status.
 
 using System.Collections.Generic;
 using System.Diagnostics;

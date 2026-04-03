@@ -1,4 +1,4 @@
-// ITimberbotWriteJob.cs -- Budgeted write execution on the main thread.
+// ITimberbotWriteJob.cs. Budgeted write execution on the main thread.
 //
 // WHY THIS EXISTS
 // ---------------
@@ -13,7 +13,7 @@
 // 3. Each frame, ProcessWriteJobs() calls Step() on pending jobs until the budget runs out
 // 4. When IsCompleted = true, the HTTP response is sent with the Result
 //
-// LambdaWriteJob also supports "settle frames" -- waiting N frames after the action
+// LambdaWriteJob also supports "settle frames". waiting N frames after the action
 // completes before reporting done, so the game has time to process side effects.
 
 namespace Timberbot

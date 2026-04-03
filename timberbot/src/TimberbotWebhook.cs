@@ -1,4 +1,4 @@
-// TimberbotWebhook.cs -- Batched push event notifications to external URLs.
+// TimberbotWebhook.cs. Batched push event notifications to external URLs.
 //
 // Register a webhook URL via POST /api/webhooks, optionally filtering by event name.
 // Events accumulate in _pendingEvents and flush every webhookBatchMs (default 200ms)
@@ -123,7 +123,7 @@ namespace Timberbot
         }
 
         // accumulate event into pending batch (called from main thread EventBus handlers)
-        // no data -- most events
+        // no data. most events
         public void PushEvent(string eventName)
         {
             if (Count == 0) return;
@@ -194,7 +194,7 @@ namespace Timberbot
                 }
                 if (count == 0) continue;
 
-                // send on ThreadPool thread -- never block the game's main thread
+                // send on ThreadPool thread. never block the game's main thread
                 var url = wh.Url;
                 var whRef = wh;
                 var threshold = CircuitBreakerThreshold;

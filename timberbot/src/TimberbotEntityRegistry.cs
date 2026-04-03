@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace Timberbot
 {
-    // TimberbotEntityRegistry.cs -- Entity lookup and ID translation.
+    // TimberbotEntityRegistry.cs. Entity lookup and ID translation.
     //
     // WHY TWO ID SYSTEMS
     // -------------------

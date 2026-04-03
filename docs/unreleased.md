@@ -32,6 +32,13 @@ Every API error response is now rich and actionable. The AI gets enough context 
 ## Panel defaults
 
 - [fix] model and effort defaults extracted to named constants (`DefaultClaudeModel`, `DefaultCodexModel`, etc.) instead of scattered string literals
+- [fix] switching binary (claude/codex) auto-selects the correct default model and effort
+
+## Testing
+
+- [new] 141 xUnit unit tests for `TimberbotJw` (serialization, commas, nesting, reuse) and `TimberbotPure` (orientation, name cleanup, assertions, normalization, quoting)
+- [new] `timberbot/test/` project (net8.0, xUnit) shares source files with the main project, no Unity deps required
+- [internal] extracted pure static helpers from 5 Unity-dependent files into `TimberbotPure.cs`
 
 ## Docs
 

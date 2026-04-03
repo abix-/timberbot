@@ -1,4 +1,4 @@
-// TimberbotAgent.cs -- Launches an interactive agent session for the player.
+// TimberbotAgent.cs. Launches an interactive agent session for the player.
 //
 // The in-game UI gathers live colony state, then launches Claude, Codex, or a
 // custom CLI interactively. The player keeps the real terminal session and can

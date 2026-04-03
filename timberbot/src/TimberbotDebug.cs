@@ -1,4 +1,4 @@
-// TimberbotDebug.cs -- Runtime reflection inspector and performance benchmark.
+// TimberbotDebug.cs. Runtime reflection inspector and performance benchmark.
 //
 // WHY THIS EXISTS
 // ---------------
@@ -17,7 +17,7 @@
 //   target:get path:$.AllComponents                -> chains from the last call result
 //
 // This is how we verified thread safety of water/terrain services, discovered
-// undocumented component properties, and confirmed GC behavior -- all without
+// undocumented component properties, and confirmed GC behavior. all without
 // rebuilding the mod.
 //
 // BENCHMARK (/api/benchmark)

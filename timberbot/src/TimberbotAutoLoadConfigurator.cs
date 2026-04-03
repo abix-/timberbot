@@ -1,4 +1,4 @@
-// TimberbotAutoLoadConfigurator.cs -- MainMenu DI registration for auto-load.
+// TimberbotAutoLoadConfigurator.cs. MainMenu DI registration for auto-load.
 //
 // [Context("MainMenu")] means this runs at the main menu, before any game is loaded.
 // Registers TimberbotAutoLoad which checks CLI args and triggers save loading.

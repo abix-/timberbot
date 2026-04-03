@@ -42,7 +42,7 @@ namespace Timberbot
 
         public TimberbotJw(int capacity = 100000) { _sb = new StringBuilder(capacity); }
 
-        // Reset for next request. StringBuilder.Clear() doesn't deallocate -- it resets length to 0.
+        // Reset for next request. StringBuilder.Clear() doesn't deallocate. it resets length to 0.
         public TimberbotJw Reset() { _sb.Clear(); _depth = 0; _hasValue[0] = false; return this; }
 
         // Structural tokens: open/close arrays and objects
@@ -180,7 +180,7 @@ namespace Timberbot
         }
 
         // Insert a comma separator if there's already a value at this nesting depth.
-        // This is the core trick: we never need to "look ahead" -- just track whether
+        // This is the core trick: we never need to "look ahead". just track whether
         // the current depth has seen a value yet.
         private void AutoSep()
         {

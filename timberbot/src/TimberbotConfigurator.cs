@@ -1,4 +1,4 @@
-// TimberbotConfigurator.cs -- Bindito DI registration.
+// TimberbotConfigurator.cs. Bindito DI registration.
 //
 // Timberborn uses Bindito (a custom DI framework) to wire game services.
 // [Context("Game")] means this runs when a game is loaded (not on the main menu).

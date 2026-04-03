@@ -1,4 +1,4 @@
-// TimberbotWrite.cs.All state-modifying API endpoints.
+// TimberbotWrite.cs. All state-modifying API endpoints.
 //
 // POST requests that change game state: speed, workers, priorities, crops, trees,
 // stockpiles, floodgates, recipes, science, distribution, migration, work hours.
@@ -149,7 +149,7 @@ namespace Timberbot
         }
 
         // ================================================================
-        // WRITE ENDPOINTS.Tier 1
+        // WRITE ENDPOINTS. Tier 1
         // ================================================================
 
         // game speed 0-3, mapped to internal values 0,1,3,7
@@ -420,7 +420,7 @@ namespace Timberbot
         }
 
         // ================================================================
-        // WRITE ENDPOINTS.Tier 2
+        // WRITE ENDPOINTS. Tier 2
         // ================================================================
 
         // set desired worker count (0 to maxWorkers)

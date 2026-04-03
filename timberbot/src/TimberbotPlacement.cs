@@ -1,4 +1,4 @@
-// TimberbotPlacement.cs -- Building placement, path routing, terrain queries.
+// TimberbotPlacement.cs. Building placement, path routing, terrain queries.
 //
 // FindPlacement: searches a region for valid building spots using the game's own
 // validation (PreviewFactory.Create + BlockObject.IsValid). Checks flooding via
@@ -137,7 +137,7 @@ namespace Timberbot
         private static string GetPriorityName(Timberborn.PrioritySystem.Priority p) => TimberbotEntityRegistry.GetPriorityName(p);
 
         // Faction suffix for prefab names (e.g. ".IronTeeth" or ".Folktails").
-        // Detected once at startup via FactionService.Current.Id -- the same API
+        // Detected once at startup via FactionService.Current.Id. the same API
         // other mods (UnifiedFactions) use. Faction never changes during a game session.
         private string _factionSuffix = "";
 
@@ -223,7 +223,7 @@ namespace Timberbot
         }
 
         // ================================================================
-        // WRITE ENDPOINTS -- Tier 3
+        // WRITE ENDPOINTS. Tier 3
         // ================================================================
 
         // List all building templates (prefabs) the faction can build.
@@ -1489,10 +1489,10 @@ namespace Timberbot
 
             return null;
         }
-        // general purpose debug endpoint -- navigate, inspect, and call methods on any game object
+        // general purpose debug endpoint. navigate, inspect, and call methods on any game object
         // chain through objects with dot-separated paths: "type._field1._field2.MethodName"
         // ================================================================
-        // BENCHMARK -- compare foreach vs for-loop on game collections
+        // BENCHMARK. compare foreach vs for-loop on game collections
         // ================================================================
 
 
@@ -2320,7 +2320,7 @@ namespace Timberbot
                     return null;
                 }
 
-                // invalid -- check block-level conflicts first (occupancy, terrain)
+                // invalid. check block-level conflicts first (occupancy, terrain)
                 var bv = preview.BlockObject._blockValidator;
                 if (bv != null)
                 {
@@ -2355,11 +2355,11 @@ namespace Timberbot
                 // collect all diagnostic info
                 var diag = new System.Text.StringBuilder("placement invalid:");
 
-                // 1. BlockValidator.BlocksValid -- what IsValid() actually calls
+                // 1. BlockValidator.BlocksValid. what IsValid() actually calls
                 bool blocksValidResult = bv != null && bv.BlocksValid(preview.BlockObject.PositionedBlocks);
                 diag.Append($" BlocksValid={blocksValidResult}");
 
-                // 2. BlockObjectValidationService.IsValid -- what IsValid() actually calls
+                // 2. BlockObjectValidationService.IsValid. what IsValid() actually calls
                 bool svcValidResult = validationSvc != null && validationSvc.IsValid(preview.BlockObject);
                 diag.Append($" SvcValid={svcValidResult}");
 

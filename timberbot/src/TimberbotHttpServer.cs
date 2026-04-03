@@ -1,4 +1,4 @@
-// TimberbotHttpServer.cs -- HTTP server and request routing.
+// TimberbotHttpServer.cs. HTTP server and request routing.
 //
 // Runs an HttpListener on a background thread (port 8085 by default).
 // Threading model:
@@ -499,7 +499,7 @@ namespace Timberbot
 
         // Send a JSON response. If data is already a string (from JW serialization),
         // use it directly. Otherwise serialize via Newtonsoft.Json (for anonymous objects).
-        // StreamWriter writes directly to the output stream -- no intermediate byte[] allocation.
+        // StreamWriter writes directly to the output stream. no intermediate byte[] allocation.
         private void Respond(HttpListenerContext ctx, int statusCode, object data, long requestId = 0, string route = null)
         {
             try
@@ -510,7 +510,7 @@ namespace Timberbot
                 ctx.Response.StatusCode = statusCode;
                 ctx.Response.ContentType = "application/json";
                 ctx.Response.Headers.Add("Access-Control-Allow-Origin", "*");
-                // write directly to output stream -- avoids intermediate byte[] allocation
+                // write directly to output stream. avoids intermediate byte[] allocation
                 // UTF8Encoding(false) = no BOM prefix (JSON parsers reject BOM)
                 using (var sw = new StreamWriter(ctx.Response.OutputStream, new UTF8Encoding(false)))
                     sw.Write(json);

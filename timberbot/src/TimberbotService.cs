@@ -1,4 +1,4 @@
-// TimberbotService.cs -- Core service: DI constructor, fields, lifecycle, settings.
+// TimberbotService.cs. Core service: DI constructor, fields, lifecycle, settings.
 //
 // This is the main entry point for the Timberbot API mod. Timberborn's Bindito DI
 // system injects game services into the constructor. The service runs as a game
@@ -6,11 +6,11 @@
 // requests on the Unity main thread and services fresh snapshot publishes.
 //
 // API logic lives in separate classes, each with their own DI:
-//   TimberbotEntityRegistry -- Entity lookup + tracked refs for writes and v2 snapshots
-//   TimberbotWrite         -- All POST write endpoints
-//   TimberbotPlacement     -- Building placement, path routing, terrain
-//   TimberbotWebhook       -- Batched push event notifications
-//   TimberbotDebug         -- Reflection inspector and benchmark
+//   TimberbotEntityRegistry. Entity lookup + tracked refs for writes and v2 snapshots
+//   TimberbotWrite        . All POST write endpoints
+//   TimberbotPlacement    . Building placement, path routing, terrain
+//   TimberbotWebhook      . Batched push event notifications
+//   TimberbotDebug        . Reflection inspector and benchmark
 
 using Timberborn.SingletonSystem;
 using UnityEngine;
@@ -96,7 +96,7 @@ namespace Timberbot
             WebhookMgr.Register();            // subscribe to 68 game events
             ReadV2.Register();           // subscribe to entity lifecycle events for v2 snapshots
             Registry.Register();              // subscribe to entity lifecycle events
-            Placement.DetectFaction();          // detect faction suffix -- must run before BuildAllIndexes
+            Placement.DetectFaction();          // detect faction suffix. must run before BuildAllIndexes
             Registry.BuildAllIndexes();        // populate indexes from existing entities
             ReadV2.BuildAll();          // populate v2 building trackers from existing entities
             Agent = new TimberbotAgent(_terminal, _pythonCommand);

@@ -1,4 +1,4 @@
-// TimberbotAutoLoad.cs -- Auto-load a save at the main menu.
+// TimberbotAutoLoad.cs. Auto-load a save at the main menu.
 //
 // Reads autoload.json from the mod folder (Documents/Timberborn/Mods/Timberbot/):
 //   { "settlement": "Potato Tomato", "save": "Potato Tomato (15)" }
@@ -7,7 +7,7 @@
 // If "save" is omitted, picks the most recent save in the settlement.
 // Falls back to CLI args --tb-settlement / --tb-save for backwards compat.
 //
-// Uses ValidatingGameLoader.LoadGame() -- same path as clicking Continue/Load in the UI.
+// Uses ValidatingGameLoader.LoadGame(). same path as clicking Continue/Load in the UI.
 // Runs as ILoadableSingleton in [Context("MainMenu")] so it fires once when the menu loads.
 
 using System;

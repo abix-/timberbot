@@ -1,4 +1,4 @@
-// TimberbotReadV2.cs -- All GET read endpoints. The core of the mod's read path.
+// TimberbotReadV2.cs. All GET read endpoints. The core of the mod's read path.
 //
 // WHY THIS EXISTS
 // ---------------
@@ -474,7 +474,7 @@ namespace Timberbot
 
         // Called every frame from UpdateSingleton(). Checks if any snapshot has
         // waiting readers, and if so, captures live state into DTO buffers.
-        // Respects a time budget (~1ms) so the game stays smooth -- if budget is
+        // Respects a time budget (~1ms) so the game stays smooth. if budget is
         // exceeded mid-capture, it resumes next frame where it left off.
         // After capture completes, expensive finalize work is queued to the
         // background finalize thread, which publishes the snapshot and wakes readers.
@@ -833,7 +833,7 @@ namespace Timberbot
             return jw.End();
         }
         // Derived endpoints: built from published snapshots on the background thread.
-        // No main-thread work needed -- just reads from the last published data.
+        // No main-thread work needed. just reads from the last published data.
         public object CollectAlerts(string format = "toon", int limit = 100, int offset = 0)
             => _alertsRoute.Collect(format, limit, offset);
         // Cluster endpoints: divide the map into cells, count trees/food in each,
@@ -1900,7 +1900,7 @@ namespace Timberbot
         }
 
         // =====================================================================
-        // ENTITY LIFECYCLE -- add/remove tracked refs via EventBus
+        // ENTITY LIFECYCLE. add/remove tracked refs via EventBus
         // =====================================================================
         // When Timberborn creates or destroys an entity, we get an event and
         // add/remove the corresponding tracked ref. This keeps our snapshot data
@@ -2155,7 +2155,7 @@ namespace Timberbot
         }
 
         // =====================================================================
-        // TRACKED REFS -- live references to game entities
+        // TRACKED REFS. live references to game entities
         // =====================================================================
         // Each tracked ref holds direct component references so we can read
         // properties (workers, wellbeing, growth) without GetComponent<T>() calls
@@ -2222,7 +2222,7 @@ namespace Timberbot
         }
 
         // =====================================================================
-        // DTO STRUCTS -- plain data objects that live in snapshot buffers
+        // DTO STRUCTS. plain data objects that live in snapshot buffers
         // =====================================================================
         // These hold the actual data served to HTTP clients. Definition = static
         // (set once), State = mutable (refreshed each snapshot), Detail = expensive
@@ -2399,9 +2399,9 @@ namespace Timberbot
         // Budget-aware: capture can pause mid-array and resume next frame. The main
         // thread tracks _captureIndex so it picks up where it left off.
         //
-        // TDef  = static definition (id, name, coords) -- set once at entity add
-        // TState = mutable state (workers, wellbeing) -- refreshed every snapshot
-        // TDetail = expensive detail (inventory strings) -- only on full-detail requests
+        // TDef  = static definition (id, name, coords). set once at entity add
+        // TState = mutable state (workers, wellbeing). refreshed every snapshot
+        // TDetail = expensive detail (inventory strings). only on full-detail requests
         internal sealed class ProjectionSnapshot<TDef, TState, TDetail>
             where TDef : class
             where TState : class, new()
