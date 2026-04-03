@@ -4,7 +4,7 @@ Tell Claude "keep my beavers alive and get to 77 wellbeing" and watch it figure 
 Open the Timberbot API widget, click Settings, pick Claude or Codex, click Start
 [/code]
 
-That's it. No setup outside the game. The widget opens a terminal session where you and the AI talk through what to do next.
+You need Python and a couple of pip packages (requests, toons) installed first. After that, everything runs from inside the game. The widget opens a terminal session where you and the AI talk through what to do next.
 
 [h1]What can the AI actually do[/h1]
 It sees everything you see. Every beaver's position, needs, and workplace. Every building's workers, power, inventory, and recipes. The full map with terrain, water, trees, and what's occupying each tile.
