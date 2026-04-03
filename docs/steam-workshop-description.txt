@@ -28,7 +28,7 @@ The whole thing is an HTTP API. You can write your own scripts, build dashboards
 2. Start a game
 3. Click the Timberbot widget in the corner, pick your AI, hit Start
 
-Works with Claude Code, OpenAI Codex, ChatGPT, or your own tools. See the [url=https://abix-.github.io/TimberbornMods/getting-started/]full setup guide[/url] for details.
+Works with Claude Code, OpenAI Codex, or any CLI agent that can make HTTP calls. See the [url=https://abix-.github.io/TimberbornMods/getting-started/]full setup guide[/url] for details.
 
 [h1]Docs[/h1]
 [url=https://abix-.github.io/TimberbornMods/getting-started/]Getting Started[/url] Install, setup, configuration
