@@ -1,8 +1,7 @@
 // TimberbotPanel.cs -- In-game UI for agent start/stop/status.
 //
-// Collapsed: one-line status badge in bottom-right strip with + button.
-// Expanded: absolute-positioned panel with status + controls.
-// Uses native Timberborn Dropdown system for model and effort selection.
+// VM console model: Start, Stop, Edit buttons.
+// Settings hidden until Edit clicked. Disabled while running.
 
 using System.Collections.Generic;
 using Timberborn.CoreUI;
@@ -28,17 +27,23 @@ namespace Timberbot
         // expanded panel
         private VisualElement _expanded;
         private Label _statusLabel;
+
+        // buttons
+        private NineSliceButton _startBtn;
+        private NineSliceButton _stopBtn;
+        private NineSliceButton _editBtn;
+
+        // settings (toggled by Edit)
+        private VisualElement _settingsContainer;
         private TextField _binaryField;
         private Dropdown _modelDropdown;
         private Dropdown _effortDropdown;
         private TextField _goalField;
-        private NineSliceButton _toggleBtn;
+        private bool _settingsVisible;
 
         private float _lastUpdate;
         private bool _isExpanded;
 
-        // value -> display label mappings
-        private readonly Dictionary<string, string> _modelValueMap = new Dictionary<string, string>();
         private readonly Dictionary<string, string> _modelDisplayToValue = new Dictionary<string, string>();
         private readonly Dictionary<string, string> _effortDisplayToValue = new Dictionary<string, string>();
 
@@ -104,13 +109,14 @@ namespace Timberbot
 
             var status = agent.CurrentStatus;
             string statusText = FormatStatus(agent);
+            bool running = status == AgentStatus.GatheringState || status == AgentStatus.Interactive;
 
-            _statusBarLabel.text = "Timberbot API:" + statusText;
+            _statusBarLabel.text = "Timberbot API: " + statusText;
             _statusLabel.text = "Status: " + statusText;
 
-            bool running = status == AgentStatus.GatheringState ||
-                           status == AgentStatus.Interactive;
-            _toggleBtn.text = running ? "Stop" : "Start";
+            _startBtn.SetEnabled(!running);
+            _stopBtn.SetEnabled(running);
+            _editBtn.SetEnabled(!running);
         }
 
         private void BuildCollapsedBar()
@@ -127,7 +133,7 @@ namespace Timberbot
             _collapsedWrapper.Add(panel);
 
             _statusBarLabel = new NineSliceLabel();
-            _statusBarLabel.text = "Timberbot API:Idle";
+            _statusBarLabel.text = "Timberbot API: Idle";
             _statusBarLabel.AddToClassList("text--yellow");
             _statusBarLabel.AddToClassList("game-text-normal");
             _statusBarLabel.style.marginRight = 4;
@@ -155,7 +161,7 @@ namespace Timberbot
             _expanded.style.paddingLeft = 8;
             _expanded.style.paddingRight = 8;
 
-            // header row
+            // header
             var header = new VisualElement();
             header.style.flexDirection = FlexDirection.Row;
             header.style.justifyContent = Justify.SpaceBetween;
@@ -176,37 +182,96 @@ namespace Timberbot
             header.Add(collapseBtn);
             _expanded.Add(header);
 
-            // status labels
+            // status
             _statusLabel = MakeLabel("Status: Idle");
             _expanded.Add(_statusLabel);
 
-            // separator
             _expanded.Add(MakeSeparator());
 
-            // binary field
+            // button row: Start / Stop / Edit
+            var btnRow = new VisualElement();
+            btnRow.style.flexDirection = FlexDirection.Row;
+            btnRow.style.justifyContent = Justify.Center;
+            btnRow.style.marginBottom = 4;
+
+            _startBtn = MakeGameButton("Start", OnStartClicked);
+            _startBtn.style.marginRight = 4;
+            btnRow.Add(_startBtn);
+
+            _stopBtn = MakeGameButton("Stop", OnStopClicked);
+            _stopBtn.SetEnabled(false);
+            _stopBtn.style.marginRight = 4;
+            btnRow.Add(_stopBtn);
+
+            _editBtn = MakeGameButton("Edit", OnEditClicked);
+            btnRow.Add(_editBtn);
+
+            _expanded.Add(btnRow);
+
+            // settings container (hidden by default)
+            _settingsContainer = new VisualElement();
+            _settingsContainer.ToggleDisplayStyle(false);
+            _settingsVisible = false;
+
+            _settingsContainer.Add(MakeSeparator());
+
             _binaryField = MakeTextField("claude");
-            _expanded.Add(MakeFieldRow("Binary:", _binaryField));
+            _settingsContainer.Add(MakeFieldRow("Binary:", _binaryField));
 
-            // model dropdown (native)
             _modelDropdown = MakeNativeDropdown(ModelChoices, "sonnet (latest) $$$", _modelDisplayToValue);
-            _expanded.Add(MakeFieldRow("Model:", _modelDropdown));
+            _settingsContainer.Add(MakeFieldRow("Model:", _modelDropdown));
 
-            // effort dropdown (native)
             _effortDropdown = MakeNativeDropdown(EffortChoices, "high - thorough (default)", _effortDisplayToValue);
-            _expanded.Add(MakeFieldRow("Effort:", _effortDropdown));
+            _settingsContainer.Add(MakeFieldRow("Effort:", _effortDropdown));
 
-            // goal field
             _goalField = MakeTextField("reach 50 beavers with 77 well-being");
             _goalField.multiline = true;
             _goalField.style.height = 36;
-            _expanded.Add(MakeFieldRow("Goal:", _goalField));
+            _settingsContainer.Add(MakeFieldRow("Goal:", _goalField));
 
-            // toggle button
-            _toggleBtn = MakeGameButton("Start", OnToggleClicked);
-            _toggleBtn.style.marginTop = 6;
-            _toggleBtn.style.alignSelf = Align.Center;
-            _expanded.Add(_toggleBtn);
+            _expanded.Add(_settingsContainer);
         }
+
+        private void ToggleExpanded()
+        {
+            _isExpanded = !_isExpanded;
+            _collapsedWrapper.ToggleDisplayStyle(!_isExpanded);
+            _expanded.ToggleDisplayStyle(_isExpanded);
+        }
+
+        private void OnStartClicked()
+        {
+            var agent = _service.Agent;
+            if (agent == null) return;
+
+            string binary = _binaryField.value;
+            if (string.IsNullOrWhiteSpace(binary)) binary = "claude";
+
+            string model = GetDropdownValue(_modelDropdown, _modelDisplayToValue);
+            string effort = GetDropdownValue(_effortDropdown, _effortDisplayToValue);
+            string goal = _goalField.value;
+
+            agent.Start(binary, model, effort, 120, goal);
+            TimberbotLog.Info($"panel: started agent binary={binary} model={model ?? "default"} effort={effort ?? "default"}");
+
+            // hide settings when starting
+            _settingsVisible = false;
+            _settingsContainer.ToggleDisplayStyle(false);
+        }
+
+        private void OnStopClicked()
+        {
+            _service.Agent?.Stop();
+            TimberbotLog.Info("panel: stopped agent");
+        }
+
+        private void OnEditClicked()
+        {
+            _settingsVisible = !_settingsVisible;
+            _settingsContainer.ToggleDisplayStyle(_settingsVisible);
+        }
+
+        // --- dropdown helpers ---
 
         private Dropdown MakeNativeDropdown(string[][] choices, string defaultDisplay, Dictionary<string, string> displayToValue)
         {
@@ -238,42 +303,6 @@ namespace Timberbot
             return display;
         }
 
-        private void ToggleExpanded()
-        {
-            _isExpanded = !_isExpanded;
-            _collapsedWrapper.ToggleDisplayStyle(!_isExpanded);
-            _expanded.ToggleDisplayStyle(_isExpanded);
-        }
-
-        private void OnToggleClicked()
-        {
-            var agent = _service.Agent;
-            if (agent == null) return;
-
-            var status = agent.CurrentStatus;
-            bool running = status == AgentStatus.GatheringState || status == AgentStatus.Interactive;
-
-            if (running)
-            {
-                agent.Stop();
-                TimberbotLog.Info("panel: stopped agent");
-            }
-            else
-            {
-                string binary = _binaryField.value;
-                if (string.IsNullOrWhiteSpace(binary)) binary = "claude";
-
-                string model = GetDropdownValue(_modelDropdown, _modelDisplayToValue);
-                string effort = GetDropdownValue(_effortDropdown, _effortDisplayToValue);
-                string goal = _goalField.value;
-
-                agent.Start(binary, model, effort, 120, goal);
-                TimberbotLog.Info($"panel: started agent binary={binary} model={model ?? "default"} effort={effort ?? "default"}");
-            }
-        }
-
-        // --- IDropdownProvider implementation ---
-
         private class SimpleDropdownProvider : IDropdownProvider
         {
             public IReadOnlyList<string> Items { get; }
@@ -299,7 +328,7 @@ namespace Timberbot
                 case AgentStatus.Done: return "Done";
                 case AgentStatus.Error: return "Error";
                 case AgentStatus.GatheringState: return "Loading...";
-                case AgentStatus.Interactive: return "Interactive";
+                case AgentStatus.Interactive: return "Running";
                 default: return agent.CurrentStatus.ToString();
             }
         }
