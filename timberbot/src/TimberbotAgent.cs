@@ -120,22 +120,98 @@ namespace Timberbot
                     .Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
         }
 
+        private static (bool ok, string output) RunProcess(string cmd, string args, int timeoutSeconds)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = cmd,
+                    Arguments = args ?? "",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+                var proc = new Process { StartInfo = psi };
+                var stdout = new StringBuilder();
+                proc.OutputDataReceived += (s, e) => { if (e.Data != null) stdout.AppendLine(e.Data); };
+                proc.Start();
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
+                if (!proc.WaitForExit(timeoutSeconds * 1000))
+                {
+                    try { proc.Kill(); } catch { }
+                    return (false, "timeout");
+                }
+                return (proc.ExitCode == 0, stdout.ToString().Trim());
+            }
+            catch (Exception ex) { return (false, ex.Message); }
+        }
+
+        private string BuildCombinedPrompt(string modDir)
+        {
+            var sb = new StringBuilder();
+
+            // 1. rules
+            var rulesFile = Path.Combine(modDir, "skill", "rules.txt");
+            if (File.Exists(rulesFile))
+            {
+                sb.AppendLine("## SESSION RULES\n");
+                sb.AppendLine(File.ReadAllText(rulesFile));
+                sb.AppendLine();
+            }
+
+            // 2. live colony state via brain
+            _currentCmd = "gathering colony state";
+            var brainArgs = "brain \"goal:" + _goal.Replace("\"", "'") + "\"";
+            var (ok, brainOut) = RunProcess("timberbot.py", brainArgs, _processTimeoutSeconds);
+            if (ok && !string.IsNullOrEmpty(brainOut))
+            {
+                sb.AppendLine("## CURRENT COLONY STATE\n");
+                sb.AppendLine(brainOut);
+                sb.AppendLine();
+                TimberbotLog.Info($"agent.brain.ok bytes={brainOut.Length}");
+            }
+            else
+            {
+                sb.AppendLine("## COLONY STATE: could not gather. Run `timberbot.py brain` manually.\n");
+                TimberbotLog.Info($"agent.brain.fail: {brainOut}");
+            }
+
+            // 3. skill (game reference)
+            var skillFile = Path.Combine(modDir, "skill", "timberbot.md");
+            if (File.Exists(skillFile))
+            {
+                sb.AppendLine("## GAME REFERENCE\n");
+                sb.AppendLine(File.ReadAllText(skillFile));
+            }
+
+            // write combined prompt to temp file
+            var tempFile = Path.Combine(Path.GetTempPath(), "timberbot-prompt.md");
+            File.WriteAllText(tempFile, sb.ToString());
+            TimberbotLog.Info($"agent.prompt.written path={tempFile} bytes={sb.Length}");
+            return tempFile;
+        }
+
         private void InteractiveSession()
         {
             try
             {
-                _status = AgentStatus.Interactive;
-                _currentCmd = "interactive session";
+                _status = AgentStatus.GatheringState;
 
-                // system prompt = skill/timberbot.md in the mod folder
                 var modDir = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                     "Timberborn", "Mods", "Timberbot");
-                var skillFile = Path.Combine(modDir, "skill", "timberbot.md");
+
+                // build combined prompt: rules + brain state + skill
+                var promptFile = BuildCombinedPrompt(modDir);
+
+                _status = AgentStatus.Interactive;
+                _currentCmd = "interactive session";
 
                 var args = new StringBuilder();
-                if (File.Exists(skillFile))
-                    args.Append("--system-prompt-file \"").Append(skillFile).Append("\"");
+                args.Append("--system-prompt-file \"").Append(promptFile).Append("\"");
                 if (!string.IsNullOrEmpty(_model))
                     args.Append(" --model ").Append(_model);
                 if (!string.IsNullOrEmpty(_effort))

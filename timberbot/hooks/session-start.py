@@ -1,9 +1,10 @@
-"""SessionStart hook for timberbot agent sessions.
+"""SessionStart hook for timberbot claude sessions.
 
-Runs at session start. Injects colony state and hard rules as additionalContext
-so the agent wakes up already knowing the game state. Even haiku can't mess this up.
+Injects rules + live colony state as additionalContext.
+Rules are read from skill/rules.txt (single source of truth).
 """
 import json
+import os
 import subprocess
 import sys
 
@@ -14,30 +15,26 @@ def run(cmd, timeout=5):
     except Exception as e:
         return False, str(e)
 
-rules = """## TIMBERBOT SESSION RULES (injected by hook -- you MUST follow these)
+parts = []
 
-- timberbot.py is on PATH. Run it directly: `timberbot.py <command> key:value ...`
-- NEVER use `python` prefix. NEVER `cd` anywhere. NEVER use full paths.
-- NEVER run mutating calls in parallel. Each changes state the next depends on.
-- ALWAYS use find_placement before placing buildings. NEVER guess coordinates.
-- ALWAYS run `timberbot.py prefabs | grep -i <keyword>` before placing a building you haven't placed this session.
-- Prefabs require faction suffix (e.g. LumberjackFlag.Folktails, NOT LumberjackFlag).
-- ALWAYS unpause the game (set_speed 1-3) after planning. Speed 0 = nothing happens.
-- The game clock is always running. Idle time wastes food, water, and construction progress.
-"""
-
-parts = [rules]
+# read rules from skill/rules.txt
+rules_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "skill", "rules.txt")
+if os.path.exists(rules_path):
+    with open(rules_path) as f:
+        parts.append("## SESSION RULES\n\n" + f.read())
+else:
+    parts.append("## SESSION RULES: rules.txt not found at " + rules_path)
 
 # try to get live colony state
 ok, ping = run("timberbot.py ping")
 if ok:
     ok2, brain = run("timberbot.py brain", timeout=10)
     if ok2 and brain:
-        parts.append("## CURRENT COLONY STATE (live from game)\n\n" + brain)
+        parts.append("## CURRENT COLONY STATE\n\n" + brain)
     else:
         parts.append("## COLONY STATE: game reachable but brain failed. Run `timberbot.py brain` manually.")
 else:
-    parts.append("## COLONY STATE: game not reachable yet. Run `timberbot.py ping` to check, then `timberbot.py brain goal:\"<goal>\"` when ready.")
+    parts.append("## COLONY STATE: game not reachable. Run `timberbot.py ping` to check.")
 
 output = {
     "hookSpecificOutput": {

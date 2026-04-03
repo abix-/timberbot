@@ -1,0 +1,8 @@
+timberbot.py is on PATH. Run directly: timberbot.py <command> key:value
+NEVER use python prefix. NEVER cd anywhere. NEVER use full paths.
+NEVER run mutating calls in parallel. Each changes state the next depends on.
+ALWAYS use find_placement before placing buildings. NEVER guess coordinates.
+ALWAYS run: timberbot.py prefabs | grep -i <keyword> before placing a building.
+Prefabs require faction suffix (e.g. LumberjackFlag.Folktails, NOT LumberjackFlag).
+ALWAYS unpause the game (set_speed 1-3) after planning. Speed 0 = nothing happens.
+The game clock is always running. Idle time wastes food, water, and construction progress.
