@@ -30,7 +30,7 @@ Colony state may be pre-loaded in your system prompt (look for `## CURRENT COLON
 
 ## Priority order
 
-1. **Water** -- beavers die without water faster than food. Place pumps FIRST. Waterfront tiles are limited -- once a path or building takes a waterfront tile, no pump can go there.
+1. **Water** -- beavers die without water faster than food. Place pumps FIRST. Waterfront tiles are limited -- once a path or building takes a waterfront tile, no pump can go there. If `waterDays: 0` but water buildings exist, those are likely Ancient Aquifer Drills (need 400hp power, not early-game). Place water pumps -- they work immediately with no power.
 2. **Food** -- gatherers for berries, then farms. 1 farmhouse per 8 beavers.
 3. **Housing** -- homeless beavers have zero wellbeing.
 4. **Roads** -- every building needs a path connection to the DC. Build roads from DC outward.
