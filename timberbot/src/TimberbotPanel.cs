@@ -1,12 +1,8 @@
 // TimberbotPanel.cs -- In-game UI for agent start/stop/status.
-//
-// VM console model: Start, Stop, Edit buttons.
-// Settings hidden until Edit clicked. Disabled while running.
 
 using System.Collections.Generic;
 using Timberborn.BlockSystem;
 using Timberborn.CoreUI;
-using Timberborn.DropdownSystem;
 using Timberborn.SelectionSystem;
 using Timberborn.SingletonSystem;
 using Timberborn.UILayoutSystem;
@@ -20,109 +16,139 @@ namespace Timberbot
         private readonly UILayout _layout;
         private readonly TimberbotService _service;
         private readonly VisualElementInitializer _veInit;
-        private readonly DropdownItemsSetter _dropdownSetter;
         private readonly EntitySelectionService _selectionService;
 
-        // collapsed bar
-        private VisualElement _collapsedWrapper;
+        private VisualElement _widget;
         private Label _statusBarLabel;
+        private NineSliceButton _openBtn;
 
-        // expanded panel
-        private VisualElement _expanded;
+        private VisualElement _modalOverlay;
+        private VisualElement _modalPanel;
         private Label _statusLabel;
         private Label _selectionLabel;
+        private VisualElement _settingsContainer;
 
-        // buttons
+        private TextField _binaryField;
+        private NineSliceButton _binaryPresetBtn;
+        private TextField _modelField;
+        private NineSliceButton _modelPresetBtn;
+        private TextField _effortField;
+        private NineSliceButton _effortPresetBtn;
+        private TextField _goalField;
+
         private NineSliceButton _startBtn;
         private NineSliceButton _stopBtn;
-        private NineSliceButton _editBtn;
 
-        // settings (toggled by Edit)
-        private VisualElement _settingsContainer;
-        private TextField _binaryField;
-        private Dropdown _modelDropdown;
-        private Dropdown _effortDropdown;
-        private TextField _goalField;
-        private bool _settingsVisible;
+        private VisualElement _presetPopup;
+        private ScrollView _presetScroll;
+        private VisualElement _presetPopupAnchor;
+
+        private bool _isWidgetDragging;
+        private int _dragPointerId;
+        private Vector2 _dragStartPointer;
+        private Vector2 _dragStartWidget;
+        private bool _widgetPositionInitialized;
 
         private float _lastUpdate;
-        private bool _isExpanded;
 
-        private readonly Dictionary<string, string> _modelDisplayToValue = new Dictionary<string, string>();
-        private readonly Dictionary<string, string> _effortDisplayToValue = new Dictionary<string, string>();
-
-        private static readonly string[][] ModelChoices = new[]
+        private static readonly string[][] BinaryChoices = new[]
         {
-            new[] { "claude-opus-4-6", "opus 4.6 $$$$" },
-            new[] { "claude-opus-4-5", "opus 4.5 $$$$" },
-            new[] { "claude-opus-4-1", "opus 4.1 $$$$" },
-            new[] { "claude-sonnet-4-6", "sonnet 4.6 $$$" },
-            new[] { "claude-sonnet-4-5", "sonnet 4.5 $$$" },
-            new[] { "claude-sonnet-3-7", "sonnet 3.7 $$" },
-            new[] { "claude-haiku-4-5", "haiku 4.5 $" },
-            new[] { "claude-haiku-3-5", "haiku 3.5 $" },
+            new[] { "claude", "claude" },
+            new[] { "codex", "codex" },
         };
 
-        private static readonly string[][] EffortChoices = new[]
+        private static readonly string[][] ClaudeModelChoices = new[]
         {
-            new[] { "max", "max - deep thinking" },
-            new[] { "high", "high - thorough (default)" },
-            new[] { "medium", "medium - faster, routine" },
-            new[] { "low", "low - fastest, simple" },
+            new[] { "claude-opus-4-6", "claude-opus-4-6" },
+            new[] { "claude-opus-4-5", "claude-opus-4-5" },
+            new[] { "claude-opus-4-1", "claude-opus-4-1" },
+            new[] { "claude-sonnet-4-6", "claude-sonnet-4-6" },
+            new[] { "claude-sonnet-4-5", "claude-sonnet-4-5" },
+            new[] { "claude-sonnet-3-7", "claude-sonnet-3-7" },
+            new[] { "claude-haiku-4-5", "claude-haiku-4-5" },
+            new[] { "claude-haiku-3-5", "claude-haiku-3-5" },
         };
 
-        public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit, DropdownItemsSetter dropdownSetter, EntitySelectionService selectionService)
+        private static readonly string[][] CodexModelChoices = new[]
+        {
+            new[] { "gpt-5.4", "gpt-5.4" },
+            new[] { "gpt-5.4-mini", "gpt-5.4-mini" },
+            new[] { "gpt-5.3-codex", "gpt-5.3-codex" },
+            new[] { "gpt-5.2-codex", "gpt-5.2-codex" },
+            new[] { "gpt-5.2", "gpt-5.2" },
+            new[] { "gpt-5.1-codex-max", "gpt-5.1-codex-max" },
+            new[] { "gpt-5.1-codex-mini", "gpt-5.1-codex-mini" },
+        };
+
+        private static readonly string[][] ClaudeEffortChoices = new[]
+        {
+            new[] { "max", "max" },
+            new[] { "high", "high" },
+            new[] { "medium", "medium" },
+            new[] { "low", "low" },
+        };
+
+        private static readonly string[][] CodexEffortChoices = new[]
+        {
+            new[] { "xhigh", "xhigh" },
+            new[] { "high", "high" },
+            new[] { "medium", "medium" },
+            new[] { "low", "low" },
+        };
+
+        public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit, EntitySelectionService selectionService)
         {
             _layout = layout;
             _service = service;
             _veInit = veInit;
-            _dropdownSetter = dropdownSetter;
             _selectionService = selectionService;
         }
 
         public void Load()
         {
-            BuildCollapsedBar();
-            BuildExpandedPanel();
+            BuildWidget();
+            BuildModal();
 
-            _veInit.InitializeVisualElement(_collapsedWrapper);
-            _veInit.InitializeVisualElement(_expanded);
+            _veInit.InitializeVisualElement(_widget);
+            _veInit.InitializeVisualElement(_modalOverlay);
 
-            _layout.AddBottomRight(_collapsedWrapper, 0);
-            _layout.AddAbsoluteItem(_expanded);
+            _layout.AddAbsoluteItem(_widget);
+            _layout.AddAbsoluteItem(_modalOverlay);
 
-            _collapsedWrapper.ToggleDisplayStyle(true);
-            _expanded.ToggleDisplayStyle(false);
-            _isExpanded = false;
+            _widget.ToggleDisplayStyle(true);
+            _modalOverlay.ToggleDisplayStyle(false);
 
             TimberbotLog.Info("panel: attached to game UI");
         }
 
         public void UpdateSingleton()
         {
-            if (_collapsedWrapper == null) return;
+            if (_widget == null)
+                return;
 
             float now = Time.realtimeSinceStartup;
-            if (now - _lastUpdate < 0.5f) return;
+            if (now - _lastUpdate < 0.5f)
+                return;
             _lastUpdate = now;
 
             var agent = _service.Agent;
-            if (agent == null) return;
+            if (agent == null)
+                return;
 
             var status = agent.CurrentStatus;
-            string statusText = FormatStatus(agent);
-            bool running = status == AgentStatus.GatheringState || status == AgentStatus.Interactive;
+            var statusText = FormatStatus(agent);
+            var running = status == AgentStatus.GatheringState || status == AgentStatus.Interactive;
 
-            _statusBarLabel.text = "Timberbot API: " + statusText;
-            _statusLabel.text = "Status: " + statusText;
+            _statusBarLabel.text = "Timberbot API - " + statusText;
+            _statusLabel.text = "Timberbot API - " + statusText;
+            _startBtn.SetEnabled(!running);
+            _stopBtn.SetEnabled(running);
 
-            // show selected entity coords
             try
             {
                 var selected = _selectionService.SelectedObject;
                 if (selected != null)
                 {
-                    // SelectableObject wraps an EntityComponent; get the GameObject via reflection
                     var goProp = selected.GetType().GetProperty("gameObject") ?? selected.GetType().GetProperty("GameObject");
                     var goField = goProp == null ? selected.GetType().GetField("_gameObject", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance) : null;
                     var go = goProp != null ? goProp.GetValue(selected) as GameObject : goField?.GetValue(selected) as GameObject;
@@ -150,61 +176,72 @@ namespace Timberbot
                     _selectionLabel.ToggleDisplayStyle(false);
                 }
             }
-            catch { _selectionLabel.ToggleDisplayStyle(false); }
-
-            _startBtn.SetEnabled(!running);
-            _stopBtn.SetEnabled(running);
-            _editBtn.SetEnabled(!running);
+            catch
+            {
+                _selectionLabel.ToggleDisplayStyle(false);
+            }
         }
 
-        private void BuildCollapsedBar()
+        private void BuildWidget()
         {
-            _collapsedWrapper = new VisualElement();
-            _collapsedWrapper.AddToClassList("top-right-item__wrapper");
+            _widget = new NineSliceVisualElement();
+            _widget.AddToClassList("top-right-item");
+            _widget.AddToClassList("square-large--green");
+            _widget.style.position = Position.Absolute;
+            _widget.style.flexDirection = FlexDirection.Row;
+            _widget.style.alignItems = Align.Center;
+            _widget.style.paddingLeft = 6;
+            _widget.style.paddingRight = 6;
+            _widget.style.paddingTop = 2;
+            _widget.style.paddingBottom = 2;
+            ApplySavedWidgetPosition();
 
-            var panel = new NineSliceVisualElement();
-            panel.AddToClassList("top-right-item");
-            panel.AddToClassList("square-large--green");
-            panel.style.flexDirection = FlexDirection.Row;
-            panel.style.justifyContent = Justify.Center;
-            panel.style.alignItems = Align.Center;
-            _collapsedWrapper.Add(panel);
-
-            _statusBarLabel = new NineSliceLabel();
-            _statusBarLabel.text = "Timberbot API: Idle";
+            _statusBarLabel = new NineSliceLabel { text = "Timberbot API - Idle" };
             _statusBarLabel.AddToClassList("text--yellow");
             _statusBarLabel.AddToClassList("game-text-normal");
             _statusBarLabel.style.marginRight = 4;
-            panel.Add(_statusBarLabel);
+            _statusBarLabel.RegisterCallback<PointerDownEvent>(OnWidgetPointerDown);
+            _statusBarLabel.RegisterCallback<PointerMoveEvent>(OnWidgetPointerMove);
+            _statusBarLabel.RegisterCallback<PointerUpEvent>(OnWidgetPointerUp);
+            _widget.Add(_statusBarLabel);
 
-            var expandBtn = new NineSliceButton();
-            expandBtn.AddToClassList("button-square");
-            expandBtn.AddToClassList("button-square--small");
-            expandBtn.AddToClassList("button-plus");
-            expandBtn.clicked += ToggleExpanded;
-            panel.Add(expandBtn);
+            _openBtn = new NineSliceButton();
+            _openBtn.AddToClassList("button-square");
+            _openBtn.AddToClassList("button-square--small");
+            _openBtn.AddToClassList("button-plus");
+            _openBtn.clicked += ShowModal;
+            _widget.Add(_openBtn);
         }
 
-        private void BuildExpandedPanel()
+        private void BuildModal()
         {
-            _expanded = new NineSliceVisualElement();
-            _expanded.AddToClassList("bg-sub-box--green");
-            _expanded.style.position = Position.Absolute;
-            _expanded.style.bottom = 60;
-            _expanded.style.right = 10;
-            _expanded.style.flexDirection = FlexDirection.Column;
-            _expanded.style.width = 310;
-            _expanded.style.paddingTop = 6;
-            _expanded.style.paddingBottom = 8;
-            _expanded.style.paddingLeft = 8;
-            _expanded.style.paddingRight = 8;
+            _modalOverlay = new VisualElement();
+            _modalOverlay.style.position = Position.Absolute;
+            _modalOverlay.style.left = 0;
+            _modalOverlay.style.top = 0;
+            _modalOverlay.style.right = 0;
+            _modalOverlay.style.bottom = 0;
+            _modalOverlay.style.justifyContent = Justify.Center;
+            _modalOverlay.style.alignItems = Align.Center;
+            _modalOverlay.style.backgroundColor = new Color(0f, 0f, 0f, 0.25f);
+            _modalOverlay.RegisterCallback<PointerDownEvent>(OnOverlayPointerDown);
 
-            // header
+            _modalPanel = new NineSliceVisualElement();
+            _modalPanel.AddToClassList("bg-sub-box--green");
+            _modalPanel.style.width = 520;
+            _modalPanel.style.maxHeight = 620;
+            _modalPanel.style.paddingTop = 8;
+            _modalPanel.style.paddingBottom = 8;
+            _modalPanel.style.paddingLeft = 10;
+            _modalPanel.style.paddingRight = 10;
+            _modalPanel.style.flexDirection = FlexDirection.Column;
+            _modalOverlay.Add(_modalPanel);
+
             var header = new VisualElement();
             header.style.flexDirection = FlexDirection.Row;
             header.style.justifyContent = Justify.SpaceBetween;
             header.style.alignItems = Align.Center;
-            header.style.marginBottom = 4;
+            header.style.marginBottom = 6;
 
             var title = new NineSliceLabel { text = "Timberbot API" };
             title.AddToClassList("text--yellow");
@@ -212,114 +249,215 @@ namespace Timberbot
             title.AddToClassList("text--bold");
             header.Add(title);
 
-            var collapseBtn = new NineSliceButton();
-            collapseBtn.AddToClassList("button-square");
-            collapseBtn.AddToClassList("button-square--small");
-            collapseBtn.AddToClassList("button-minus");
-            collapseBtn.clicked += ToggleExpanded;
-            header.Add(collapseBtn);
-            _expanded.Add(header);
+            var closeBtn = new NineSliceButton();
+            closeBtn.AddToClassList("button-square");
+            closeBtn.AddToClassList("button-square--small");
+            closeBtn.AddToClassList("button-minus");
+            closeBtn.clicked += HideModal;
+            header.Add(closeBtn);
+            _modalPanel.Add(header);
 
-            // status
-            _statusLabel = MakeLabel("Status: Idle");
-            _expanded.Add(_statusLabel);
+            _statusLabel = MakeLabel("Timberbot API - Idle");
+            _modalPanel.Add(_statusLabel);
 
-            // selected entity debug info
             _selectionLabel = MakeLabel("");
             _selectionLabel.AddToClassList("text--green");
             _selectionLabel.ToggleDisplayStyle(false);
-            _expanded.Add(_selectionLabel);
+            _modalPanel.Add(_selectionLabel);
 
-            _expanded.Add(MakeSeparator());
+            _modalPanel.Add(MakeSeparator());
 
-            // button row: Start / Stop / Edit
+            _settingsContainer = new VisualElement();
+            _settingsContainer.style.flexDirection = FlexDirection.Column;
+            _settingsContainer.style.marginBottom = 6;
+            _modalPanel.Add(_settingsContainer);
+
+            var savedBinary = NormalizeValue(_service.GetUISetting("agentBinary"), "claude");
+            var savedModel = _service.GetUISetting("agentModel");
+            var savedEffort = _service.GetUISetting("agentEffort");
+            var savedGoal = _service.GetUISetting("agentGoal") ?? "reach 50 beavers with 77 well-being";
+
+            _binaryField = MakeTextField(savedBinary);
+            _binaryField.RegisterValueChangedCallback(evt =>
+            {
+                var binary = NormalizeValue(evt.newValue, "claude");
+                _service.SaveUISetting("agentBinary", binary);
+                SyncFieldsForBinary(binary);
+            });
+            _binaryPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_binaryPresetBtn, _binaryField, BinaryChoices));
+            _settingsContainer.Add(MakePresetFieldRow("Binary:", _binaryField, _binaryPresetBtn));
+
+            var modelChoices = GetModelChoices(savedBinary);
+            _modelField = MakeTextField(GetInitialChoiceValue(modelChoices, savedModel));
+            _modelField.RegisterValueChangedCallback(evt =>
+                _service.SaveUISetting("agentModel", NormalizeValue(evt.newValue, modelChoices[0][0])));
+            _modelPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_modelPresetBtn, _modelField, GetModelChoices(CurrentBinary())));
+            _settingsContainer.Add(MakePresetFieldRow("Model:", _modelField, _modelPresetBtn));
+
+            var effortChoices = GetEffortChoices(savedBinary);
+            _effortField = MakeTextField(GetInitialChoiceValue(effortChoices, savedEffort));
+            _effortField.RegisterValueChangedCallback(evt =>
+                _service.SaveUISetting("agentEffort", NormalizeValue(evt.newValue, effortChoices[0][0])));
+            _effortPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_effortPresetBtn, _effortField, GetEffortChoices(CurrentBinary())));
+            _settingsContainer.Add(MakePresetFieldRow("Effort:", _effortField, _effortPresetBtn));
+
+            _goalField = MakeTextField(savedGoal);
+            _goalField.multiline = true;
+            _goalField.style.height = 80;
+            _goalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("agentGoal", evt.newValue));
+            _settingsContainer.Add(MakeFieldRow("Goal:", _goalField));
+
+            _modalPanel.Add(MakeSeparator());
+
             var btnRow = new VisualElement();
             btnRow.style.flexDirection = FlexDirection.Row;
             btnRow.style.justifyContent = Justify.Center;
-            btnRow.style.marginBottom = 4;
+            btnRow.style.marginTop = 4;
 
             _startBtn = MakeGameButton("Start", OnStartClicked);
             _startBtn.style.marginRight = 4;
             btnRow.Add(_startBtn);
 
             _stopBtn = MakeGameButton("Stop", OnStopClicked);
-            _stopBtn.SetEnabled(false);
             _stopBtn.style.marginRight = 4;
+            _stopBtn.SetEnabled(false);
             btnRow.Add(_stopBtn);
 
-            _editBtn = MakeGameButton("Edit", OnEditClicked);
-            btnRow.Add(_editBtn);
+            var doneBtn = MakeGameButton("Close", HideModal);
+            btnRow.Add(doneBtn);
+            _modalPanel.Add(btnRow);
 
-            _expanded.Add(btnRow);
+            _presetPopup = new NineSliceVisualElement();
+            _presetPopup.AddToClassList("bg-sub-box--green");
+            _presetPopup.style.position = Position.Absolute;
+            _presetPopup.style.minWidth = 180;
+            _presetPopup.style.paddingTop = 4;
+            _presetPopup.style.paddingBottom = 4;
+            _presetPopup.style.paddingLeft = 4;
+            _presetPopup.style.paddingRight = 4;
+            _presetPopup.ToggleDisplayStyle(false);
+            _modalPanel.Add(_presetPopup);
 
-            // settings container (hidden by default)
-            _settingsContainer = new VisualElement();
-            _settingsContainer.ToggleDisplayStyle(false);
-            _settingsVisible = false;
-
-            _settingsContainer.Add(MakeSeparator());
-
-            // load saved values or use defaults
-            var savedBinary = _service.GetUISetting("agentBinary") ?? "claude";
-            var savedModel = _service.GetUISetting("agentModel");
-            var savedEffort = _service.GetUISetting("agentEffort");
-            var savedGoal = _service.GetUISetting("agentGoal") ?? "reach 50 beavers with 77 well-being";
-
-            _binaryField = MakeTextField(savedBinary);
-            _binaryField.RegisterValueChangedCallback(evt => _service.SaveUISetting("agentBinary", evt.newValue));
-            _settingsContainer.Add(MakeFieldRow("Binary:", _binaryField));
-
-            // resolve saved model value to display label
-            string modelDefault = "sonnet 4.6 $$$";
-            if (savedModel != null)
-                foreach (var c in ModelChoices)
-                    if (c[0] == savedModel) { modelDefault = c[1]; break; }
-            _modelDropdown = MakeNativeDropdown(ModelChoices, modelDefault, _modelDisplayToValue);
-            _modelDropdown.ValueChanged += (s, e) => _service.SaveUISetting("agentModel", GetDropdownValue(_modelDropdown, _modelDisplayToValue));
-            _settingsContainer.Add(MakeFieldRow("Model:", _modelDropdown));
-
-            string effortDefault = "high - thorough (default)";
-            if (savedEffort != null)
-                foreach (var c in EffortChoices)
-                    if (c[0] == savedEffort) { effortDefault = c[1]; break; }
-            _effortDropdown = MakeNativeDropdown(EffortChoices, effortDefault, _effortDisplayToValue);
-            _effortDropdown.ValueChanged += (s, e) => _service.SaveUISetting("agentEffort", GetDropdownValue(_effortDropdown, _effortDisplayToValue));
-            _settingsContainer.Add(MakeFieldRow("Effort:", _effortDropdown));
-
-            _goalField = MakeTextField(savedGoal);
-            _goalField.multiline = true;
-            _goalField.style.height = 36;
-            _goalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("agentGoal", evt.newValue));
-            _settingsContainer.Add(MakeFieldRow("Goal:", _goalField));
-
-            _expanded.Add(_settingsContainer);
+            _presetScroll = new ScrollView(ScrollViewMode.Vertical);
+            _presetScroll.style.maxHeight = 260;
+            _presetScroll.style.minWidth = 172;
+            _presetScroll.style.flexGrow = 1;
+            _presetPopup.Add(_presetScroll);
         }
 
-        private void ToggleExpanded()
+        private void ApplySavedWidgetPosition()
         {
-            _isExpanded = !_isExpanded;
-            _collapsedWrapper.ToggleDisplayStyle(!_isExpanded);
-            _expanded.ToggleDisplayStyle(_isExpanded);
+            var savedLeft = _service.GetUISetting("widgetLeft");
+            var savedTop = _service.GetUISetting("widgetTop");
+            if (float.TryParse(savedLeft, out var left) && float.TryParse(savedTop, out var top))
+            {
+                _widget.style.left = left;
+                _widget.style.top = top;
+                _widget.style.right = StyleKeyword.Auto;
+                _widget.style.bottom = StyleKeyword.Auto;
+                _widgetPositionInitialized = true;
+            }
+            else
+            {
+                _widget.style.right = 0;
+                _widget.style.bottom = 0;
+                _widgetPositionInitialized = false;
+            }
+        }
+
+        private void OnWidgetPointerDown(PointerDownEvent evt)
+        {
+            if (evt.button != 0)
+                return;
+
+            _isWidgetDragging = true;
+            _dragPointerId = evt.pointerId;
+            _dragStartPointer = new Vector2(evt.position.x, evt.position.y);
+
+            var widgetBounds = _widget.worldBound;
+            if (!_widgetPositionInitialized)
+            {
+                _widget.style.left = widgetBounds.xMin;
+                _widget.style.top = widgetBounds.yMin;
+                _widget.style.right = StyleKeyword.Auto;
+                _widget.style.bottom = StyleKeyword.Auto;
+                _widgetPositionInitialized = true;
+            }
+
+            _dragStartWidget = new Vector2(_widget.resolvedStyle.left, _widget.resolvedStyle.top);
+            _statusBarLabel.CapturePointer(evt.pointerId);
+            evt.StopPropagation();
+        }
+
+        private void OnWidgetPointerMove(PointerMoveEvent evt)
+        {
+            if (!_isWidgetDragging || evt.pointerId != _dragPointerId)
+                return;
+
+            var pointer = new Vector2(evt.position.x, evt.position.y);
+            var delta = pointer - _dragStartPointer;
+            var newLeft = _dragStartWidget.x + delta.x;
+            var newTop = _dragStartWidget.y + delta.y;
+            var root = _widget.parent;
+            if (root != null)
+            {
+                newLeft = Mathf.Clamp(newLeft, 0, Mathf.Max(0, root.resolvedStyle.width - _widget.resolvedStyle.width));
+                newTop = Mathf.Clamp(newTop, 0, Mathf.Max(0, root.resolvedStyle.height - _widget.resolvedStyle.height));
+            }
+
+            _widget.style.left = newLeft;
+            _widget.style.top = newTop;
+            _widget.style.right = StyleKeyword.Auto;
+            _widget.style.bottom = StyleKeyword.Auto;
+            evt.StopPropagation();
+        }
+
+        private void OnWidgetPointerUp(PointerUpEvent evt)
+        {
+            if (!_isWidgetDragging || evt.pointerId != _dragPointerId)
+                return;
+
+            _isWidgetDragging = false;
+            _statusBarLabel.ReleasePointer(evt.pointerId);
+            _service.SaveUISetting("widgetLeft", _widget.resolvedStyle.left.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            _service.SaveUISetting("widgetTop", _widget.resolvedStyle.top.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            evt.StopPropagation();
+        }
+
+        private void OnOverlayPointerDown(PointerDownEvent evt)
+        {
+            if (evt.target == _modalOverlay)
+            {
+                HidePresetMenu();
+                HideModal();
+            }
+        }
+
+        private void ShowModal()
+        {
+            _modalOverlay.ToggleDisplayStyle(true);
+        }
+
+        private void HideModal()
+        {
+            HidePresetMenu();
+            _modalOverlay.ToggleDisplayStyle(false);
         }
 
         private void OnStartClicked()
         {
             var agent = _service.Agent;
-            if (agent == null) return;
+            if (agent == null)
+                return;
 
-            string binary = _binaryField.value;
-            if (string.IsNullOrWhiteSpace(binary)) binary = "claude";
-
-            string model = GetDropdownValue(_modelDropdown, _modelDisplayToValue);
-            string effort = GetDropdownValue(_effortDropdown, _effortDisplayToValue);
-            string goal = _goalField.value;
+            var binary = NormalizeValue(_binaryField.value, "claude");
+            var model = NormalizeValue(_modelField.value, "");
+            var effort = NormalizeValue(_effortField.value, "");
+            var goal = _goalField.value;
 
             agent.Start(binary, model, effort, 120, goal);
             TimberbotLog.Info($"panel: started agent binary={binary} model={model ?? "default"} effort={effort ?? "default"}");
-
-            // hide settings when starting
-            _settingsVisible = false;
-            _settingsContainer.ToggleDisplayStyle(false);
+            HidePresetMenu();
         }
 
         private void OnStopClicked()
@@ -328,60 +466,120 @@ namespace Timberbot
             TimberbotLog.Info("panel: stopped agent");
         }
 
-        private void OnEditClicked()
+        private void TogglePresetMenu(VisualElement anchor, TextField targetField, string[][] choices)
         {
-            _settingsVisible = !_settingsVisible;
-            _settingsContainer.ToggleDisplayStyle(_settingsVisible);
+            if (_presetPopupAnchor == anchor && _presetPopup.resolvedStyle.display != DisplayStyle.None)
+            {
+                HidePresetMenu();
+                return;
+            }
+
+            ShowPresetMenu(anchor, targetField, choices);
         }
 
-        // --- dropdown helpers ---
-
-        private Dropdown MakeNativeDropdown(string[][] choices, string defaultDisplay, Dictionary<string, string> displayToValue)
+        private void ShowPresetMenu(VisualElement anchor, TextField targetField, string[][] choices)
         {
-            var displayItems = new List<string>();
+            _presetScroll.Clear();
+            _presetPopupAnchor = anchor;
+
+            foreach (var choice in choices)
+            {
+                var value = choice[0];
+                _presetScroll.Add(MakePresetOptionButton(value, () =>
+                {
+                    targetField.value = value;
+                    HidePresetMenu();
+                }));
+            }
+
+            const float optionHeight = 26f;
+            const float popupPadding = 8f;
+            const float popupWidth = 188f;
+            const float panelMargin = 8f;
+
+            var panelBounds = _modalPanel.worldBound;
+            var anchorBounds = anchor.worldBound;
+            var desiredHeight = choices.Length * optionHeight + popupPadding;
+            var belowTop = anchorBounds.yMax - panelBounds.yMin + 2f;
+            var spaceBelow = panelBounds.height - belowTop - panelMargin;
+            var spaceAbove = anchorBounds.yMin - panelBounds.yMin - panelMargin;
+            var useAbove = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
+            var popupHeight = Mathf.Min(desiredHeight, Mathf.Max(optionHeight + popupPadding, useAbove ? spaceAbove : spaceBelow));
+
+            _presetPopup.style.width = popupWidth;
+            _presetPopup.style.height = popupHeight;
+            _presetPopup.style.left = Mathf.Clamp(anchorBounds.xMin - panelBounds.xMin - 156f, panelMargin, panelBounds.width - popupWidth - panelMargin);
+            _presetPopup.style.top = useAbove
+                ? Mathf.Max(panelMargin, anchorBounds.yMin - panelBounds.yMin - popupHeight - 2f)
+                : Mathf.Max(panelMargin, belowTop);
+            _presetPopup.ToggleDisplayStyle(true);
+            _presetPopup.BringToFront();
+        }
+
+        private void HidePresetMenu()
+        {
+            if (_presetPopup == null)
+                return;
+
+            _presetScroll.Clear();
+            _presetPopup.ToggleDisplayStyle(false);
+            _presetPopupAnchor = null;
+        }
+
+        private static string[][] GetModelChoices(string binary)
+        {
+            return binary == "codex" ? CodexModelChoices : ClaudeModelChoices;
+        }
+
+        private static string[][] GetEffortChoices(string binary)
+        {
+            return binary == "codex" ? CodexEffortChoices : ClaudeEffortChoices;
+        }
+
+        private static string GetInitialChoiceValue(string[][] choices, string savedValue)
+        {
+            if (!string.IsNullOrWhiteSpace(savedValue))
+            {
+                foreach (var c in choices)
+                    if (c[0] == savedValue)
+                        return c[0];
+            }
+
+            return choices[0][0];
+        }
+
+        private string CurrentBinary()
+        {
+            return NormalizeValue(_binaryField?.value, "claude");
+        }
+
+        private void SyncFieldsForBinary(string binary)
+        {
+            var modelChoices = GetModelChoices(binary);
+            if (!ChoiceContainsValue(modelChoices, _modelField?.value))
+                _modelField.value = modelChoices[0][0];
+
+            var effortChoices = GetEffortChoices(binary);
+            if (!ChoiceContainsValue(effortChoices, _effortField?.value))
+                _effortField.value = effortChoices[0][0];
+        }
+
+        private static bool ChoiceContainsValue(string[][] choices, string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
             foreach (var c in choices)
-            {
-                displayItems.Add(c[1]);
-                displayToValue[c[1]] = c[0];
-            }
+                if (c[0] == value.Trim())
+                    return true;
 
-            var dropdown = new Dropdown();
-            dropdown.style.flexGrow = 1;
-            dropdown.style.height = 26;
-            _veInit.InitializeVisualElement(dropdown);
-
-            var provider = new SimpleDropdownProvider(displayItems, defaultDisplay);
-            _dropdownSetter.SetItems(dropdown, provider);
-
-            return dropdown;
+            return false;
         }
 
-        private string GetDropdownValue(Dropdown dropdown, Dictionary<string, string> displayToValue)
+        private static string NormalizeValue(string value, string fallback)
         {
-            var provider = dropdown._dropdownProvider;
-            if (provider == null) return null;
-            var display = provider.GetValue();
-            if (display != null && displayToValue.TryGetValue(display, out var val))
-                return val;
-            return display;
+            return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         }
-
-        private class SimpleDropdownProvider : IDropdownProvider
-        {
-            public IReadOnlyList<string> Items { get; }
-            private string _value;
-
-            public SimpleDropdownProvider(IReadOnlyList<string> items, string defaultValue)
-            {
-                Items = items;
-                _value = defaultValue ?? items[0];
-            }
-
-            public string GetValue() => _value;
-            public void SetValue(string value) => _value = value;
-        }
-
-        // --- shared helpers ---
 
         private static string FormatStatus(TimberbotAgent agent)
         {
@@ -394,12 +592,6 @@ namespace Timberbot
                 case AgentStatus.Interactive: return "Running";
                 default: return agent.CurrentStatus.ToString();
             }
-        }
-
-        private static string Truncate(string s, int max)
-        {
-            if (string.IsNullOrEmpty(s)) return "(none)";
-            return s.Length <= max ? s : s.Substring(0, max) + "...";
         }
 
         private static VisualElement MakeSeparator()
@@ -433,6 +625,30 @@ namespace Timberbot
             return field;
         }
 
+        private static NineSliceButton MakePresetButton(string text, System.Action onClick)
+        {
+            var btn = new NineSliceButton { text = text };
+            btn.AddToClassList("button-game");
+            btn.AddToClassList("game-text-normal");
+            btn.style.width = 22;
+            btn.style.height = 22;
+            btn.style.paddingLeft = 0;
+            btn.style.paddingRight = 0;
+            btn.clicked += onClick;
+            return btn;
+        }
+
+        private static NineSliceButton MakePresetOptionButton(string text, System.Action onClick)
+        {
+            var btn = new NineSliceButton { text = text };
+            btn.AddToClassList("button-game");
+            btn.AddToClassList("game-text-normal");
+            btn.style.height = 24;
+            btn.style.marginBottom = 2;
+            btn.clicked += onClick;
+            return btn;
+        }
+
         private static NineSliceButton MakeGameButton(string text, System.Action onClick)
         {
             var btn = new NineSliceButton { text = text };
@@ -453,17 +669,24 @@ namespace Timberbot
             var row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
             row.style.alignItems = Align.Center;
-            row.style.marginBottom = 3;
+            row.style.marginBottom = 6;
 
             var lbl = new NineSliceLabel { text = labelText };
             lbl.AddToClassList("text--yellow");
             lbl.AddToClassList("game-text-normal");
-            lbl.style.width = 48;
+            lbl.style.width = 52;
             row.Add(lbl);
 
             field.style.flexGrow = 1;
             row.Add(field);
+            return row;
+        }
 
+        private static VisualElement MakePresetFieldRow(string labelText, TextField field, NineSliceButton button)
+        {
+            var row = MakeFieldRow(labelText, field);
+            button.style.marginLeft = 4;
+            row.Add(button);
             return row;
         }
     }
