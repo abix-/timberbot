@@ -2224,12 +2224,13 @@ namespace Timberbot
                 case 3: gx = x + rx - 1; break;
             }
 
+            int baseZ = blockObjectSpec.BaseZ;
             var validationReason = ValidatePlacement(buildingSpec, blockObjectSpec, x, y, ref z, orientation);
             if (validationReason != null)
                 return new PlaceBuildingResult { Error = validationReason, X = x, Y = y, Z = z, Prefab = prefabName };
 
             var orient = (Timberborn.Coordinates.Orientation)orientation;
-            var placement = new Placement(new Vector3Int(gx, gy, z), orient, FlipMode.Unflipped);
+            var placement = new Placement(new Vector3Int(gx, gy, z - baseZ), orient, FlipMode.Unflipped);
 
             var placer = _blockObjectPlacerService.GetMatchingPlacer(blockObjectSpec);
             int placedId = 0;
@@ -2267,11 +2268,14 @@ namespace Timberbot
             Preview preview = null;
             try
             {
-                var placement = new Placement(new Vector3Int(gx, gy, z),
+                int baseZ = blockObjectSpec.BaseZ;
+                var placement = new Placement(new Vector3Int(gx, gy, z - baseZ),
                     (Timberborn.Coordinates.Orientation)orientation, FlipMode.Unflipped);
                 preview = _previewFactory.Create(placeableSpec);
                 preview.Reposition(placement);
-                if (preview.BlockObject.IsValid())
+                // use service-level validation only, same as the player's PreviewPlacer.PreviewsAreValid
+                var validationSvc = preview.BlockObject._blockObjectValidationService;
+                if (validationSvc != null && validationSvc.IsValid(preview.BlockObject))
                 {
                     z = preview.BlockObject.CoordinatesAtBaseZ.z;
                     return null;
@@ -2328,7 +2332,6 @@ namespace Timberbot
                 }
 
                 // check service-level validators (district, water buildings, etc)
-                var validationSvc = preview.BlockObject._blockObjectValidationService;
                 if (validationSvc != null)
                 {
                     var validators = validationSvc._blockObjectValidators;
@@ -2339,35 +2342,52 @@ namespace Timberbot
                             return reason ?? validators[i].GetType().Name;
                     }
                 }
-                // fallback: collect all diagnostic info we can
+                // collect all diagnostic info
                 var diag = new System.Text.StringBuilder("placement invalid:");
-                var blocks = preview.BlockObject.PositionedBlocks.GetAllBlocks();
-                diag.Append($" blocks=[");
-                bool first = true;
-                foreach (var block in blocks)
+
+                // 1. BlockValidator.BlocksValid -- what IsValid() actually calls
+                bool blocksValidResult = bv != null && bv.BlocksValid(preview.BlockObject.PositionedBlocks);
+                diag.Append($" BlocksValid={blocksValidResult}");
+
+                // 2. BlockObjectValidationService.IsValid -- what IsValid() actually calls
+                bool svcValidResult = validationSvc != null && validationSvc.IsValid(preview.BlockObject);
+                diag.Append($" SvcValid={svcValidResult}");
+
+                // 3. per-block details
+                foreach (var block in preview.BlockObject.PositionedBlocks.GetAllBlocks())
                 {
                     var c = block.Coordinates;
-                    if (!first) diag.Append(",");
-                    first = false;
                     int th = GetTerrainHeight(c.x, c.y);
                     float wd = GetWaterDepth(c.x, c.y);
-                    diag.Append($"({c.x},{c.y},{c.z} terrain={th} water={wd:F2})");
+                    var conflicts = new System.Collections.Generic.List<string>();
+                    if (bv != null)
+                    {
+                        if (!bv.FitsInMap(block, false)) conflicts.Add("!fitsInMap");
+                        if (bv.BlockConflictsWithExistingObject(block)) conflicts.Add("occupied");
+                        if (bv.BlockConflictsWithBlockAbove(block)) conflicts.Add("above");
+                        if (bv.BlockConflictsWithBlocksBelow(block)) conflicts.Add("below");
+                        if (bv.BlockConflictsWithTerrain(block)) conflicts.Add("terrain");
+                        if (bv.ConflictsWithUndergroundBlockObject(block)) conflicts.Add("underground");
+                        if (bv.UndergroundBlockIsNotUnderground(block)) conflicts.Add("notUnderground");
+                        if (bv.BlockConflictsWithMatterBelow(block, false)) conflicts.Add("matterBelow");
+                    }
+                    string status = conflicts.Count > 0 ? string.Join("+", conflicts) : "ok";
+                    diag.Append($" ({c.x},{c.y},{c.z} t={th} w={wd:F1} {status})");
                 }
-                diag.Append("]");
-                if (bv == null) diag.Append(" blockValidator=null");
-                if (validationSvc == null)
-                    diag.Append(" validationService=null");
-                else
+
+                // 4. per-validator details
+                if (validationSvc != null)
                 {
                     var vals = validationSvc._blockObjectValidators;
                     for (int i = 0; i < vals.Length; i++)
                     {
                         string r2 = null;
                         bool ok = vals[i].IsValid(preview.BlockObject, out r2);
-                        if (!ok)
-                            diag.Append($" FAIL:{vals[i].GetType().Name}={r2 ?? "no reason"}");
+                        diag.Append($" {vals[i].GetType().Name}={ok}");
+                        if (!ok && r2 != null) diag.Append($"({r2})");
                     }
                 }
+
                 return diag.ToString();
             }
             catch (System.Exception ex)
