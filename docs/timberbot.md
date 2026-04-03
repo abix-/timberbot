@@ -204,7 +204,7 @@ ALWAYS run `timberbot.py prefabs | grep -i <keyword>` before placing any buildin
 - Folktails `EfficientFarmHouse` -> Iron Teeth `FarmHouse` (reversed)
 - Folktails `SmallWarehouse` -> Iron Teeth `MediumWarehouse` (different size prefix)
 
-A wrong prefab name causes `not_found` on every placement attempt. If `find_placement` returns `not_found`, check the prefab name FIRST.
+A wrong prefab name causes `invalid_prefab` on every placement attempt. If `find_placement` returns `invalid_prefab`, check the prefab name FIRST.
 
 ### Folktails key buildings
 

@@ -35,7 +35,8 @@ The error string starts with a machine-readable code. Parse the prefix before `:
 
 | Code prefix | Meaning |
 |------|---------|
-| `not_found` | Entity, building, district, or prefab does not exist |
+| `not_found` | Entity, building, or district does not exist |
+| `invalid_prefab` | Prefab name does not exist. Use /api/prefabs to list valid names |
 | `invalid_type` | Entity exists but is the wrong type for this operation |
 | `invalid_param` | Parameter value is out of range or invalid |
 | `not_unlocked` | Building requires science unlock first |
@@ -1202,7 +1203,7 @@ Place a building in the world. Validates all tiles before placing: occupancy, te
 #### Response (error)
 
 ```json
-{"error": "not_found", "x": 120, "y": 130, "z": 2, "prefab": "BadName"}
+{"error": "invalid_prefab: 'BadName' is not a valid prefab name. Use prefabs to list valid names", "x": 120, "y": 130, "z": 2}
 ```
 
 ```json
