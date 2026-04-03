@@ -369,6 +369,8 @@ Berries are a bridge to farming, not a long-term food plan.
 - Place paths and non-water buildings away from the water's edge. Route paths around waterfront, not along it.
 - Folktails use `WaterPump.Folktails` or `LargeWaterPump.Folktails`.
 - Iron Teeth use `DeepWaterPump.IronTeeth`.
+- Run `find_placement` with the water pump prefab to discover all valid pump locations. Results with `waterDepth > 0` are waterfront tiles with water access. Use these positions for pumps -- they are the only tiles where pumps can function.
+- If valid pump positions are on the same z-level as the DC, prioritize those -- shorter haul distance for water delivery.
 - Rough rule: 2 pumps per 15 beavers, 3 pumps once you are above that and preparing for drought.
 - During drought, water is consumed but not produced; only stored water and aquifer drills help.
 
