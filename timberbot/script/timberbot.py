@@ -665,6 +665,8 @@ class Timberbot:
         global _MEMORY_DIR
 
         summary = self._get_json("/api/summary")
+        # toon summary for display (compact flat format)
+        toon_summary = self._get("/api/summary")
 
         # set per-settlement memory dir
         settlement = _sanitize_name(summary.get("settlement", summary.get("settlementName", "unknown")) if isinstance(summary, dict) else "unknown")
@@ -715,20 +717,6 @@ class Timberbot:
         with open(bpath, "w") as f:
             _t.dump(brain_data, f)
 
-        # compact clusters: "{x,y,z,grown/total,species}" header then one-line values
-        def _compact_clusters(clusters):
-            out = []
-            for c in (clusters or []):
-                sp = ",".join(c.get("species", {}).keys())
-                out.append({"x": c["x"], "y": c["y"], "z": c.get("z", 0), "grown": c.get("grown", 0), "total": c.get("total", 0), "species": sp})
-            return out
-
-        if isinstance(summary, dict):
-            if "treeClusters" in summary:
-                summary["treeClusters"] = _compact_clusters(summary["treeClusters"])
-            if "foodClusters" in summary:
-                summary["foodClusters"] = _compact_clusters(summary["foodClusters"])
-
         # compact locations: "dc:124,143,z2" instead of nested dicts
         compact_locs = {}
         for name, loc in locations.items():
@@ -741,7 +729,7 @@ class Timberbot:
                 val += " " + note
             compact_locs[name] = val
 
-        return {"summary": summary, "goal": current_goal, "tasks": tasks, "locations": compact_locs}
+        return {"summary": toon_summary, "goal": current_goal, "tasks": tasks, "locations": compact_locs}
 
     def set_location(self, name, x, y, z=0, note=""):
         """Save a named location. Persists across sessions."""
