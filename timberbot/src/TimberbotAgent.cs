@@ -216,8 +216,9 @@ namespace Timberbot
                     args.Append(" --model ").Append(_model);
                 if (!string.IsNullOrEmpty(_effort))
                     args.Append(" --effort ").Append(_effort);
-                // initial message is just the player's goal
-                args.Append(" \"").Append(_goal.Replace("\"", "'")).Append("\"");
+                // initial message: demand boot report, then goal
+                args.Append(" \"Your system prompt contains session rules, colony state, and the game guide. Complete the boot sequence from the guide FIRST (print the boot report), then work on this goal: ")
+                    .Append(_goal.Replace("\"", "'")).Append("\"");
 
                 // build the full claude command (binary + flags + goal)
                 var claudeCmd = _binary + " " + args;
