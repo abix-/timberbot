@@ -20,7 +20,9 @@ namespace Timberbot
 
         private VisualElement _widget;
         private Label _statusBarLabel;
-        private NineSliceButton _openBtn;
+        private NineSliceButton _widgetStartBtn;
+        private NineSliceButton _widgetStopBtn;
+        private NineSliceButton _widgetEditBtn;
 
         private VisualElement _modalOverlay;
         private VisualElement _modalPanel;
@@ -35,9 +37,6 @@ namespace Timberbot
         private TextField _effortField;
         private NineSliceButton _effortPresetBtn;
         private TextField _goalField;
-
-        private NineSliceButton _startBtn;
-        private NineSliceButton _stopBtn;
 
         private VisualElement _presetPopup;
         private ScrollView _presetScroll;
@@ -141,8 +140,8 @@ namespace Timberbot
 
             _statusBarLabel.text = "Timberbot API - " + statusText;
             _statusLabel.text = "Timberbot API - " + statusText;
-            _startBtn.SetEnabled(!running);
-            _stopBtn.SetEnabled(running);
+            _widgetStartBtn.SetEnabled(!running);
+            _widgetStopBtn.SetEnabled(running);
 
             try
             {
@@ -188,29 +187,44 @@ namespace Timberbot
             _widget.AddToClassList("top-right-item");
             _widget.AddToClassList("square-large--green");
             _widget.style.position = Position.Absolute;
-            _widget.style.flexDirection = FlexDirection.Row;
-            _widget.style.alignItems = Align.Center;
+            _widget.style.flexDirection = FlexDirection.Column;
+            _widget.style.alignItems = Align.Stretch;
             _widget.style.paddingLeft = 6;
             _widget.style.paddingRight = 6;
-            _widget.style.paddingTop = 2;
-            _widget.style.paddingBottom = 2;
+            _widget.style.paddingTop = 4;
+            _widget.style.paddingBottom = 4;
             ApplySavedWidgetPosition();
 
             _statusBarLabel = new NineSliceLabel { text = "Timberbot API - Idle" };
             _statusBarLabel.AddToClassList("text--yellow");
             _statusBarLabel.AddToClassList("game-text-normal");
-            _statusBarLabel.style.marginRight = 4;
+            _statusBarLabel.style.marginBottom = 4;
             _statusBarLabel.RegisterCallback<PointerDownEvent>(OnWidgetPointerDown);
             _statusBarLabel.RegisterCallback<PointerMoveEvent>(OnWidgetPointerMove);
             _statusBarLabel.RegisterCallback<PointerUpEvent>(OnWidgetPointerUp);
             _widget.Add(_statusBarLabel);
 
-            _openBtn = new NineSliceButton();
-            _openBtn.AddToClassList("button-square");
-            _openBtn.AddToClassList("button-square--small");
-            _openBtn.AddToClassList("button-plus");
-            _openBtn.clicked += ShowModal;
-            _widget.Add(_openBtn);
+            var buttonRow = new VisualElement();
+            buttonRow.style.flexDirection = FlexDirection.Row;
+            buttonRow.style.justifyContent = Justify.Center;
+            buttonRow.style.alignItems = Align.Center;
+
+            _widgetStartBtn = MakeGameButton("Start", OnStartClicked);
+            _widgetStartBtn.style.width = 58;
+            _widgetStartBtn.style.marginRight = 4;
+            buttonRow.Add(_widgetStartBtn);
+
+            _widgetStopBtn = MakeGameButton("Stop", OnStopClicked);
+            _widgetStopBtn.style.width = 58;
+            _widgetStopBtn.style.marginRight = 4;
+            _widgetStopBtn.SetEnabled(false);
+            buttonRow.Add(_widgetStopBtn);
+
+            _widgetEditBtn = MakeGameButton("Edit", ShowModal);
+            _widgetEditBtn.style.width = 58;
+            buttonRow.Add(_widgetEditBtn);
+
+            _widget.Add(buttonRow);
         }
 
         private void BuildModal()
@@ -306,26 +320,6 @@ namespace Timberbot
             _goalField.style.height = 80;
             _goalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("agentGoal", evt.newValue));
             _settingsContainer.Add(MakeFieldRow("Goal:", _goalField));
-
-            _modalPanel.Add(MakeSeparator());
-
-            var btnRow = new VisualElement();
-            btnRow.style.flexDirection = FlexDirection.Row;
-            btnRow.style.justifyContent = Justify.Center;
-            btnRow.style.marginTop = 4;
-
-            _startBtn = MakeGameButton("Start", OnStartClicked);
-            _startBtn.style.marginRight = 4;
-            btnRow.Add(_startBtn);
-
-            _stopBtn = MakeGameButton("Stop", OnStopClicked);
-            _stopBtn.style.marginRight = 4;
-            _stopBtn.SetEnabled(false);
-            btnRow.Add(_stopBtn);
-
-            var doneBtn = MakeGameButton("Close", HideModal);
-            btnRow.Add(doneBtn);
-            _modalPanel.Add(btnRow);
 
             _presetPopup = new NineSliceVisualElement();
             _presetPopup.AddToClassList("bg-sub-box--green");
