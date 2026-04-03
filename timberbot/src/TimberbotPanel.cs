@@ -210,7 +210,7 @@ namespace Timberbot
             _expanded.Add(_effortDropdown);
 
             // goal field
-            _goalField = MakeTextField("survive and grow the colony");
+            _goalField = MakeTextField("reach 50 beavers with 77 well-being");
             _goalField.multiline = true;
             _goalField.style.height = 36;
             _expanded.Add(MakeFieldRow("Goal:", _goalField));

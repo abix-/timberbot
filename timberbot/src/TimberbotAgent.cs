@@ -44,7 +44,7 @@ namespace Timberbot
             _terminal = terminal ?? "";
         }
 
-        private const string DEFAULT_GOAL = "survive and grow the colony. keep beavers fed and watered. expand housing and production as resources allow.";
+        private const string DEFAULT_GOAL = "reach 50 beavers with 77 well-being";
 
         private AgentStatus _status = AgentStatus.Idle;
         private string _lastError;
