@@ -28,7 +28,6 @@ namespace Timberbot
         // expanded panel
         private VisualElement _expanded;
         private Label _statusLabel;
-        private Label _goalLabel;
         private TextField _binaryField;
         private Dropdown _modelDropdown;
         private Dropdown _effortDropdown;
@@ -109,7 +108,6 @@ namespace Timberbot
 
             _statusBarLabel.text = "Timberbot API:" + statusText;
             _statusLabel.text = "Status: " + statusText;
-            _goalLabel.text = "Goal: " + Truncate(agent.CurrentGoal, 40);
 
             bool running = status == AgentStatus.GatheringState ||
                            status == AgentStatus.Interactive;
@@ -183,8 +181,6 @@ namespace Timberbot
             // status labels
             _statusLabel = MakeLabel("Status: Idle");
             _expanded.Add(_statusLabel);
-            _goalLabel = MakeLabel("Goal: (none)");
-            _expanded.Add(_goalLabel);
 
             // separator
             _expanded.Add(MakeSeparator());
@@ -202,7 +198,7 @@ namespace Timberbot
             _expanded.Add(MakeFieldRow("Effort:", _effortDropdown));
 
             // goal field
-            _goalField = MakeTextField("");
+            _goalField = MakeTextField("reach 50 beavers with 77 well-being");
             _goalField.multiline = true;
             _goalField.style.height = 36;
             _expanded.Add(MakeFieldRow("Goal:", _goalField));
