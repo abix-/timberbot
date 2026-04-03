@@ -44,9 +44,12 @@ namespace Timberbot
         private bool _webhooksEnabled = true;
         private float _webhookBatchSeconds = 0.2f;
         private int _webhookCircuitBreaker = 30;
+        private int _webhookMaxPendingEvents = 1000;
         private double _writeBudgetMs = 1.0;
         private string _terminal = "";           // terminal command prefix (e.g. "wezterm start --")
         private string _settingsPath;            // full path to settings.json
+        private JObject _cachedSettings;         // in-memory settings, flushed on debounce
+        private float _settingsDirtyTime = -1f;  // realtimeSinceStartup when last mutated, -1 = clean
 
         public TimberbotService(
             EventBus eventBus,
@@ -86,6 +89,7 @@ namespace Timberbot
             WebhookMgr.Enabled = _webhooksEnabled;
             WebhookMgr.BatchSeconds = _webhookBatchSeconds;
             WebhookMgr.CircuitBreakerThreshold = _webhookCircuitBreaker;
+            WebhookMgr.MaxPendingEvents = _webhookMaxPendingEvents;
             TimberbotLog.Info($"v0.7.0 port={_httpPort} debug={_debugEnabled} webhooks={_webhooksEnabled} batchMs={_webhookBatchSeconds * 1000:F0}");
             Registry.WebhookMgr = WebhookMgr;  // registry pushes webhook events on entity lifecycle
             DebugTool.Service = this;         // debug needs Service reference for endpoint benchmarks
@@ -112,7 +116,8 @@ namespace Timberbot
                 _settingsPath = path;
                 if (System.IO.File.Exists(path))
                 {
-                    var json = Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(path));
+                    var json = JObject.Parse(System.IO.File.ReadAllText(path));
+                    _cachedSettings = json;
                     _debugEnabled = json.Value<bool>("debugEndpointEnabled");
                     _httpPort = json.Value<int>("httpPort");
                     if (_httpPort <= 0) _httpPort = 8085;
@@ -127,6 +132,11 @@ namespace Timberbot
                     {
                         int cb = json.Value<int>("webhookCircuitBreaker");
                         _webhookCircuitBreaker = cb > 0 ? cb : 30;
+                    }
+                    if (json["webhookMaxPendingEvents"] != null)
+                    {
+                        int maxPending = json.Value<int>("webhookMaxPendingEvents");
+                        _webhookMaxPendingEvents = maxPending > 0 ? maxPending : 1000;
                     }
                     if (json["writeBudgetMs"] != null)
                     {
@@ -147,9 +157,8 @@ namespace Timberbot
         {
             try
             {
-                var json = LoadSettingsJson();
-                if (json != null)
-                    return json.Value<string>(key);
+                if (_cachedSettings != null)
+                    return _cachedSettings.Value<string>(key);
             }
             catch { }
             return null;
@@ -175,31 +184,38 @@ namespace Timberbot
             SaveSettingToken(key, value);
         }
 
-        private JObject LoadSettingsJson()
-        {
-            if (_settingsPath != null && System.IO.File.Exists(_settingsPath))
-                return JObject.Parse(System.IO.File.ReadAllText(_settingsPath));
-
-            return null;
-        }
-
         private void SaveSettingToken(string key, JToken value)
         {
+            if (_settingsPath == null) return;
+            if (_cachedSettings == null) _cachedSettings = new JObject();
+            _cachedSettings[key] = value;
+            _settingsDirtyTime = Time.realtimeSinceStartup;
+        }
+
+        private void FlushSettingsIfNeeded(float now)
+        {
+            if (_settingsDirtyTime < 0f) return;
+            if (now - _settingsDirtyTime < 1f) return;
+            FlushSettings();
+        }
+
+        private void FlushSettings()
+        {
+            if (_settingsDirtyTime < 0f || _cachedSettings == null || _settingsPath == null) return;
+            _settingsDirtyTime = -1f;
             try
             {
-                if (_settingsPath == null) return;
-                JObject json = LoadSettingsJson() ?? new JObject();
-                json[key] = value;
-                System.IO.File.WriteAllText(_settingsPath, json.ToString(Newtonsoft.Json.Formatting.Indented));
+                System.IO.File.WriteAllText(_settingsPath, _cachedSettings.ToString(Newtonsoft.Json.Formatting.Indented));
             }
             catch (System.Exception ex)
             {
-                TimberbotLog.Error("settings.json save failed", ex);
+                TimberbotLog.Error("settings.json flush failed", ex);
             }
         }
 
         public void Unload()
         {
+            FlushSettings();
             ReadV2.Unregister();
             Registry.Unregister();
             WebhookMgr.Unregister();
@@ -219,6 +235,7 @@ namespace Timberbot
             ReadV2.ProcessPendingRefresh(now);
             _server?.ProcessWriteJobs(now, _writeBudgetMs);
             WebhookMgr.FlushWebhooks(now);
+            FlushSettingsIfNeeded(now);
         }
     }
 }

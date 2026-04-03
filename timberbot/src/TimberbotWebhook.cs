@@ -32,6 +32,7 @@ namespace Timberbot
         public bool Enabled = true;
         public float BatchSeconds = 0.2f;
         public int CircuitBreakerThreshold = 30;
+        public int MaxPendingEvents = 1000;
 
         private class WebhookRegistration
         {
@@ -281,6 +282,8 @@ namespace Timberbot
                 {
                     if (wh.Disabled) continue;
                     if (wh.Events != null && !wh.Events.Contains(eventName)) continue;
+                    if (MaxPendingEvents > 0 && wh.PendingPayloads.Count >= MaxPendingEvents)
+                        wh.PendingPayloads.RemoveAt(0); // drop oldest to keep backlog bounded
                     wh.PendingPayloads.Add(payload);
                 }
             }

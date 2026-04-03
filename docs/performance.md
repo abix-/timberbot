@@ -6,17 +6,25 @@ Single source of truth for Timberbot API performance. All optimization decisions
 
 | # | Severity | Issue | Cost | Location |
 |---|---|---|---|---|
-| 12 | Low | `CollectSummary` toon: `$"..."` interpolations for beds/workers/alerts + `string.Join` | ~7 strings | `TimberbotReadV2.cs` |
-| 13 | Low | `CollectAlerts`: `$"{a}/{b}"` per unstaffed building | N strings | `TimberbotReadV2.cs` |
+| 38 | High | Webhook `PendingPayloads` backlog is unbounded while endpoint is slow/failing | memory growth under noisy events until circuit breaker trips | `TimberbotWebhook.cs` |
+| 39 | High | HTTP `_pending` / `_writeQueue` POST queues are unbounded | unbounded memory + rising latency under write flood | `TimberbotHttpServer.cs` |
+| 40 | Medium | `TimberbotLog.Info/Error` does synchronous `Debug.Log` + `File.AppendAllText` in hot paths | lock contention, disk I/O, string churn on requests/webhooks | `TimberbotLog.cs`, `TimberbotHttpServer.cs`, `TimberbotWebhook.cs` |
+| 41 | Medium | `Process` objects in agent paths are never disposed | OS handle leak across repeated start/stop sessions | `TimberbotAgent.cs` |
 | 14 | Low | `CollectBuildings` basic: `$"{a}/{b}"` per building with workers | N strings | `TimberbotReadV2.cs` |
+| 13 | Low | `CollectAlerts`: `$"{a}/{b}"` per unstaffed building | N strings | `TimberbotReadV2.cs` |
 | 15 | Low | `CollectBeavers` basic: string concat `critical + "+" + n.Id` | N strings | `TimberbotReadV2.cs` |
 | 16 | Low | `CollectPowerNetworks`: inner `List<PowerBuildingItem>` + `.ToArray()` per network | ~N networks | `TimberbotReadV2.cs` |
 | 18 | Low | `CollectNotifications`: `.ToString()` per notification field | 2N strings | `TimberbotReadV2.cs` |
-| 20 | Low | `GetBeaverNeeds()` called on background thread (thread-questionable) | unknown | `TimberbotReadV2.cs` |
-| 21 | Low | Unity GC spikes freeze all threads | 0.5-2s | unavoidable |
-| 22 | Low | `sb.ToString()` alloc per HTTP response | 100-500KB | unavoidable |
+| 12 | Low | `CollectSummary` toon: `$"..."` interpolations for beds/workers/alerts + `string.Join` | ~7 strings | `TimberbotReadV2.cs` |
+| 34 | Low | `_alertCounts` dictionary keys grow unbounded across alert types | capacity never shrinks | `TimberbotReadV2.cs` |
+| 33 | Low | `InvalidPrefabError` iterates all buildings with `ToLowerInvariant()` + `new List` | error path only | `TimberbotPlacement.cs` |
+| 35 | Low | `ShowPresetMenu` recreates buttons on every dropdown open | GC'd VisualElements | `TimberbotPanel.cs` |
+| 36 | Low | `QueueTooltip` closure + scheduled callback per hover | lambda capture per hover | `TimberbotPanel.cs` |
+| 37 | None | `RegisterTooltipHandlers` creates 3 lambda closures per settings row | 33 closures at build time | `TimberbotPanel.cs` |
+| 21 | None | Unity GC spikes freeze all threads | 0.5-2s | unavoidable |
+| 22 | None | `sb.ToString()` alloc per HTTP response | 100-500KB | unavoidable |
 
-All remaining issues are low severity. Benchmark with `/api/benchmark` to measure impact.
+Highest-priority remaining work is queue/backlog bounding and hot-path logging reduction. Benchmark with `/api/benchmark` after fixing those to re-measure the lower-level alloc issues.
 
 For thread model, snapshot pipeline, serialization, and reusable collections see [architecture.md](architecture.md).
 
@@ -208,6 +216,12 @@ All scaling is linear with item count. Bot polling at 1/min cadence -- even 30ms
 | 10 | `CollectScience` GetSpec on background thread | Pre-built on main thread via `RefreshMainThreadData()` |
 | 11 | District refresh allocates new CachedDistrict + Dict every 1s | Reuses existing CachedDistrict objects, updates in place, clears Dict |
 | 23 | `Math.Round(need.Points, 2)` boxes on Mono | **DISPROVED** -- 0 GC0 across 11.4M calls |
+| 29 | `SaveSettingToken` File.Read + JObject.Parse + File.Write per keystroke | `_cachedSettings` JObject in memory, 1s debounce flush via `FlushSettingsIfNeeded()` in `UpdateSingleton()`, flush on `Unload()` |
+| 30 | Selected-object reflection alloc every 0.5s in panel | Removed with the selected-object inspector UI; panel no longer polls selection or reflects `gameObject` accessors |
+| 31 | `new StringBuilder(64)` per building per snapshot for StatusAlerts | `BuildingCompactState.StatusAlerts` changed from `string` to `string[]`, stores game strings directly |
+| 32 | `string.Split(',')` per building in summary alert counting | Consumers iterate `string[]` directly, no Split/Trim/array allocation |
+| 37 | `RegisterTooltipHandlers` 3 closures per settings row (33 total) | Created once in `BuildModal()` at load time, not per-frame. Correct pattern for UI event handlers |
+| 20 | `GetBeaverNeeds()` LINQ iterator alloc on background thread | Decompiled: read-only filter over write-once list, not a thread-safety bug. Cached as `_cachedBeaverNeeds` array at load time, zero alloc on read path |
 | -- | `Priority.ToString()` per building per refresh | Static lookup array |
 | -- | `CleanName()` per employed beaver per refresh | RefChanged pattern (ref compare) |
 | -- | `GetComponent<EntityComponent>()` per beaver per refresh | Cached `Go` field at add-time |

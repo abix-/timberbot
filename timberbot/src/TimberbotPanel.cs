@@ -24,7 +24,7 @@ namespace Timberbot
 
         private VisualElement _modalOverlay;
         private VisualElement _modalPanel;
-        private Label _statusLabel;
+
         private VisualElement _settingsContainer;
 
         private TextField _binaryField;
@@ -41,6 +41,7 @@ namespace Timberbot
         private NineSliceButton _webhooksEnabledPresetBtn;
         private TextField _webhookBatchMsField;
         private TextField _webhookCircuitBreakerField;
+        private TextField _webhookMaxPendingEventsField;
         private TextField _writeBudgetMsField;
         private TextField _terminalField;
 
@@ -120,13 +121,14 @@ namespace Timberbot
             ["Model:"] = "Model name passed to the agent with --model. Preset choices change based on the selected binary, but you can type any model manually.",
             ["Effort:"] = "Reasoning effort passed to the agent with --effort. Preset choices change based on the selected binary, but you can type any effort value manually.",
             ["Goal:"] = "Initial task sent to the agent after it prints the boot report. The system prompt also includes the guide and current colony state.",
-            ["debugEndpointEnabled:"] = "Enables debug and benchmark endpoints such as /api/debug and /api/benchmark. Applied on load; reload the save/mod to fully apply.",
-            ["httpPort:"] = "HTTP server port Timberbot listens on. The Python client reads this by default from settings.json. Applied on load; reload the save/mod to fully apply.",
-            ["webhooksEnabled:"] = "Turns outgoing webhook event delivery on or off. Applied on load; reload the save/mod to fully apply.",
-            ["webhookBatchMs:"] = "Webhook batching window in milliseconds. Use 0 for immediate delivery instead of batching. Applied on load; reload the save/mod to fully apply.",
-            ["webhookCircuitBreaker:"] = "Number of consecutive webhook delivery failures before Timberbot disables webhook sending. Applied on load; reload the save/mod to fully apply.",
-            ["writeBudgetMs:"] = "Per-frame main-thread time budget for queued write jobs. Higher values process writes faster but use more frame time. Applied on load; reload the save/mod to fully apply.",
-            ["terminal:"] = "Optional terminal command prefix used to launch the agent, with {cwd} supported as the working-directory placeholder. Applied on load; reload the save/mod to fully apply.",
+            ["* debugEndpointEnabled:"] = "Enables debug and benchmark endpoints such as /api/debug and /api/benchmark. Reload save to apply.",
+            ["* httpPort:"] = "HTTP server port Timberbot listens on. The Python client reads this by default from settings.json. Reload save to apply.",
+            ["* webhooksEnabled:"] = "Turns outgoing webhook event delivery on or off. Reload save to apply.",
+            ["* webhookBatchMs:"] = "Webhook batching window in milliseconds. Use 0 for immediate delivery instead of batching. Reload save to apply.",
+            ["* webhookCircuitBreaker:"] = "Number of consecutive webhook delivery failures before Timberbot disables webhook sending. Reload save to apply.",
+            ["* webhookMaxPendingEvents:"] = "Per-webhook cap for queued event payloads while delivery is in flight or failing. Oldest queued events are dropped when the cap is reached. Reload save to apply.",
+            ["* writeBudgetMs:"] = "Per-frame main-thread time budget for queued write jobs. Higher values process writes faster but use more frame time. Reload save to apply.",
+            ["* terminal:"] = "Optional terminal command prefix used to launch the agent, with {cwd} supported as the working-directory placeholder. Reload save to apply.",
         };
 
         public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit)
@@ -172,7 +174,7 @@ namespace Timberbot
             var running = status == AgentStatus.GatheringState || status == AgentStatus.Interactive;
 
             _statusBarLabel.text = "Timberbot API - " + statusText;
-            _statusLabel.text = "Timberbot API - " + statusText;
+
             _widgetStartBtn.SetEnabled(!running);
             _widgetStopBtn.SetEnabled(running);
         }
@@ -274,10 +276,6 @@ namespace Timberbot
             content.style.paddingRight = 4;
             _modalPanel.Add(content);
 
-            _statusLabel = MakeLabel("Timberbot API - Idle");
-            content.Add(_statusLabel);
-
-            content.Add(MakeSeparator());
 
             _settingsContainer = new VisualElement();
             _settingsContainer.style.flexDirection = FlexDirection.Column;
@@ -288,11 +286,12 @@ namespace Timberbot
             var savedModel = _service.GetUISetting("agentModel");
             var savedEffort = _service.GetUISetting("agentEffort");
             var savedGoal = _service.GetUISetting("agentGoal") ?? "reach 50 beavers with 77 well-being";
-            var savedDebugEndpointEnabled = NormalizeBoolString(_service.GetUISetting("debugEndpointEnabled"), true);
+            var savedDebugEndpointEnabled = NormalizeBoolString(_service.GetUISetting("debugEndpointEnabled"), false);
             var savedHttpPort = NormalizeValue(_service.GetUISetting("httpPort"), "8085");
             var savedWebhooksEnabled = NormalizeBoolString(_service.GetUISetting("webhooksEnabled"), true);
             var savedWebhookBatchMs = NormalizeValue(_service.GetUISetting("webhookBatchMs"), "200");
             var savedWebhookCircuitBreaker = NormalizeValue(_service.GetUISetting("webhookCircuitBreaker"), "30");
+            var savedWebhookMaxPendingEvents = NormalizeValue(_service.GetUISetting("webhookMaxPendingEvents"), "1000");
             var savedWriteBudgetMs = NormalizeValue(_service.GetUISetting("writeBudgetMs"), "1.0");
             var savedTerminal = _service.GetUISetting("terminal") ?? "";
 
@@ -340,7 +339,7 @@ namespace Timberbot
                 _service.SaveBoolSetting("debugEndpointEnabled", value == "true");
             });
             _debugEndpointPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_debugEndpointPresetBtn, _debugEndpointField, BoolChoices));
-            _settingsContainer.Add(MakePresetFieldRow("debugEndpointEnabled:", _debugEndpointField, _debugEndpointPresetBtn));
+            _settingsContainer.Add(MakePresetFieldRow("* debugEndpointEnabled:", _debugEndpointField, _debugEndpointPresetBtn));
 
             _httpPortField = MakeTextField(savedHttpPort);
             _httpPortField.RegisterValueChangedCallback(evt =>
@@ -349,7 +348,7 @@ namespace Timberbot
                 _httpPortField.SetValueWithoutNotify(value);
                 _service.SaveIntSetting("httpPort", int.Parse(value));
             });
-            _settingsContainer.Add(MakeFieldRow("httpPort:", _httpPortField));
+            _settingsContainer.Add(MakeFieldRow("* httpPort:", _httpPortField));
 
             _webhooksEnabledField = MakeTextField(savedWebhooksEnabled);
             _webhooksEnabledField.RegisterValueChangedCallback(evt =>
@@ -359,7 +358,7 @@ namespace Timberbot
                 _service.SaveBoolSetting("webhooksEnabled", value == "true");
             });
             _webhooksEnabledPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_webhooksEnabledPresetBtn, _webhooksEnabledField, BoolChoices));
-            _settingsContainer.Add(MakePresetFieldRow("webhooksEnabled:", _webhooksEnabledField, _webhooksEnabledPresetBtn));
+            _settingsContainer.Add(MakePresetFieldRow("* webhooksEnabled:", _webhooksEnabledField, _webhooksEnabledPresetBtn));
 
             _webhookBatchMsField = MakeTextField(savedWebhookBatchMs);
             _webhookBatchMsField.RegisterValueChangedCallback(evt =>
@@ -368,7 +367,7 @@ namespace Timberbot
                 _webhookBatchMsField.SetValueWithoutNotify(value);
                 _service.SaveIntSetting("webhookBatchMs", int.Parse(value));
             });
-            _settingsContainer.Add(MakeFieldRow("webhookBatchMs:", _webhookBatchMsField));
+            _settingsContainer.Add(MakeFieldRow("* webhookBatchMs:", _webhookBatchMsField));
 
             _webhookCircuitBreakerField = MakeTextField(savedWebhookCircuitBreaker);
             _webhookCircuitBreakerField.RegisterValueChangedCallback(evt =>
@@ -377,7 +376,16 @@ namespace Timberbot
                 _webhookCircuitBreakerField.SetValueWithoutNotify(value);
                 _service.SaveIntSetting("webhookCircuitBreaker", int.Parse(value));
             });
-            _settingsContainer.Add(MakeFieldRow("webhookCircuitBreaker:", _webhookCircuitBreakerField));
+            _settingsContainer.Add(MakeFieldRow("* webhookCircuitBreaker:", _webhookCircuitBreakerField));
+
+            _webhookMaxPendingEventsField = MakeTextField(savedWebhookMaxPendingEvents);
+            _webhookMaxPendingEventsField.RegisterValueChangedCallback(evt =>
+            {
+                var value = NormalizeIntString(evt.newValue, 1000, 1);
+                _webhookMaxPendingEventsField.SetValueWithoutNotify(value);
+                _service.SaveIntSetting("webhookMaxPendingEvents", int.Parse(value));
+            });
+            _settingsContainer.Add(MakeFieldRow("* webhookMaxPendingEvents:", _webhookMaxPendingEventsField));
 
             _writeBudgetMsField = MakeTextField(savedWriteBudgetMs);
             _writeBudgetMsField.RegisterValueChangedCallback(evt =>
@@ -386,11 +394,11 @@ namespace Timberbot
                 _writeBudgetMsField.SetValueWithoutNotify(value);
                 _service.SaveDoubleSetting("writeBudgetMs", double.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
             });
-            _settingsContainer.Add(MakeFieldRow("writeBudgetMs:", _writeBudgetMsField));
+            _settingsContainer.Add(MakeFieldRow("* writeBudgetMs:", _writeBudgetMsField));
 
             _terminalField = MakeTextField(savedTerminal);
             _terminalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("terminal", evt.newValue ?? ""));
-            _settingsContainer.Add(MakeFieldRow("terminal:", _terminalField));
+            _settingsContainer.Add(MakeFieldRow("* terminal:", _terminalField));
 
             _presetPopup = new NineSliceVisualElement();
             _presetPopup.AddToClassList("bg-sub-box--green");
