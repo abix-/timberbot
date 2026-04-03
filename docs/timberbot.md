@@ -18,6 +18,8 @@ On the first invocation of `/timberbot` per session, complete `Boot`, then `Brai
 
 ### Boot (rules confirmation -- NO API calls)
 
+`timberbot.py` is on PATH. Run it directly -- never use `python` prefix, never `cd` anywhere.
+
 1. Read this entire guide top to bottom before calling any game APIs.
 2. Read `api-reference.md` top to bottom. Once in context, use it from context -- do not re-read it.
 3. Immediately print this boot report in markdown. Replace every placeholder yourself. Use lowercase throughout:
