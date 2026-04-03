@@ -1,7 +1,7 @@
 Tell Claude "keep my beavers alive and get to 77 wellbeing" and watch it figure out the rest. It reads your colony, places buildings, routes paths up cliffs, manages workers, and reacts to droughts. You play together.
 
 [code]
-Open the Timberbot widget, click Settings, pick Claude or Codex, click Start
+Open the Timberbot API widget, click Settings, pick Claude or Codex, click Start
 [/code]
 
 That's it. No setup outside the game. The widget opens a terminal session where you and the AI talk through what to do next.
