@@ -632,7 +632,7 @@ namespace Timberbot
 
             if (tracked.BlockObject != null)
             {
-                var coords = tracked.BlockObject.Coordinates;
+                var coords = tracked.BlockObject.CoordinatesAtBaseZ;
                 AddComparison(fields, ref mismatches, ref total, "x", def.X, coords.x);
                 AddComparison(fields, ref mismatches, ref total, "y", def.Y, coords.y);
                 AddComparison(fields, ref mismatches, ref total, "z", def.Z, coords.z);

@@ -42,17 +42,20 @@
 | [Bot durability](api-reference.md#get-apibeavers) | Deterioration progress (0-1) on mechanical beavers | Yes |
 | [Resource projection](api-reference.md#get-apisummary) | Projected days of logs, planks, gears (logDays, plankDays, gearDays) | Yes |
 | [Webhooks](webhooks.md) | 68 push notification events for game automation (drought, death, construction, weather, power, wonders) | Yes |
+| [In-game agent widget](getting-started.md#preferred-ai-workflow-in-game-timberbot-ui) | Movable corner widget with `Start`, `Stop`, `Settings`, and live agent status | Yes |
+| [In-game settings](getting-started.md#settings-and-configuration) | Primary configuration surface for agent and runtime settings. All changes persist to `settings.json` | Yes |
+| [Built-in agent launch](getting-started.md#preferred-ai-workflow-in-game-timberbot-ui) | Launch Claude, Codex, or a custom binary interactively from inside Timberborn | Yes |
 | [Pagination](api-reference.md#pagination) | Server-side limit/offset on all list endpoints (default 100 items) | Yes |
 | [Filtering](api-reference.md#filtering) | Server-side name and proximity filtering on list endpoints | Yes |
 | [Error codes](api-reference.md#error-format) | Structured `"code: detail"` error format with machine-readable prefixes | Yes |
 | [Faction detection](api-reference.md#get-apisummary) | Auto-detects Folktails vs Iron Teeth, uses correct prefab names | Yes |
-| [Brain](api-reference.md#spatial-memory-cli-only) | Live summary + persistent goal/tasks/maps. One command for full colony awareness | Yes |
+| [Brain](api-reference.md#spatial-memory-cli-only) | Live summary + persistent goal/tasks/maps for `/timberbot` and other advanced CLI workflows | Yes |
 | [Placement distance](api-reference.md#post-apiplacement-find) | Flow-field path distance from DC on find_placement results for optimal building placement | Yes |
 | [Path routing](api-reference.md#post-apipathroute) | Auto-stairs and platforms across z-levels, checks science unlocks | Yes |
 | [Crops endpoint](api-reference.md#get-apicrops) | Separate crops listing with growth status, independent from trees | Yes |
 | [Food clusters](api-reference.md#get-apifood_clusters) | Top gatherable food clusters by density, excluding trees | Yes |
 | [Settlement name](api-reference.md#get-apisettlement) | Save game / settlement name for per-settlement memory folders | Yes |
-| [Remote connection](getting-started.md#remote-connections) | `--host=` and `--port=` CLI flags, `httpHost` in settings.json | Yes |
+| [Remote connection](getting-started.md#remote-connections) | Connect external clients with `--host=` and `--port=` CLI flags or `httpHost` / `httpPort` in `settings.json` | Yes |
 | [Benchmark](api-reference.md#post-apibenchmark) | Per-endpoint performance profiling | Yes |
 
 ## By design

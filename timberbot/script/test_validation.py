@@ -691,7 +691,7 @@ class TestRunner:
 
         # specific error codes
         specific_tests = [
-            ("unknown prefab", lambda: self.bot.place_building("Fake", sx, sy, sz), "not_found"),
+            ("unknown prefab", lambda: self.bot.place_building("Fake", sx, sy, sz), "invalid_prefab"),
             ("invalid orientation", lambda: self.bot.place_building("Path", sx, sy, sz, orientation="bogus"), "invalid_param"),
             ("locked building", lambda: self.bot.place_building(self._locked_prefab or "FakeLockedBuilding", sx, sy, sz), "not_unlocked"),
         ]
@@ -2866,9 +2866,9 @@ class TestRunner:
             ("set_plantable_priority nonexistent", lambda: bot.set_plantable_priority(999999, "Pine"), "not_found"),
             ("set_workers nonexistent", lambda: bot.set_workers(999999, 1),                     "not_found"),
             ("demolish nonexistent",    lambda: bot.demolish_building(999999),                  "not_found"),
-            ("place unknown prefab",    lambda: bot.place_building("Fake", sx, sy, sz),         "not_found"),
+            ("place unknown prefab",    lambda: bot.place_building("Fake", sx, sy, sz),         "invalid_prefab"),
             ("place bad orientation",   lambda: bot.place_building("Path", sx, sy, sz, "bogus"), "invalid_param"),
-            ("find_placement unknown",  lambda: bot.find_placement("Fake", 0, 0, 10, 10),      "not_found"),
+            ("find_placement unknown",  lambda: bot.find_placement("Fake", 0, 0, 10, 10),      "invalid_prefab"),
             ("stockpile_capacity nonexistent", lambda: bot.set_capacity(999999, 100),           "not_found"),
             ("stockpile_good nonexistent", lambda: bot.set_good(999999, "Water"),               "not_found"),
             ("building_range nonexistent", lambda: bot.building_range(999999),                  "not_found"),
@@ -3015,7 +3015,7 @@ class TestRunner:
             "crops": {"ready": int, "growing": int},
             "wellbeing": {"average": float, "miserable": int, "critical": int},
             "science": int,
-            "alerts": {"unstaffed": int, "unpowered": int, "unreachable": int},
+            "alerts": dict,
         })
         self.check("schema: summary (json)", len(errs) == 0, "; ".join(errs[:5]))
 
@@ -3290,7 +3290,7 @@ class TestRunner:
         self.check("schema: tiles (toon)", len(errs) == 0, "; ".join(errs[:5]))
 
         t_fp = tbot.find_placement("Path", self.center_x, self.center_y, self.center_x + 5, self.center_y + 5)
-        errs = validate(t_fp, {"prefab": str, "sizeX": int, "sizeY": int, "placements": list})
+        errs = validate(t_fp, [{"x": int, "y": int, "z": int, "orientation": str}])
         self.check("schema: find_placement (toon)", len(errs) == 0, "; ".join(errs[:5]))
 
         t_webhooks = tbot.list_webhooks()

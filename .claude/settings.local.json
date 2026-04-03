@@ -34,7 +34,15 @@
       "Bash(do echo:*)",
       "Read(//c/code/timberborn/timberbot/src/**)",
       "Bash(done)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(grep -r \"entrypoint\\\\|dockerfile\\\\|claude-agent\\\\|timberbot/claude\" /c/code/timberborn --include=*.md --include=*.sh --include=*.yml --include=*.yaml)",
+      "Bash(cmd.exe /c \"where python\")",
+      "Bash(cmd.exe /c \"python --version\")",
+      "Bash(\"/c/Users/Abix/AppData/Local/Programs/Python/Python312/python.exe\" -c \"print\\('ok'\\)\" 2>&1)",
+      "Read(//c/Users/Abix/Documents/Timberborn/Mods/Timberbot/skill/**)"
     ]
   }
 }

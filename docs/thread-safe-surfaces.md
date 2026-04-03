@@ -114,7 +114,7 @@ Treat these as main-thread only unless there is specific contrary evidence for a
 - `BuildingService`
 - `DistrictCenterRegistry`
 - `EntityRegistry`
-- `FactionNeedService`
+- `FactionNeedService` (but `GetBeaverNeeds()`/`GetBotNeeds()` are read-only LINQ filters over a write-once list -- effectively safe for reads after `Load()`. Timberbot caches the result at load time)
 - `ScienceService`
 - `BuildingUnlockingService`
 - `NotificationSaver`
