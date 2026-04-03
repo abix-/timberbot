@@ -4,8 +4,10 @@
 // Settings hidden until Edit clicked. Disabled while running.
 
 using System.Collections.Generic;
+using Timberborn.BlockSystem;
 using Timberborn.CoreUI;
 using Timberborn.DropdownSystem;
+using Timberborn.SelectionSystem;
 using Timberborn.SingletonSystem;
 using Timberborn.UILayoutSystem;
 using UnityEngine;
@@ -19,6 +21,7 @@ namespace Timberbot
         private readonly TimberbotService _service;
         private readonly VisualElementInitializer _veInit;
         private readonly DropdownItemsSetter _dropdownSetter;
+        private readonly EntitySelectionService _selectionService;
 
         // collapsed bar
         private VisualElement _collapsedWrapper;
@@ -27,6 +30,7 @@ namespace Timberbot
         // expanded panel
         private VisualElement _expanded;
         private Label _statusLabel;
+        private Label _selectionLabel;
 
         // buttons
         private NineSliceButton _startBtn;
@@ -70,12 +74,13 @@ namespace Timberbot
             new[] { "low", "low - fastest, simple" },
         };
 
-        public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit, DropdownItemsSetter dropdownSetter)
+        public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit, DropdownItemsSetter dropdownSetter, EntitySelectionService selectionService)
         {
             _layout = layout;
             _service = service;
             _veInit = veInit;
             _dropdownSetter = dropdownSetter;
+            _selectionService = selectionService;
         }
 
         public void Load()
@@ -113,6 +118,42 @@ namespace Timberbot
 
             _statusBarLabel.text = "Timberbot API: " + statusText;
             _statusLabel.text = "Status: " + statusText;
+
+            // show selected entity coords
+            try
+            {
+                var selected = _selectionService.SelectedObject;
+                if (selected != null)
+                {
+                    // SelectableObject wraps an EntityComponent; get the GameObject via reflection
+                    var goProp = selected.GetType().GetProperty("gameObject") ?? selected.GetType().GetProperty("GameObject");
+                    var goField = goProp == null ? selected.GetType().GetField("_gameObject", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance) : null;
+                    var go = goProp != null ? goProp.GetValue(selected) as GameObject : goField?.GetValue(selected) as GameObject;
+                    if (go != null)
+                    {
+                        var block = go.GetComponent<BlockObject>();
+                        if (block != null)
+                        {
+                            var coords = block.Coordinates;
+                            _selectionLabel.text = TimberbotEntityRegistry.CanonicalName(go.name) + " x:" + coords.x + " y:" + coords.y + " z:" + coords.z;
+                        }
+                        else
+                        {
+                            _selectionLabel.text = TimberbotEntityRegistry.CanonicalName(go.name);
+                        }
+                    }
+                    else
+                    {
+                        _selectionLabel.text = selected.ToString();
+                    }
+                    _selectionLabel.ToggleDisplayStyle(true);
+                }
+                else
+                {
+                    _selectionLabel.ToggleDisplayStyle(false);
+                }
+            }
+            catch { _selectionLabel.ToggleDisplayStyle(false); }
 
             _startBtn.SetEnabled(!running);
             _stopBtn.SetEnabled(running);
@@ -185,6 +226,12 @@ namespace Timberbot
             // status
             _statusLabel = MakeLabel("Status: Idle");
             _expanded.Add(_statusLabel);
+
+            // selected entity debug info
+            _selectionLabel = MakeLabel("");
+            _selectionLabel.AddToClassList("text--green");
+            _selectionLabel.ToggleDisplayStyle(false);
+            _expanded.Add(_selectionLabel);
 
             _expanded.Add(MakeSeparator());
 
