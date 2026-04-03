@@ -1,64 +1,35 @@
----
-name: timberbot
-description: Play Timberborn via timberbot.py. Use when controlling a running Timberborn game.
-version: "1.0"
----
-# Timberbot
-
-You are playing Timberborn via `timberbot.py`. The human player is also building in real time. Game state changes between API calls.
+Play Timberborn via `timberbot.py`.
 
 ## Rules
 
-- `timberbot.py` is on PATH. Run directly: `timberbot.py <command> key:value`. Never use `python` prefix. Never `cd`. Never use full paths.
-- Never run mutating calls in parallel. Each changes state the next depends on.
-- Always use `find_placement` before placing buildings. Never guess coordinates.
-- Always run `timberbot.py prefabs | grep -i <keyword>` before placing a building you haven't placed this session.
-- Prefabs require faction suffix (e.g. `LumberjackFlag.Folktails`, NOT `LumberjackFlag`).
+- Run `timberbot.py <command> key:value` directly. Never use `python`, `cd`, or full paths.
+- Never run mutating calls in parallel.
+- Always use `find_placement` for building placement. Never guess coordinates.
+- Before placing a building for the first time this session, run `timberbot.py prefabs | grep -i <keyword>`.
+- Prefabs require the faction suffix, e.g. `LumberjackFlag.Folktails`.
+- After each mutation batch, re-read the relevant state before planning the next step.
 
 ## Boot
 
-Colony state may be pre-loaded in your system prompt (look for `## CURRENT COLONY STATE`). If present, print the readout below from it. If not, run `timberbot.py brain goal:"<goal>"` first.
+- If `## CURRENT COLONY STATE` is present in context, use it. Otherwise run `timberbot.py brain goal:"<goal>"`.
+- Print the boot report first with: settlement/faction, day/speed/weather, population/beds/workers, food/water/logs/planks, wellbeing, and urgent alerts.
 
-```
-> **settlement** <name> | <faction>
-> **day** <N> speed:<S> | weather: <temperate/drought> <N>t/<N>d
-> **pop** <adults>a <children>c | beds: <occ>/<total> | workers: <assigned>/<vacancies> idle:<unemployed>
-> **supply** food:<F>d water:<W>d logs:<L> planks:<P>
-> **wellbeing** <avg>/77 | miserable:<N> critical:<N>
-> **alerts** <unstaffed> unstaffed | <unpowered> unpowered | <unreachable> unreachable
-```
+## Priorities
 
-## Priority order
+1. Water first.
+   Use waterfront tiles for pumps before paths/buildings consume them. If `water: 0` but `aquifer: N`, those are Ancient Aquifer Drills; leave them alone early and place water pumps instead.
+2. Food second.
+3. Housing next.
+4. Roads must connect everything back to the district center.
+5. Assign workers after essential buildings exist.
 
-1. **Water** -- beavers die without water faster than food. Place pumps FIRST. Waterfront tiles are limited -- once a path or building takes a waterfront tile, no pump can go there. If `water: 0` but `aquifer: N` in buildings, those are Ancient Aquifer Drills (need 400hp power, not early-game). Do NOT staff, demolish, or reconfigure drills -- leave them as-is for later when you have power. Place water pumps instead -- they work immediately with no power.
-2. **Food** -- gatherers for berries, then farms. 1 farmhouse per 8 beavers.
-3. **Housing** -- homeless beavers have zero wellbeing.
-4. **Roads** -- every building needs a path connection to the DC. Build roads from DC outward.
-5. **Workers** -- assign workers to buildings. Check `unemployed` and `vacancies` in summary.
+## Placement
 
-## Speed
+- Use `find_placement`, then connect the entrance with `place_path` if needed, then `place_building`.
+- New buildings are blueprints until `finished` is true.
+- Use `locations` from `brain` as search anchors.
 
-- Unpause AFTER giving beavers work, not before. If all workers are idle, unpausing wastes food/water.
-- Speed 0 = plan and place. Speed 1-3 = execute. Speed 0 for too long = nothing happens.
+## Reference
 
-## Placement workflow
-
-1. `find_placement prefab:<name> x1:... y1:... x2:... y2:...` -- find valid spots
-2. Pick best result (reachable > lower distance > pathAccess > nearPower)
-3. `place_path` from DC to the entrance coords if not already connected
-4. `place_building` at the coords and orientation from find_placement
-5. `set_priority` and `set_workers` as needed
-
-Placed buildings are blueprints. Beavers must haul materials and construct them before they function. A placed lodge has 0 beds until built. A placed pump produces 0 water until built. Check `finished` field in buildings output -- 0 means under construction. Unpause and wait for builders to complete them.
-
-## Locations
-
-`brain` output includes `locations` -- named spatial anchors (dc, forest, berries). Use these coordinates for search areas in `find_placement`.
-
-## Deep reference (read on demand)
-
-For building tables, crop details, wellbeing, manufacturing chains, faction-specific info:
-- Read `docs/timberbot.md` in the mod folder
-
-For exact endpoint shapes, error codes, pagination, response formats:
-- Read `docs/api-reference.md` in the mod folder
+- Read `docs/timberbot.md` for game strategy or building guidance.
+- Read `docs/api-reference.md` for exact command shapes and errors.
