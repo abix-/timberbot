@@ -40,7 +40,7 @@ Settings persist automatically. The widget position is saved too.
 
 [b]One-call snapshot:[/b] entire colony in a single request. Resources, weather, drought countdown, alerts, and projected days of food, water, logs, planks, and gears.
 
-[b]Brain:[/b] One command gives the AI everything: live colony summary (faction, DC per district, resources, building counts by role, nearby tree and food clusters) plus persistent state (goal, tasks, named maps). Summary is always fresh; goal, tasks, and maps survive between sessions in compact toon format.
+[b]Brain:[/b] One command gives the AI everything: live colony summary (faction, DC per district, resources, building counts by role, nearby tree and food clusters) plus persistent state (goal, tasks, named locations). Summary is always fresh; goal, tasks, and locations survive between sessions in compact toon format.
 
 [b]Webhooks:[/b] 68 push notification events -- drought start/end, beaver death, construction complete, game over, and more. Your scripts react instantly instead of polling.
 
@@ -61,11 +61,11 @@ Timberbot API runs an HTTP server (port 8085) inside the game. When you press St
 
 The Python client is included too:
 [code]
-timberbot.py brain                                # full colony picture: DC, faction, resources, clusters, maps, tasks
+timberbot.py brain                                # full colony picture: DC, faction, resources, clusters, locations, tasks
 timberbot.py top                                  # live colony dashboard
 timberbot.py beavers detail:full                  # every need on every beaver
 timberbot.py power                                # power networks with supply vs demand
-timberbot.py map x1:110 y1:130 x2:130 y2:150 name:base  # ANSI map saved to memory
+timberbot.py map x1:110 y1:130 x2:130 y2:150             # ANSI map with terrain, buildings, water, trees
 timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2 orientation:south
 timberbot.py place_path x1:0 y1:0 x2:200 y2:180    # A* path with auto-stairs
 timberbot.py launch settlement:Potato save:Tomato       # Windows: auto-launch, macOS: prepare autoload then open Timberborn manually

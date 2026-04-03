@@ -157,7 +157,7 @@ Use speed 0 to plan and queue work without spending resources. Do not unpause wi
 
 `brain` is the preferred first read for colony state because it combines live game state with persistent task and memory state.
 
-- `timberbot.py brain` returns live summary from the game plus goal/tasks/maps from disk
+- `timberbot.py brain` returns live summary from the game plus goal/tasks/locations from disk
 - `timberbot.py brain goal:"<text>"` sets or overwrites the persistent goal
 
 ### What brain returns
@@ -176,7 +176,7 @@ Use speed 0 to plan and queue work without spending resources. Do not unpause wi
 
 - `goal`
 - ordered `tasks`
-- saved `maps`
+- saved `locations`
 - last write timestamp
 
 ### Districts and clusters
@@ -185,15 +185,14 @@ Each district is self-contained: population, resources, housing, employment, wel
 
 `treeClusters` and `foodClusters` are filtered to the same z-level as the first DC and within 40 Manhattan distance. `grown` means harvestable now. `total` includes seedlings or immature growth.
 
-### DC map
+### Locations
 
-`brain` auto-saves a 41x41 ANSI map centered on the DC on first run. Read from `maps.districtcenter.files[0]`. It shows terrain height, water, trees, buildings, and paths.
+`brain` auto-seeds named locations (DC, forests, berries) from live data on first run. Use `set_location` and `remove_location` to manage them. Locations are stored in `brain.toon` and survive between sessions.
 
 ### Task workflow
 
 - Use persistent tasks for multi-step work that will span turns or sessions.
 - Mark failed tasks with the real reason so the next session can re-plan instead of repeating the same mistake.
-- Keep maps named and reusable so the AI can reason from saved spatial context instead of rescanning constantly.
 
 ## Factions and prefab names
 

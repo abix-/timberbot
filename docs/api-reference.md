@@ -1937,7 +1937,6 @@ Colored ASCII grid with terrain height display. Background shading encodes z-lev
 
 ```bash
 timberbot.py map x1:112 y1:126 x2:132 y2:146
-timberbot.py map x1:112 y1:126 x2:132 y2:146 name:districtcenter  # saves to memory/
 ```
 
 | Char | Color | Meaning |
@@ -2041,16 +2040,18 @@ timberbot.py top
 Persistent colony knowledge in `Documents/Timberborn/Mods/Timberbot/memory/`.
 
 ```bash
-timberbot.py brain            # live summary + persistent goal/tasks/maps
+timberbot.py brain            # live summary + persistent goal/tasks/locations
 timberbot.py brain goal:"get to 77 wellbeing"  # set persistent goal
-timberbot.py list_maps        # list saved map files
+timberbot.py set_location name:berries x:120 y:140 note:"south of DC"  # save a named location
+timberbot.py remove_location name:berries     # remove a saved location
+timberbot.py list_locations   # list saved locations
 timberbot.py add_task action:"build roads"   # add task to work queue
 timberbot.py update_task id:1 status:done    # update task status
 timberbot.py list_tasks       # show all tasks
 timberbot.py clear_tasks      # remove done tasks
 ```
 
-`brain` returns live summary (always fresh from `/api/summary`) plus persistent state from `memory/brain.toon` (goal, tasks, maps). Summary is never persisted -- only goal, tasks, and maps survive between sessions. Auto-creates brain and DC map on first run. Set a persistent goal with `brain goal:"text"`. The built-in in-game agent also uses `brain` internally during startup before it launches Claude/Codex.
+`brain` returns live summary (always fresh from `/api/summary`) plus persistent state from `memory/brain.toon` (goal, tasks, locations). Summary is never persisted -- only goal, tasks, and locations survive between sessions. Set a persistent goal with `brain goal:"text"`. The built-in in-game agent also uses `brain` internally during startup before it launches Claude/Codex.
 
 ---
 
