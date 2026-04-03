@@ -28,7 +28,7 @@ There's a draggable widget in the bottom-right corner. Pick your AI, set a goal,
 
 [b]Brain:[/b] one command gives the AI everything. Live colony snapshot plus persistent goal, tasks, and named locations across sessions.
 
-[b]Webhooks:[/b] 68 push events. Drought, death, construction, game over. Your scripts react instantly instead of polling.
+[b]Webhooks:[/b] [url=https://abix-.github.io/TimberbornMods/webhooks/]68 push events[/url]. Drought, death, construction, game over. Your scripts react instantly instead of polling.
 
 [b]Live dashboard:[/b] run timberbot.py top for a real-time colony overview right in your terminal.
 
@@ -36,23 +36,13 @@ There's a draggable widget in the bottom-right corner. Pick your AI, set a goal,
 [code]
 timberbot.py brain                                # full colony snapshot
 timberbot.py top                                  # live dashboard
-timberbot.py beavers detail:full                  # every need on every beaver
-timberbot.py power                                # power networks
-timberbot.py map x1:110 y1:130 x2:130 y2:150     # ANSI terrain map
-timberbot.py place_building prefab:FarmHouse.IronTeeth x:120 y:130 z:2
 timberbot.py place_path x1:0 y1:0 x2:200 y2:180  # A* path with auto-stairs
-timberbot.py crops                                # growth status
-timberbot.py register_webhook url:http://localhost:9000/events events:drought.start,beaver.died
+timberbot.py map x1:110 y1:130 x2:130 y2:150     # ANSI terrain map
 [/code]
-Works with any language. The Python client is optional. Raw curl works too.
+Works with any language. Python client is optional. Raw curl works too. See the [url=https://abix-.github.io/TimberbornMods/api-reference/]API Reference[/url] for all commands.
 
-[h1]AI skill setup (optional)[/h1]
-The in-game widget is the easy path. For manual Claude Code setup:
-[code]
-cp skill/timberbot.md ~/.claude/skills/timberbot/SKILL.md
-/timberbot
-[/code]
-For Codex, point it at the mod folder. For ChatGPT, paste docs/timberbot.md as the system prompt.
+[h1]AI setup[/h1]
+The in-game widget handles everything. For manual setup or other AI providers, see [url=https://abix-.github.io/TimberbornMods/getting-started/#let-ai-play-your-colony]AI setup guide[/url].
 
 [h1]Getting started[/h1]
 1. Subscribe and enable in Mod Manager
