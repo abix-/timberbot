@@ -48,7 +48,7 @@ If boot is `PASSED`, continue immediately to `Brain` and run the `brain` call.
 If any doc is `MISSING`, any placeholder is left blank, or any fact cannot be stated, boot is `FAILED`. Report the issue, ask the user for guidance, and do not make any game API calls.
 ### Brain (one command)
 
-3. Run `timberbot.py brain goal:"<player's request>"`. This is the only boot API call. The player's prompt becomes the persistent goal. Memory is per-settlement and stored in `memory/<settlement>/`.
+3. `timberbot.py` is on PATH. Run it directly -- never use `python` prefix, never `cd` anywhere. Example: `timberbot.py brain goal:"<player's request>"`. This is the only boot API call. The player's prompt becomes the persistent goal. Memory is per-settlement and stored in `memory/<settlement>/`.
 4. If existing memory is found for this settlement, ask the human whether to load it or start fresh. If they choose fresh, run `timberbot.py clear_brain`, then `brain` again.
 5. If no existing memory exists, `brain` auto-creates it with the district-center map. Print this readout:
 
