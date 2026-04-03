@@ -125,13 +125,7 @@ namespace Timberbot
                 .CloseObj().ToString();
         }
 
-        private static string JsonEscape(string s)
-        {
-            if (string.IsNullOrEmpty(s)) return "";
-            if (s.Length > 2000) s = s.Substring(0, 2000) + "...(truncated)";
-            return s.Replace("\\", "\\\\").Replace("\"", "\\\"")
-                    .Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
-        }
+        private static string JsonEscape(string s) => TimberbotPure.JsonEscape(s);
 
         private static (bool ok, string output) RunProcess(string cmd, string args, int timeoutSeconds)
         {
@@ -168,34 +162,11 @@ namespace Timberbot
             catch (Exception ex) { return (false, ex.Message); }
         }
 
-        private static bool IsCodexBinary(string binary)
-        {
-            if (string.IsNullOrWhiteSpace(binary))
-                return false;
+        private static bool IsCodexBinary(string binary) => TimberbotPure.IsCodexBinary(binary);
 
-            try
-            {
-                return string.Equals(Path.GetFileNameWithoutExtension(binary.Trim()), "codex", StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                return false;
-            }
-        }
+        private static string QuoteArg(string value) => TimberbotPure.QuoteArg(value);
 
-        private static string QuoteArg(string value)
-        {
-            if (value == null)
-                value = "";
-            return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
-        }
-
-        private static string ShellQuoteArg(string value)
-        {
-            if (value == null)
-                value = "";
-            return "'" + value.Replace("'", "'\"'\"'") + "'";
-        }
+        private static string ShellQuoteArg(string value) => TimberbotPure.ShellQuoteArg(value);
 
         private static (string exe, string args) SplitCommand(string command)
         {

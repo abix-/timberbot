@@ -1034,32 +1034,13 @@ namespace Timberbot
             return false;
         }
 
-        private static string NormalizeValue(string value, string fallback)
-        {
-            return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
-        }
+        private static string NormalizeValue(string value, string fallback) => TimberbotPure.NormalizeValue(value, fallback);
 
-        private static string NormalizeBoolString(string value, bool fallback)
-        {
-            var normalized = NormalizeValue(value, fallback ? "true" : "false").ToLowerInvariant();
-            return normalized == "false" ? "false" : "true";
-        }
+        private static string NormalizeBoolString(string value, bool fallback) => TimberbotPure.NormalizeBoolString(value, fallback);
 
-        private static string NormalizeIntString(string value, int fallback, int minValue)
-        {
-            if (int.TryParse(NormalizeValue(value, fallback.ToString()), out var parsed) && parsed >= minValue)
-                return parsed.ToString();
+        private static string NormalizeIntString(string value, int fallback, int minValue) => TimberbotPure.NormalizeIntString(value, fallback, minValue);
 
-            return fallback.ToString();
-        }
-
-        private static string NormalizeDoubleString(string value, double fallback, double minValue)
-        {
-            if (double.TryParse(NormalizeValue(value, fallback.ToString(CultureInfo.InvariantCulture)), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) && parsed >= minValue)
-                return parsed.ToString(CultureInfo.InvariantCulture);
-
-            return fallback.ToString(CultureInfo.InvariantCulture);
-        }
+        private static string NormalizeDoubleString(string value, double fallback, double minValue) => TimberbotPure.NormalizeDoubleString(value, fallback, minValue);
 
         private static string FormatStatus(TimberbotAgent agent)
         {

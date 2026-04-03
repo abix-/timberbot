@@ -891,67 +891,13 @@ namespace Timberbot
 
         private static int ParseInt(string raw, int fallback) => int.TryParse(raw, out var value) ? value : fallback;
 
-        private static bool ValuesEqual(object left, object right)
-        {
-            if (left == null || right == null) return left == right;
-            if (TryGetNumeric(left, out var leftNum) && TryGetNumeric(right, out var rightNum))
-                return Math.Abs(leftNum - rightNum) < 0.0001;
-            return Equals(left, right);
-        }
+        private static bool ValuesEqual(object left, object right) => TimberbotPure.ValuesEqual(left, right);
 
-        private static bool TryGetNumeric(object value, out double numeric)
-        {
-            numeric = 0;
-            if (value == null) return false;
-            try
-            {
-                if (value is bool b) { numeric = b ? 1 : 0; return true; }
-                if (value is IConvertible) { numeric = Convert.ToDouble(value); return true; }
-            }
-            catch { }
-            return false;
-        }
+        private static bool TryGetNumeric(object value, out double numeric) => TimberbotPure.TryGetNumeric(value, out numeric);
 
-        private static int CompareValues(object left, object right, out bool comparable)
-        {
-            comparable = false;
-            if (TryGetNumeric(left, out var leftNum) && TryGetNumeric(right, out var rightNum))
-            {
-                comparable = true;
-                return leftNum.CompareTo(rightNum);
-            }
-            if (left is string ls && right is string rs)
-            {
-                comparable = true;
-                return string.Compare(ls, rs, StringComparison.Ordinal);
-            }
-            return 0;
-        }
+        private static int CompareValues(object left, object right, out bool comparable) => TimberbotPure.CompareValues(left, right, out comparable);
 
-        private static bool EvaluateAssertion(object left, string op, object right, out string detail)
-        {
-            detail = null;
-            switch (op)
-            {
-                case "eq": return ValuesEqual(left, right);
-                case "neq": return !ValuesEqual(left, right);
-                case "null": return left == null;
-                case "notnull": return left != null;
-                case "gt":
-                case "gte":
-                case "lt":
-                case "lte":
-                    var cmp = CompareValues(left, right, out var comparable);
-                    if (!comparable) { detail = "values not comparable"; return false; }
-                    if (op == "gt") return cmp > 0;
-                    if (op == "gte") return cmp >= 0;
-                    if (op == "lt") return cmp < 0;
-                    return cmp <= 0;
-                default:
-                    detail = $"unknown op '{op}'";
-                    return false;
-            }
-        }
+        private static bool EvaluateAssertion(object left, string op, object right, out string detail) => TimberbotPure.EvaluateAssertion(left, op, right, out detail);
 
         private static void AddComparison(Dictionary<string, object> fields, ref int mismatches, ref int total, string name, object cached, object live)
         {

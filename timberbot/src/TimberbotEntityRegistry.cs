@@ -62,17 +62,9 @@ namespace Timberbot
             return (i >= 0 && i < PriorityNames.Length) ? PriorityNames[i] : "Normal";
         }
 
-        public static string CanonicalName(string name)
-        {
-            return name.Replace("(Clone)", "").Trim();
-        }
+        public static string CanonicalName(string name) => TimberbotPure.CanonicalName(name);
 
-        public static string CleanName(string name)
-        {
-            var clean = CanonicalName(name);
-            if (FactionSuffix.Length > 0) clean = clean.Replace(FactionSuffix, "");
-            return clean.Trim();
-        }
+        public static string CleanName(string name) => TimberbotPure.CleanName(name, FactionSuffix);
 
         public IReadOnlyList<string> AllGoodIds => _goodService.Goods;
 

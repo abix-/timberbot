@@ -16,6 +16,7 @@ TimberbornMods/
       ITimberbotWriteJob.cs              Write job interface for budgeted main-thread execution
       TimberbotHttpServer.cs            HttpListener, routing, request/response handling
       TimberbotJw.cs                    Fluent zero-alloc JSON writer
+      TimberbotPure.cs                  Pure static helpers (no Unity deps, shared with test project)
       TimberbotLog.cs                   File-based error logging, timestamped, thread-safe
       TimberbotConfigurator.cs          Bindito DI module registration
       TimberbotAutoLoad.cs              Auto-load a save at main menu via autoload.json or CLI args
@@ -24,6 +25,10 @@ TimberbornMods/
       manifest.json                     Mod metadata (version, name, description)
       settings.json                     Persistent settings store (runtime + agent/UI settings, primarily edited in-game)
       thumbnail.png                     Steam Workshop image
+    test/
+      Timberbot.Tests.csproj            xUnit test project (net8.0, shares source files)
+      TimberbotJwTests.cs               JSON writer tests (primitives, nesting, commas, reuse)
+      TimberbotPureTests.cs             Pure helper tests (parsing, quoting, assertions, normalization)
     script/
       timberbot.py                      Python client (API + CLI + dashboard)
       test_v2.py                        Primary test harness (smoke, freshness, write_to_read, performance, concurrency)
@@ -109,6 +114,16 @@ All settings persist to `settings.json`, including:
 `Publicize="true"` makes internal types accessible. `<Private>false</Private>` prevents copying the DLL to output (the game already has it).
 
 ## Testing
+
+### Unit tests
+
+Offline tests for the JSON serializer and pure helper functions. No game required.
+
+```bash
+dotnet test timberbot/test/
+```
+
+141 tests covering `TimberbotJw` (serialization, comma handling, nesting, reuse) and `TimberbotPure` (orientation parsing, name cleanup, assertion evaluation, value normalization, shell quoting).
 
 ### Test suite
 
