@@ -322,8 +322,10 @@ Common footprints:
 - There is almost always something productive to do: mark trees, place a building, assign workers, adjust priorities, plant crops, expand roads.
 - Inaction compounds. A 2-day gap with no actions can mean 2 fewer days of crop growth, 2 fewer days of resource hauling, and 2 fewer days of construction progress.
 - When in doubt, check `alerts` for unstaffed/unpowered/unreachable buildings, or `resources` for low stocks.
-- Pausing (speed 0) is available for planning, but the game only progresses when unpaused. A paused game produces no food, no water, no construction progress. Unpause to play.
-- Speed 0 for extended periods means nothing happens -- beavers stand still, crops don't grow, drought timer is frozen. Use speed 1-3 to keep the colony alive.
+- Pausing (speed 0) is available for planning, but the game only progresses when unpaused. A paused game produces no food, no water, no construction progress.
+- Unpause AFTER giving beavers work, not before. If all workers are unemployed, unpausing just wastes food/water while beavers idle. Place buildings, assign workers, build roads FIRST at speed 0, then unpause.
+- The summary shows `unemployed` count. If unemployed > 0 and vacancies > 0, beavers need roads to reach workplaces or workers need to be assigned.
+- Speed 0 for extended periods means nothing happens. Use speed 1-3 to keep the colony alive once beavers have work.
 
 ### Food
 
@@ -365,6 +367,7 @@ Berries are a bridge to farming, not a long-term food plan.
 
 ### Water
 
+- Water is the top priority. Beavers die without water faster than without food. Place water pumps and route paths to them BEFORE placing other buildings. Other buildings placed near the water's edge consume waterfront tiles that pumps need.
 - Pumps must straddle the land/water edge. Waterfront tiles are limited and irreplaceable -- once a path or non-pump building occupies a waterfront tile, no pump can go there. Reserve waterfront tiles for pumps.
 - Place paths and non-water buildings away from the water's edge. Route paths around waterfront, not along it.
 - Folktails use `WaterPump.Folktails` or `LargeWaterPump.Folktails`.
