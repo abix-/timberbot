@@ -1,5 +1,7 @@
 {
   "debugEndpointEnabled": true,
   "webhooksEnabled": true,
-  "httpPort": 8085
+  "httpPort": 8085,
+  "terminal": "",
+  "pythonCommand": ""
 }

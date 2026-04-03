@@ -136,7 +136,7 @@ namespace Timberbot
         private static readonly Dictionary<string, string> SettingTooltips = new Dictionary<string, string>
         {
             ["Binary:"] = "Which CLI executable Timberbot launches for the agent session. Select 'custom' to provide your own command template.",
-            ["Command:"] = "Freeform command template for custom CLIs. Placeholders: {skill} = skill file path, {prompt} = inline startup text, {prompt_file} = startup text written to a temp file, {model} = model value, {effort} = effort value. If model/effort are empty, the flag before the placeholder is stripped too.",
+            ["Command:"] = "Freeform command template for custom CLIs. Placeholders: {skill} = skill file path, {prompt} = inline startup text, {prompt_file} = startup text written to a temp file, {model} = model value, {effort} = effort value. If model/effort are empty, the flag before the placeholder is stripped too. On macOS, custom binaries should also set Startup -> terminal.",
             ["Model:"] = "Model name passed to the agent with --model. Preset choices change based on the selected binary, but you can type any model manually.",
             ["Effort:"] = "Reasoning effort passed to the agent with --effort. Preset choices change based on the selected binary, but you can type any effort value manually.",
             ["Goal:"] = "Initial task sent to the agent after it prints the boot report. The system prompt also includes the guide and current colony state.",
@@ -353,7 +353,9 @@ namespace Timberbot
             var savedWebhookCircuitBreaker = NormalizeValue(_service.GetUISetting("webhookCircuitBreaker"), "30");
             var savedWebhookMaxPendingEvents = NormalizeValue(_service.GetUISetting("webhookMaxPendingEvents"), "1000");
             var savedWriteBudgetMs = NormalizeValue(_service.GetUISetting("writeBudgetMs"), "1.0");
-            var savedTerminal = _service.GetUISetting("terminal") ?? "";
+            var savedTerminal = _service.GetUISetting("terminal");
+            if (savedTerminal == null)
+                savedTerminal = Application.platform == RuntimePlatform.WindowsPlayer ? "wt -d {cwd} --" : "";
             var savedPythonCommand = _service.GetUISetting("pythonCommand") ?? "";
 
             _binaryField = MakeTextField(savedBinary);

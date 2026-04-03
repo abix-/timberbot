@@ -6,6 +6,7 @@ Usage:
 """
 import json
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
@@ -15,7 +16,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 SRC_DIR = os.path.join(ROOT, "timberbot", "src")
 DIST_DIR = os.path.join(ROOT, "dist")
-MOD_DIR = os.path.join(os.environ["USERPROFILE"], "Documents", "Timberborn", "Mods", "Timberbot")
+MOD_DIR = os.path.join(str(Path.home()), "Documents", "Timberborn", "Mods", "Timberbot")
 MANIFEST = os.path.join(SRC_DIR, "manifest.json")
 DLL_PATH = os.path.join(SRC_DIR, "bin", "Release", "netstandard2.1", "Timberbot.dll")
 SCRIPT = os.path.join(SCRIPT_DIR, "timberbot.py")
@@ -78,7 +79,9 @@ def main():
         # include settings.json with debug disabled
         release_settings = json.dumps({
             "debugEndpointEnabled": False,
-            "httpPort": 8085
+            "httpPort": 8085,
+            "terminal": "",
+            "pythonCommand": ""
         }, indent=2)
         zf.writestr("settings.json", release_settings)
         # include docs

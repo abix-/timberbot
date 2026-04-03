@@ -24,13 +24,31 @@ As a library:
 """
 import json
 import os
+import platform
 import re
 import subprocess
 import sys
 import time
 import requests
 
-_MEMORY_BASE = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Mods", "Timberbot", "memory")
+
+def _timberborn_documents_dir():
+    return os.path.join(os.path.expanduser("~"), "Documents", "Timberborn")
+
+
+def _mod_dir():
+    return os.path.join(_timberborn_documents_dir(), "Mods", "Timberbot")
+
+
+def _settings_path():
+    return os.path.join(_mod_dir(), "settings.json")
+
+
+def _saves_dir():
+    return os.path.join(_timberborn_documents_dir(), "Saves")
+
+
+_MEMORY_BASE = os.path.join(_mod_dir(), "memory")
 _MEMORY_DIR = _MEMORY_BASE  # overridden per-settlement by brain()
 
 
@@ -93,8 +111,7 @@ class Timberbot:
     def __init__(self, host=None, port=None, json_mode=False, write_timeout=60):
         if host is None or port is None:
             try:
-                spath = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Mods", "Timberbot", "settings.json")
-                with open(spath) as f:
+                with open(_settings_path()) as f:
                     settings = json.load(f)
                 if host is None:
                     host = settings.get("httpHost", "127.0.0.1")
@@ -1434,7 +1451,7 @@ def _cast(a):
             return a
 
 
-_SAVES_DIR = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Saves")
+_SAVES_DIR = _saves_dir()
 
 
 def _start_agent(args):
@@ -1499,7 +1516,7 @@ def _start_agent(args):
 
 
 def _launch(args):
-    """Launch Timberborn and auto-load a save.
+    """Prepare a save launch via autoload.json.
 
     Usage: timberbot.py launch settlement:<name> [save:<filename>] [timeout:120]
     """
@@ -1554,10 +1571,15 @@ def _launch(args):
         save_name = timbers[0][:-7]  # strip .timber
 
     # write autoload.json for the mod to pick up (avoids Steam CLI arg dialog)
-    mod_dir = os.path.join(os.path.expanduser("~"), "Documents", "Timberborn", "Mods", "Timberbot")
+    mod_dir = _mod_dir()
     autoload = {"settlement": settlement, "save": save_name}
     with open(os.path.join(mod_dir, "autoload.json"), "w") as f:
         json.dump(autoload, f)
+
+    if platform.system() == "Darwin":
+        print(f"  {_BGRN}autoload prepared{_RST}  {settlement} / {save_name}")
+        print(f"  {_DIM}open Timberborn manually on macOS and the mod will load this save from autoload.json{_RST}")
+        return
 
     # kill existing Timberborn process if running, wait until it's gone
     try:
@@ -1657,8 +1679,11 @@ def main():
                     print(f"    {usage.strip()}")
         print(f"\n  {'top':30s} live colony dashboard")
         print(f"  {'manager':30s} auto-manage haulers (keep 1-4 idle)")
-        print(f"  {'launch':30s} launch game and auto-load a save")
-        print(f"  {'start':30s} start AI agent loop (binary:claude turns:5)")
+        if platform.system() == "Darwin":
+            print(f"  {'launch':30s} prepare autoload.json, then open Timberborn manually")
+        else:
+            print(f"  {'launch':30s} prepare autoload and launch the game (manual open on macOS)")
+        print(f"  {'start':30s} start the built-in interactive agent")
         sys.exit(1)
 
     json_mode = "--json" in sys.argv

@@ -27,9 +27,7 @@ namespace Timberbot
         private readonly GameSaveRepository _gameSaveRepository;
         private readonly ValidatingGameLoader _validatingGameLoader;
 
-        private static readonly string ModDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            "Timberborn", "Mods", "Timberbot");
+        private static readonly string ModDir = TimberbotPaths.ModDir;
 
         public TimberbotAutoLoad(
             GameSaveRepository gameSaveRepository,

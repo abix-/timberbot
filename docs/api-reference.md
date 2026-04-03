@@ -61,6 +61,8 @@ timberbot.py <command> key:value    # with parameters
 timberbot.py --host=192.168.1.50 --port=8085 summary  # remote connection
 ```
 
+The in-game Timberbot widget is the primary way to launch and configure the built-in agent. The Python CLI remains available for direct API access and advanced workflows.
+
 ### Pagination
 
 List endpoints (buildings, beavers, trees, crops, gatherables, alerts, notifications) support server-side pagination via query params:
@@ -179,6 +181,84 @@ Full game state snapshot: settlement, time, weather, population, resources, tree
 #### Response (format=toon)
 
 Flat key-value pairs including `settlement`, `faction`, `day`, `dayProgress`, `speed`, `cycle`, `cycleDay`, `isHazardous`, `tempDays`, `hazardDays`, `markedGrown`, `markedSeedling`, `unmarkedGrown`, `cropReady`, `cropGrowing`, `adults`, `children`, `bots`, resource stocks (e.g. `Water`, `Log`), `foodDays`, `waterDays`, `logDays`, `plankDays`, `gearDays`, `beds`, `homeless`, `workers`, `unemployed`, `wellbeing`, `miserable`, `critical`, `science`, `alerts`, building role counts, `treeClusters`, `foodClusters`.
+
+---
+
+## Agent
+
+Built-in interactive agent control. The in-game widget is the primary surface for these actions, but the same shared agent is also available over HTTP.
+
+### GET /api/agent/status
+
+Current built-in agent status.
+
+#### Response
+
+| Field | Type | Description |
+|-------|------|-------------|
+| status | string | `idle`, `gatheringstate`, `interactive`, `done`, or `error` |
+| binary | string | Current agent binary, usually `claude`, `codex`, or a custom command |
+| model | string | Current model name, or `""` if default |
+| goal | string | Current goal text |
+| currentCmd | string | Internal progress text while gathering state, otherwise `""` |
+| lastError | string | Last launch/runtime error, if any |
+
+```json
+{
+  "status": "interactive",
+  "binary": "codex",
+  "model": "gpt-5.4",
+  "goal": "reach 50 beavers with 77 well-being",
+  "currentCmd": "",
+  "lastError": ""
+}
+```
+
+### POST /api/agent/start
+
+Start the built-in interactive agent. This gathers fresh colony state via `timberbot.py brain`, points the agent at the static `skill/timberbot.md` instructions file, and launches the selected binary interactively with the live colony state as the startup prompt.
+
+#### Body
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| binary | string | no | `claude` | CLI binary to launch |
+| model | string | no | binary default | Model name passed via `--model` |
+| effort | string | no | binary default | Reasoning effort passed via `--effort` |
+| timeout | int | no | `120` | Timeout in seconds for the `brain` gather step |
+| goal | string | no | built-in default | Goal text appended to the startup message |
+| command | string | no | `null` | Custom launch template when `binary` is `custom` |
+
+```json
+{
+  "binary": "codex",
+  "model": "gpt-5.4",
+  "effort": "medium",
+  "goal": "reach 50 beavers with 77 well-being"
+}
+```
+
+#### Response
+
+```json
+{"status": "started", "binary": "codex"}
+```
+
+Possible errors:
+- `agent_busy` if the agent is already gathering state or running interactively
+
+### POST /api/agent/stop
+
+Stop the current built-in agent session.
+
+#### Response
+
+```json
+{"status": "stopping"}
+```
+
+Possible errors:
+- `agent_not_running` if there is no active session to stop
 
 ---
 
@@ -1939,7 +2019,10 @@ timberbot.py place_path x1:120 y1:130 x2:150 y2:160 sections:1 timings:true
 
 ### launch (CLI-only)
 
-Launch Timberborn and auto-load a save. Writes `autoload.json` for the mod, then opens the game via Steam.
+Prepare a save launch using `autoload.json`.
+
+- On Windows, this also opens Timberborn via Steam.
+- On macOS, v1 writes `autoload.json` and then expects you to open Timberborn manually.
 
 ```bash
 timberbot.py launch settlement:Potato save:Tomato
@@ -1953,7 +2036,7 @@ Live colony dashboard. Population, resources, weather, drought countdown, wellbe
 timberbot.py top
 ```
 
-### Spatial memory (CLI-only)
+### Spatial memory (CLI-focused)
 
 Persistent colony knowledge in `Documents/Timberborn/Mods/Timberbot/memory/`.
 
@@ -1967,7 +2050,7 @@ timberbot.py list_tasks       # show all tasks
 timberbot.py clear_tasks      # remove done tasks
 ```
 
-`brain` returns live summary (always fresh from `/api/summary`) plus persistent state from `memory/brain.toon` (goal, tasks, maps). Summary is never persisted -- only goal, tasks, and maps survive between sessions. Auto-creates brain and DC map on first run. Set a persistent goal with `brain goal:"text"`.
+`brain` returns live summary (always fresh from `/api/summary`) plus persistent state from `memory/brain.toon` (goal, tasks, maps). Summary is never persisted -- only goal, tasks, and maps survive between sessions. Auto-creates brain and DC map on first run. Set a persistent goal with `brain goal:"text"`. The built-in in-game agent also uses `brain` internally during startup before it launches Claude/Codex.
 
 ---
 

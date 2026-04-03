@@ -47,6 +47,7 @@ namespace Timberbot
         private int _webhookMaxPendingEvents = 1000;
         private double _writeBudgetMs = 1.0;
         private string _terminal = "";           // terminal command prefix (e.g. "wezterm start --")
+        private string _pythonCommand = "";      // optional python launcher override
         private string _settingsPath;            // full path to settings.json
         private JObject _cachedSettings;         // in-memory settings, flushed on debounce
         private float _settingsDirtyTime = -1f;  // realtimeSinceStartup when last mutated, -1 = clean
@@ -82,9 +83,7 @@ namespace Timberbot
         public void Load()
         {
             LoadSettings();
-            var modDir = System.IO.Path.Combine(
-                System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),
-                "Timberborn", "Mods", "Timberbot");
+            var modDir = TimberbotPaths.ModDir;
             TimberbotLog.Init(modDir);
             WebhookMgr.Enabled = _webhooksEnabled;
             WebhookMgr.BatchSeconds = _webhookBatchSeconds;
@@ -100,7 +99,7 @@ namespace Timberbot
             Placement.DetectFaction();          // detect faction suffix -- must run before BuildAllIndexes
             Registry.BuildAllIndexes();        // populate indexes from existing entities
             ReadV2.BuildAll();          // populate v2 building trackers from existing entities
-            Agent = new TimberbotAgent(_terminal);
+            Agent = new TimberbotAgent(_terminal, _pythonCommand);
             _server = new TimberbotHttpServer(_httpPort, this, _debugEnabled);
             TimberbotLog.Info($"HTTP server started on port {_httpPort}");
         }
@@ -109,10 +108,7 @@ namespace Timberbot
         {
             try
             {
-                var modDir = System.IO.Path.Combine(
-                    System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),
-                    "Timberborn", "Mods", "Timberbot");
-                var path = System.IO.Path.Combine(modDir, "settings.json");
+                var path = TimberbotPaths.SettingsPath;
                 _settingsPath = path;
                 if (System.IO.File.Exists(path))
                 {
@@ -145,6 +141,8 @@ namespace Timberbot
                     }
                     if (json["terminal"] != null)
                         _terminal = json.Value<string>("terminal") ?? "";
+                    if (json["pythonCommand"] != null)
+                        _pythonCommand = json.Value<string>("pythonCommand") ?? "";
                 }
             }
             catch (System.Exception ex)

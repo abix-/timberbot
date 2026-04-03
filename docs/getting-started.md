@@ -32,6 +32,12 @@ Download `Timberbot.dll`, `manifest.json`, and `thumbnail.png` from the [latest 
 C:\Users\<you>\Documents\Timberborn\Mods\Timberbot\
 ```
 
+On macOS, use:
+
+```
+~/Documents/Timberborn/Mods/Timberbot/
+```
+
 Enable the mod in the Mod Manager.
 
 ## Verify it works
@@ -44,7 +50,25 @@ http://localhost:8085/api/ping
 
 You should see `{"status": "ok", "ready": true}`. The API is only active while a game is loaded -- it won't respond from the main menu.
 
-## Install the Python client
+## Preferred AI workflow: in-game Timberbot UI
+
+The preferred way to use Timberbot with Claude or Codex is the in-game Timberbot widget.
+
+1. Start a game or load a save.
+2. Look for the green `Timberbot API` widget in the bottom-right corner.
+3. Click `Settings`.
+4. Set:
+   - `Binary`
+   - `Model`
+   - `Effort`
+   - `Goal`
+5. Click `Start`.
+
+Timberbot gathers the current colony state, prepares the agent prompt, and launches the selected CLI interactively. You can then guide that Claude/Codex session in the terminal it opens.
+
+The widget is draggable. Its position and your settings persist automatically. On macOS, Timberbot also auto-detects a Python 3 launcher and opens the agent in Terminal.app by default, so you only need `Startup -> pythonCommand` or `Startup -> terminal` for non-standard setups.
+
+## Install the Python client (optional)
 
 The CLI lives at `timberbot/script/timberbot.py` in your local clone (or in the mod folder alongside the DLL).
 
@@ -61,7 +85,9 @@ pip install requests toons
 
 Add the script directory to your system PATH so you can run `timberbot.py` from anywhere:
 
-1. Add the folder containing `timberbot.py` to your **PATH** environment variable (e.g. `C:\Users\<you>\Documents\Timberborn\Mods\Timberbot` for Steam installs)
+1. Add the folder containing `timberbot.py` to your **PATH** environment variable.
+   Windows Steam example: `C:\Users\<you>\Documents\Timberborn\Mods\Timberbot`
+   macOS example: `~/Documents/Timberborn/Mods/Timberbot`
 2. Add `.PY` to your **PATHEXT** environment variable if it isn't already -- this tells Windows to treat `.py` files as executable without needing to type `python` first
 
 ```powershell
@@ -102,7 +128,7 @@ timberbot.py map x1:110 y1:130 x2:130 y2:150
 
 The same applies to the HTTP API: add `?format=json` to GET requests, or `"format": "json"` in POST bodies. Without it, endpoints that support both formats default to TOON.
 
-## First commands
+## First API commands
 
 ```bash
 timberbot.py                                        # list all commands with usage
@@ -159,7 +185,9 @@ curl -X POST http://localhost:8085/api/building/place -d '{"prefab": "Path", "x"
 
 ## Let AI play your colony
 
-The mod ships docs for AI play with Claude Code, OpenAI Codex, ChatGPT, or any AI agent that can make HTTP calls:
+The mod also ships docs for AI play with Claude Code, OpenAI Codex, ChatGPT, or any AI agent that can make HTTP calls. This is optional if you prefer the in-game UI workflow.
+
+The AI docs entrypoints are:
 
 - `skill/timberbot.md` is the distributable Claude Code entrypoint
 - [timberbot.md](timberbot.md) is the single authoritative AI guide
@@ -173,8 +201,8 @@ mkdir -p ~/.claude/skills/timberbot
 cp skill/timberbot.md ~/.claude/skills/timberbot/SKILL.md
 
 # start Claude from the Steam Workshop mod folder root first, or from the Timberbot repo root
-# workshop docs live in %USERPROFILE%\Documents\Timberborn\Mods\Timberbot\docs
-/loop 1m /timberbot
+# workshop docs live in Documents/Timberborn/Mods/Timberbot/docs
+/timberbot
 ```
 
 ### OpenAI Codex
@@ -183,7 +211,7 @@ Point Codex at the mod folder (or repo root). It can call the HTTP API directly 
 
 ### Other LLMs
 
-Paste the contents of `docs/timberbot.md` as the system prompt. Keep `docs/api-reference.md` available for exact command and error details. The Steam Workshop install ships the same docs under `%USERPROFILE%\Documents\Timberborn\Mods\Timberbot\docs`, and the GitHub repo mirrors the same content if users need another copy.
+Paste the contents of `docs/timberbot.md` as the system prompt. Keep `docs/api-reference.md` available for exact command and error details. The Steam Workshop install ships the same docs under `Documents/Timberborn/Mods/Timberbot/docs`, and the GitHub repo mirrors the same content if users need another copy.
 
 ## Remote connections
 
@@ -203,6 +231,23 @@ Or set defaults in `settings.json` (mod folder):
 ```
 
 The client reads `httpHost` and `httpPort` from settings.json when no CLI flags are given. CLI flags take precedence. See [architecture.md](architecture.md#settings) for all settings.
+
+## Settings and configuration
+
+The in-game `Settings` modal is the primary way to configure Timberbot.
+
+All settings persist to `settings.json`, including:
+
+- agent/UI settings such as `Binary`, `Model`, `Effort`, `Goal`, and widget position
+- runtime settings such as `debugEndpointEnabled`, `httpPort`, `webhooksEnabled`, `webhookBatchMs`, `webhookCircuitBreaker`, `webhookMaxPendingEvents`, `writeBudgetMs`, `terminal`, and `pythonCommand`
+
+Editing `settings.json` directly is the advanced/manual path. The normal path is to change settings in-game and let Timberbot save them for you.
+
+Some runtime settings are applied on load, so changing them may require reloading the save or mod to fully apply.
+
+## macOS launch helper
+
+`timberbot.py launch settlement:<name>` still prepares `autoload.json` on macOS, but v1 does not auto-start Timberborn there. Run the command, then open Timberborn manually and the mod will auto-load the selected save from the main menu.
 
 ## Troubleshooting
 

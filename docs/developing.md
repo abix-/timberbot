@@ -22,7 +22,7 @@ TimberbornMods/
       TimberbotAutoLoadConfigurator.cs  MainMenu context DI registration for auto-load
       Timberbot.csproj                  Build config, game DLL references
       manifest.json                     Mod metadata (version, name, description)
-      settings.json                     Runtime config (port, debug, webhooks, write budget)
+      settings.json                     Persistent settings store (runtime + agent/UI settings, primarily edited in-game)
       thumbnail.png                     Steam Workshop image
     script/
       timberbot.py                      Python client (API + CLI + dashboard)
@@ -53,7 +53,14 @@ Game DLLs are referenced from:
 C:\Games\Steam\steamapps\common\Timberborn\Timberborn_Data\Managed
 ```
 
-If your Steam install is elsewhere, edit `GameManagedDir` in `Timberbot.csproj`.
+If your Steam install is elsewhere, override `GameManagedDir` when building instead of editing the project file:
+
+```bash
+dotnet build /p:GameManagedDir="D:\Steam\steamapps\common\Timberborn\Timberborn_Data\Managed"
+dotnet build /p:ModDir="C:\Users\<you>\Documents\Timberborn\Mods\Timberbot"
+```
+
+On macOS, pass the platform-specific `GameManagedDir` and `ModDir` the same way.
 
 ## How the mod works
 
@@ -64,6 +71,17 @@ If your Steam install is elsewhere, edit `GameManagedDir` in `Timberbot.csproj`.
 5. `UpdateSingleton()` runs every frame: drains POST queue, services pending fresh publishes, flushes webhooks
 
 For full architecture details see [architecture.md](architecture.md).
+
+## Settings model
+
+The in-game `Settings` modal is the primary configuration surface for Timberbot.
+
+All settings persist to `settings.json`, including:
+
+- runtime settings such as `debugEndpointEnabled`, `httpPort`, `webhooksEnabled`, `webhookBatchMs`, `webhookCircuitBreaker`, `webhookMaxPendingEvents`, `writeBudgetMs`, `terminal`, and `pythonCommand`
+- agent/UI settings such as `agentBinary`, `agentModel`, `agentEffort`, `agentGoal`, `widgetLeft`, and `widgetTop`
+
+`TimberbotService` keeps an in-memory settings object and debounces writes back to disk. Editing `settings.json` directly is supported, but it is the manual/advanced path rather than the default workflow.
 
 ## Adding a new GET endpoint
 

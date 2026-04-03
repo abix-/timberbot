@@ -1,19 +1,11 @@
-// TimberbotAgent.cs -- Launches interactive claude session for the player.
+// TimberbotAgent.cs -- Launches an interactive agent session for the player.
 //
-// The player gets a real claude terminal where they can chat, guide, and
-// correct the AI. Claude calls timberbot.py via its Bash tool to control
-// the game. The player approves each action via normal permission prompts.
-//
-// Flow:
-//   1. Gets game state via `timberbot.py brain`
-//   2. Writes system prompt + game state to a temp file
-//   3. Launches claude interactively (UseShellExecute=true)
-//   4. Player interacts with claude in the terminal
-//   5. When the player exits claude, agent goes Done
-//
-// Triggered via POST /api/agent/start or the in-game UI panel.
+// The in-game UI gathers live colony state, then launches Claude, Codex, or a
+// custom CLI interactively. The player keeps the real terminal session and can
+// guide or correct the agent directly.
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -33,18 +25,14 @@ namespace Timberbot
 
     public class TimberbotAgent
     {
-        private readonly string _terminal;  // terminal command prefix from settings.json
+        private readonly string _terminal;
+        private readonly string _pythonCommand;
         private string _binary;
         private string _model;
         private string _effort;
         private string _goal;
-        private string _commandTemplate;  // null for claude/codex presets, set for custom CLIs
+        private string _commandTemplate;
         private int _processTimeoutSeconds;
-
-        public TimberbotAgent(string terminal)
-        {
-            _terminal = terminal ?? "";
-        }
 
         private const string DEFAULT_GOAL = "reach 50 beavers with 77 well-being";
 
@@ -54,8 +42,14 @@ namespace Timberbot
         private Thread _thread;
         private volatile bool _cancelRequested;
         private volatile Process _activeProcess;
+        private string _activeSessionPidPath;
 
-        // read-only properties for in-game UI
+        public TimberbotAgent(string terminal, string pythonCommand)
+        {
+            _terminal = terminal ?? "";
+            _pythonCommand = pythonCommand ?? "";
+        }
+
         public AgentStatus CurrentStatus => _status;
         public string CurrentGoal => _goal;
         public string CurrentCommand => _currentCmd;
@@ -80,6 +74,7 @@ namespace Timberbot
             _lastError = null;
             _currentCmd = null;
             _cancelRequested = false;
+            _activeSessionPidPath = null;
             _status = AgentStatus.GatheringState;
 
             _thread = new Thread(InteractiveSession) { IsBackground = true, Name = "Timberbot-Agent" };
@@ -98,8 +93,21 @@ namespace Timberbot
                 return _jw.Error("agent_not_running");
 
             _cancelRequested = true;
-            try { _activeProcess?.Kill(); } catch { }
-            TimberbotLog.Info("agent.stop requested");
+            bool stopped = false;
+            try
+            {
+                if (_activeProcess != null && !_activeProcess.HasExited)
+                {
+                    _activeProcess.Kill();
+                    stopped = true;
+                }
+            }
+            catch { }
+
+            if (!stopped)
+                stopped = TryStopSessionPid();
+
+            TimberbotLog.Info($"agent.stop requested stopped={stopped}");
             return _jw.Reset().OpenObj().Prop("status", "stopping").CloseObj().ToString();
         }
 
@@ -180,18 +188,108 @@ namespace Timberbot
             return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
         }
 
-        /// <summary>
-        /// Build launch command from a freeform template with placeholder substitution.
-        /// Returns (exe, args) for ProcessStartInfo.
-        /// </summary>
+        private static string ShellQuoteArg(string value)
+        {
+            if (value == null)
+                value = "";
+            return "'" + value.Replace("'", "'\"'\"'") + "'";
+        }
+
+        private static (string exe, string args) SplitCommand(string command)
+        {
+            if (string.IsNullOrWhiteSpace(command))
+                return ("", "");
+
+            var text = command.Trim();
+            if (text[0] == '"')
+            {
+                var end = text.IndexOf('"', 1);
+                if (end > 0)
+                    return (text.Substring(1, end - 1), text.Substring(end + 1).TrimStart());
+            }
+
+            var space = text.IndexOf(' ');
+            return space < 0 ? (text, "") : (text.Substring(0, space), text.Substring(space + 1));
+        }
+
+        private IEnumerable<(string exe, string prefixArgs)> PythonCandidates()
+        {
+            if (!string.IsNullOrWhiteSpace(_pythonCommand))
+            {
+                var configured = SplitCommand(_pythonCommand);
+                if (!string.IsNullOrWhiteSpace(configured.exe))
+                    yield return configured;
+                yield break;
+            }
+
+            if (TimberbotPaths.IsWindows)
+            {
+                yield return ("py", "-3");
+                yield return ("python", "");
+                yield return ("python3", "");
+                yield break;
+            }
+
+            if (TimberbotPaths.IsMacOS)
+            {
+                yield return ("python3", "");
+                yield return ("/opt/homebrew/bin/python3", "");
+                yield return ("/usr/local/bin/python3", "");
+                yield return ("/usr/bin/python3", "");
+                yield return ("python", "");
+                yield break;
+            }
+
+            yield return ("python3", "");
+            yield return ("python", "");
+        }
+
+        private bool TryRunPython(string scriptPath, string scriptArgs, out string output, out string resolvedCommand)
+        {
+            output = "";
+            resolvedCommand = "";
+            var errors = new StringBuilder();
+
+            foreach (var candidate in PythonCandidates())
+            {
+                if (candidate.exe.Contains(Path.DirectorySeparatorChar.ToString()) || candidate.exe.Contains(Path.AltDirectorySeparatorChar.ToString()))
+                {
+                    if (!File.Exists(candidate.exe))
+                        continue;
+                }
+
+                var args = new StringBuilder();
+                if (!string.IsNullOrWhiteSpace(candidate.prefixArgs))
+                    args.Append(candidate.prefixArgs).Append(" ");
+                args.Append(QuoteArg(scriptPath));
+                if (!string.IsNullOrWhiteSpace(scriptArgs))
+                    args.Append(" ").Append(scriptArgs);
+
+                var (ok, runOutput) = RunProcess(candidate.exe, args.ToString(), _processTimeoutSeconds);
+                if (ok)
+                {
+                    output = runOutput;
+                    resolvedCommand = string.IsNullOrWhiteSpace(candidate.prefixArgs)
+                        ? candidate.exe
+                        : candidate.exe + " " + candidate.prefixArgs;
+                    return true;
+                }
+
+                if (errors.Length > 0)
+                    errors.Append(" | ");
+                errors.Append(candidate.exe).Append(": ").Append(runOutput);
+            }
+
+            output = errors.ToString();
+            return false;
+        }
+
         private (string exe, string args) BuildCustomCommand(string template, string skillFile, string startupPrompt, string modDir)
         {
             var cmd = template;
 
-            // substitute {skill}
             cmd = cmd.Replace("{skill}", QuoteArg(skillFile));
 
-            // substitute {prompt_file} -- write temp file only if placeholder is used
             if (cmd.Contains("{prompt_file}"))
             {
                 var promptFile = Path.Combine(modDir, "agent_prompt.md");
@@ -200,37 +298,20 @@ namespace Timberbot
                 TimberbotLog.Info($"agent.custom wrote prompt file: {promptFile}");
             }
 
-            // substitute {prompt} -- inline text
             cmd = cmd.Replace("{prompt}", QuoteArg(startupPrompt));
 
-            // substitute {model} and {effort} -- strip orphaned flags if empty
             if (!string.IsNullOrEmpty(_model))
-            {
                 cmd = cmd.Replace("{model}", _model);
-            }
             else
-            {
-                // remove flag + {model} pattern (e.g. "--model {model}" or "-m {model}")
                 cmd = Regex.Replace(cmd, @"\S+\s+\{model\}", "");
-            }
 
             if (!string.IsNullOrEmpty(_effort))
-            {
                 cmd = cmd.Replace("{effort}", _effort);
-            }
             else
-            {
                 cmd = Regex.Replace(cmd, @"\S+\s+\{effort\}", "");
-            }
 
-            // clean up double spaces from stripped flags
             cmd = Regex.Replace(cmd, @"\s{2,}", " ").Trim();
-
-            // split into exe + args on first space
-            var spaceIdx = cmd.IndexOf(' ');
-            if (spaceIdx < 0)
-                return (cmd, "");
-            return (cmd.Substring(0, spaceIdx), cmd.Substring(spaceIdx + 1));
+            return SplitCommand(cmd);
         }
 
         private string BuildStartupPrompt(string modDir)
@@ -238,16 +319,16 @@ namespace Timberbot
             var sb = new StringBuilder();
 
             _currentCmd = "gathering colony state";
-            var brainArgs = "brain \"goal:" + _goal.Replace("\"", "'") + "\"";
             var brainScript = Path.Combine(modDir, "timberbot.py");
-            var (ok, brainOut) = RunProcess("py", "-3 " + QuoteArg(brainScript) + " " + brainArgs, _processTimeoutSeconds);
+            var brainArgs = "brain " + QuoteArg("goal:" + _goal.Replace("\"", "'"));
+            var ok = TryRunPython(brainScript, brainArgs, out var brainOut, out var pythonCmd);
             if (ok && !string.IsNullOrEmpty(brainOut))
             {
                 sb.AppendLine("## CURRENT COLONY STATE");
                 sb.AppendLine();
                 sb.AppendLine(brainOut);
                 sb.AppendLine();
-                TimberbotLog.Info($"agent.brain.ok bytes={brainOut.Length}");
+                TimberbotLog.Info($"agent.brain.ok python={pythonCmd} bytes={brainOut.Length}");
             }
             else
             {
@@ -263,17 +344,152 @@ namespace Timberbot
             return sb.ToString();
         }
 
+        private ProcessStartInfo BuildTerminalStartInfo(string modDir, string launchCmd)
+        {
+            var termCmd = _terminal.Trim().Replace("{cwd}", QuoteArg(modDir));
+            if (termCmd.Contains("{command}"))
+                termCmd = termCmd.Replace("{command}", launchCmd);
+            else
+                termCmd = termCmd + " " + launchCmd;
+
+            var termParts = SplitCommand(termCmd);
+            return new ProcessStartInfo
+            {
+                FileName = termParts.exe,
+                Arguments = termParts.args,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WorkingDirectory = modDir
+            };
+        }
+
+        private ProcessStartInfo BuildMacDefaultStartInfo(string modDir, string shellCommand)
+        {
+            var pidFile = Path.Combine(modDir, "agent-session.pid");
+            var scriptPath = Path.Combine(modDir, "agent-session.command");
+            var script = new StringBuilder();
+            script.AppendLine("#!/bin/bash");
+            script.Append("cd ").AppendLine(ShellQuoteArg(modDir));
+            script.Append("echo $$ > ").AppendLine(ShellQuoteArg(pidFile));
+            script.Append("exec ").AppendLine(shellCommand);
+            File.WriteAllText(scriptPath, script.ToString(), new UTF8Encoding(false));
+            RunProcess("/bin/chmod", "+x " + QuoteArg(scriptPath), 10);
+            _activeSessionPidPath = pidFile;
+
+            return new ProcessStartInfo
+            {
+                FileName = "open",
+                Arguments = "-a Terminal " + QuoteArg(scriptPath),
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WorkingDirectory = modDir
+            };
+        }
+
+        private static bool IsPidRunning(int pid)
+        {
+            if (pid <= 0)
+                return false;
+
+            var (ok, _) = RunProcess("/bin/kill", "-0 " + pid, 5);
+            return ok;
+        }
+
+        private bool TryReadSessionPid(out int pid)
+        {
+            pid = 0;
+            if (string.IsNullOrWhiteSpace(_activeSessionPidPath) || !File.Exists(_activeSessionPidPath))
+                return false;
+
+            try
+            {
+                return int.TryParse(File.ReadAllText(_activeSessionPidPath).Trim(), out pid) && pid > 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool TryStopSessionPid()
+        {
+            if (!TimberbotPaths.IsMacOS || !TryReadSessionPid(out var pid))
+                return false;
+
+            RunProcess("/bin/kill", "-TERM " + pid, 5);
+            for (int i = 0; i < 20; i++)
+            {
+                if (!IsPidRunning(pid))
+                    return true;
+                Thread.Sleep(100);
+            }
+
+            RunProcess("/bin/kill", "-KILL " + pid, 5);
+            return true;
+        }
+
+        private bool WaitForMacSession()
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(Math.Max(5, _processTimeoutSeconds));
+            while (!_cancelRequested && DateTime.UtcNow < deadline)
+            {
+                if (TryReadSessionPid(out var pid) && IsPidRunning(pid))
+                {
+                    while (!_cancelRequested && IsPidRunning(pid))
+                        Thread.Sleep(500);
+                    return true;
+                }
+                Thread.Sleep(200);
+            }
+            return false;
+        }
+
+        private string BuildMacBuiltInShellCommand(string skillFile, string startupPrompt)
+        {
+            var parts = new List<string> { ShellQuoteArg(_binary) };
+            if (IsCodexBinary(_binary))
+            {
+                parts.Add(ShellQuoteArg("-c"));
+                parts.Add(ShellQuoteArg("model_instructions_file=\"" + skillFile + "\""));
+                if (!string.IsNullOrEmpty(_model))
+                {
+                    parts.Add(ShellQuoteArg("--model"));
+                    parts.Add(ShellQuoteArg(_model));
+                }
+                if (!string.IsNullOrEmpty(_effort))
+                {
+                    parts.Add(ShellQuoteArg("-c"));
+                    parts.Add(ShellQuoteArg("model_reasoning_effort=\"" + _effort + "\""));
+                }
+            }
+            else
+            {
+                parts.Add(ShellQuoteArg("--system-prompt-file"));
+                parts.Add(ShellQuoteArg(skillFile));
+                if (!string.IsNullOrEmpty(_model))
+                {
+                    parts.Add(ShellQuoteArg("--model"));
+                    parts.Add(ShellQuoteArg(_model));
+                }
+                if (!string.IsNullOrEmpty(_effort))
+                {
+                    parts.Add(ShellQuoteArg("--effort"));
+                    parts.Add(ShellQuoteArg(_effort));
+                }
+            }
+
+            parts.Add(ShellQuoteArg(startupPrompt));
+            return string.Join(" ", parts);
+        }
+
         private void InteractiveSession()
         {
             try
             {
                 _status = AgentStatus.GatheringState;
 
-                var modDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                    "Timberborn", "Mods", "Timberbot");
-
-                var skillFile = Path.Combine(modDir, "skill", "timberbot.md");
+                var modDir = TimberbotPaths.ModDir;
+                var skillFile = TimberbotPaths.SkillFile;
                 var startupPrompt = BuildStartupPrompt(modDir);
                 TimberbotLog.Info($"agent.launch binary={_binary} model={_model ?? "default"} effort={_effort ?? "default"} instructions={skillFile} startupBytes={Encoding.UTF8.GetByteCount(startupPrompt)}");
 
@@ -285,15 +501,13 @@ namespace Timberbot
 
                 if (_commandTemplate != null)
                 {
-                    // custom CLI -- freeform template with placeholder substitution
-                    var (exe, customArgs) = BuildCustomCommand(_commandTemplate, skillFile, startupPrompt, modDir);
-                    launchExe = exe;
-                    launchArgs = customArgs;
+                    var custom = BuildCustomCommand(_commandTemplate, skillFile, startupPrompt, modDir);
+                    launchExe = custom.exe;
+                    launchArgs = custom.args;
                     TimberbotLog.Info($"agent.custom.launch exe={launchExe} args={launchArgs.Length}chars");
                 }
                 else
                 {
-                    // built-in presets: claude or codex
                     var args = new StringBuilder();
                     if (IsCodexBinary(_binary))
                     {
@@ -318,26 +532,20 @@ namespace Timberbot
                 }
 
                 var launchCmd = launchExe + " " + launchArgs;
-
                 ProcessStartInfo psi;
+                bool waitForMacSession = false;
+
                 if (!string.IsNullOrWhiteSpace(_terminal))
                 {
-                    // terminal setting is a command prefix with optional {cwd} placeholder
-                    // e.g. "wezterm start --cwd {cwd} --"
-                    //      "wt -d {cwd} --"
-                    //      "alacritty --working-directory {cwd} -e"
-                    var termCmd = _terminal.Trim().Replace("{cwd}", "\"" + modDir + "\"");
-                    var termParts = termCmd.Split(new[] { ' ' }, 2);
-                    var termExe = termParts[0];
-                    var termArgs = termParts.Length > 1 ? termParts[1] + " " : "";
-                    psi = new ProcessStartInfo
-                    {
-                        FileName = termExe,
-                        Arguments = termArgs + launchCmd,
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        WorkingDirectory = modDir
-                    };
+                    psi = BuildTerminalStartInfo(modDir, launchCmd);
+                }
+                else if (TimberbotPaths.IsMacOS)
+                {
+                    if (_commandTemplate != null)
+                        throw new InvalidOperationException("Custom binaries on macOS require Startup -> terminal.");
+
+                    psi = BuildMacDefaultStartInfo(modDir, BuildMacBuiltInShellCommand(skillFile, startupPrompt));
+                    waitForMacSession = true;
                 }
                 else
                 {
@@ -353,11 +561,22 @@ namespace Timberbot
                 using var proc = new Process { StartInfo = psi };
                 _activeProcess = proc;
                 proc.Start();
-                proc.WaitForExit();
-                _activeProcess = null;
+
+                if (waitForMacSession)
+                {
+                    proc.WaitForExit();
+                    _activeProcess = null;
+                    if (!WaitForMacSession() && !_cancelRequested)
+                        throw new InvalidOperationException("Terminal.app did not start a tracked agent session.");
+                }
+                else
+                {
+                    proc.WaitForExit();
+                    _activeProcess = null;
+                    TimberbotLog.Info($"agent.interactive.done exitCode={proc.ExitCode} cancelled={_cancelRequested}");
+                }
 
                 _status = _cancelRequested ? AgentStatus.Idle : AgentStatus.Done;
-                TimberbotLog.Info($"agent.interactive.done exitCode={proc.ExitCode} cancelled={_cancelRequested}");
             }
             catch (Exception ex)
             {
@@ -368,9 +587,8 @@ namespace Timberbot
             finally
             {
                 _activeProcess = null;
+                _activeSessionPidPath = null;
             }
         }
-
-
     }
 }

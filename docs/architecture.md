@@ -13,6 +13,8 @@ The mod has one read stack and one write stack:
 - HTTP: [`TimberbotHttpServer`](../timberbot/src/TimberbotHttpServer.cs) -- background listener, routing
 - webhooks: [`TimberbotWebhook`](../timberbot/src/TimberbotWebhook.cs) -- batched push notifications
 - debug: [`TimberbotDebug`](../timberbot/src/TimberbotDebug.cs) -- reflection inspector, benchmark
+- agent: [`TimberbotAgent`](../timberbot/src/TimberbotAgent.cs) -- interactive Claude/Codex/custom-binary launcher
+- UI: [`TimberbotPanel`](../timberbot/src/TimberbotPanel.cs) -- movable in-game widget + centered settings modal
 - orchestrator: [`TimberbotService`](../timberbot/src/TimberbotService.cs) -- lifecycle, settings, per-frame dispatch
 - write jobs: [`ITimberbotWriteJob`](../timberbot/src/ITimberbotWriteJob.cs) -- budgeted write execution
 
@@ -58,15 +60,98 @@ UpdateSingleton() [every frame]             ListenLoop() [blocking accept]
 It owns:
 
 - settings load from `settings.json`
+- cached settings state and debounced writeback to `settings.json`
 - HTTP server lifetime
 - event bus registration
 - `Registry.BuildAllIndexes()`
 - `ReadV2.BuildAll()`
+- `TimberbotAgent` creation and shutdown
 - per-frame dispatch:
   - `DrainRequests()`
   - `ReadV2.ProcessPendingRefresh(now)`
   - `_server.ProcessWriteJobs(now, writeBudgetMs)`
   - `WebhookMgr.FlushWebhooks(now)`
+  - `FlushSettingsIfNeeded(now)`
+
+Settings behavior:
+
+- runtime settings are loaded once in `Load()`
+- the in-game settings UI mutates an in-memory `JObject`
+- writes to disk are debounced (~1 second after the last change)
+- `Unload()` forces a final flush
+
+Agent ownership:
+
+- `Load()` instantiates `Agent = new TimberbotAgent(_terminal, _pythonCommand)`
+- `Unload()` calls `Agent?.Stop()` before shutting down the HTTP server
+- the service does not run the agent logic itself; it owns the single agent instance and exposes it to the panel and HTTP routes
+
+## TimberbotAgent
+
+[`TimberbotAgent`](../timberbot/src/TimberbotAgent.cs) is the built-in interactive agent launcher.
+
+It owns:
+
+- agent launch configuration: `binary`, `model`, `effort`, `goal`, optional custom command template, and process timeout
+- agent state machine: `Idle`, `GatheringState`, `Interactive`, `Done`, `Error`
+- a background worker thread for session startup and process waiting
+- the currently launched process handle used by `Stop()`
+- optional tracked macOS session pid file when Terminal.app is used by default
+- prompt construction from the Timberbot skill plus live colony state
+
+Launch flow:
+
+1. `Start(...)` validates the agent is not already running and stores the launch settings.
+2. The agent enters `GatheringState` and starts a background thread.
+3. That thread runs `timberbot.py brain "goal:..."` to gather live colony state.
+4. The static instructions file stays `skill/timberbot.md` from the mod folder.
+5. The startup prompt is built from:
+   - `## CURRENT COLONY STATE` followed by the fresh `brain` output, or a failure note
+   - the boot-sequence requirement and current goal text
+6. The selected binary is launched interactively with the static instructions file plus that startup prompt.
+7. While the process is running, the agent is `Interactive`.
+8. When the process exits, the agent transitions to `Done`, or back to `Idle` if it was explicitly cancelled.
+
+Terminal wrapping:
+
+- if `terminal` is empty on Windows, Timberbot launches the selected binary directly
+- if `terminal` is empty on macOS, Timberbot generates a `.command` wrapper and opens Terminal.app
+- if `terminal` is set, Timberbot uses it as a launch template
+- `{cwd}` in `terminal` is replaced with the Timberbot mod directory before launch
+- `{command}` in `terminal` is replaced with the full agent command; if omitted, Timberbot appends the command for backwards compatibility
+
+Python and stop behavior:
+
+- `pythonCommand` can override the Python 3 launcher used for `timberbot.py brain`
+- when `pythonCommand` is empty, Timberbot auto-detects an OS-appropriate Python command
+- `Stop()` sets a cancel flag and kills the tracked `_activeProcess`
+- on macOS default Terminal.app launches, Timberbot also tracks the real CLI pid via a pid file and kills that session specifically
+- with a custom `terminal` template, stop behavior still depends on what that wrapper launches
+
+The built-in agent is interactive, not an autonomous multi-turn executor. It prepares context and launches the external CLI for the player to drive.
+
+## TimberbotPanel
+
+[`TimberbotPanel`](../timberbot/src/TimberbotPanel.cs) is the in-game control surface.
+
+It owns:
+
+- a movable bottom-right widget with status, `Start`, `Stop`, and `Settings`
+- a centered `Timberbot API - Settings` modal
+- agent launch settings: `agentBinary`, `agentModel`, `agentEffort`, `agentGoal`
+- runtime settings editing for the same `settings.json` file
+- `Startup` tab fields for `terminal`, `pythonCommand`, and other load-time settings
+- preset popups for binary/model/effort and boolean runtime fields
+- custom row-hover tooltips inside the settings modal
+- saved widget position via `widgetLeft` / `widgetTop`
+
+UI model:
+
+- the corner widget is always visible once loaded
+- `Settings` opens the centered modal; the widget remains available underneath
+- the modal edits settings live; there is no separate Apply button
+- `Start` and `Stop` operate on the shared `TimberbotAgent` owned by `TimberbotService`
+- the panel no longer shows selected-object coordinates or selection context
 
 ## TimberbotReadV2
 
@@ -227,6 +312,16 @@ HTTP POST
   -> Respond()
 ```
 
+### Agent control
+
+Agent control is split across GET and queued POST routes in [`TimberbotHttpServer`](../timberbot/src/TimberbotHttpServer.cs):
+
+- `GET /api/agent/status` returns the current `TimberbotAgent.Status()` payload
+- `POST /api/agent/start` is queued and calls `Agent.Start(binary, model, effort, timeout, goal)` on the main-thread write path
+- `POST /api/agent/stop` is queued and calls `Agent.Stop()`
+
+The in-game panel uses the same shared `Agent` instance as the HTTP routes.
+
 ## Serialization
 
 `TimberbotJw` is the core JSON writer. Zero-alloc fluent API that writes directly to a reusable `StringBuilder`.
@@ -270,9 +365,43 @@ Registry data (GUID-to-ID maps, webhook lifecycle hooks). Updated on `EntityInit
   "webhooksEnabled": true,
   "webhookBatchMs": 200,
   "webhookCircuitBreaker": 30,
-  "writeBudgetMs": 1.0
+  "webhookMaxPendingEvents": 1000,
+  "writeBudgetMs": 1.0,
+  "terminal": "",
+  "pythonCommand": "",
+  "agentBinary": "claude",
+  "agentModel": "claude-sonnet-4-6",
+  "agentEffort": "medium",
+  "agentGoal": "reach 50 beavers with 77 well-being",
+  "widgetLeft": "123",
+  "widgetTop": "456"
 }
 ```
+
+There are two categories of settings in the same file:
+
+- runtime settings read by [`TimberbotService`](../timberbot/src/TimberbotService.cs):
+  - `debugEndpointEnabled`
+  - `httpPort`
+  - `webhooksEnabled`
+  - `webhookBatchMs`
+  - `webhookCircuitBreaker`
+  - `webhookMaxPendingEvents`
+  - `writeBudgetMs`
+  - `terminal`
+  - `pythonCommand`
+- UI/agent settings written by [`TimberbotPanel`](../timberbot/src/TimberbotPanel.cs):
+  - `agentBinary`
+  - `agentModel`
+  - `agentEffort`
+  - `agentGoal`
+  - `widgetLeft`
+  - `widgetTop`
+
+Important behavior:
+
+- runtime settings are applied on load; changing them in the modal updates `settings.json` immediately in memory but may require reloading the save/mod to fully apply
+- UI/agent settings are consumed live by the panel and agent launcher
 
 ## Test posture
 
