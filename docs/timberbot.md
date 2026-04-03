@@ -36,7 +36,7 @@ On the first invocation of `/timberbot` per session, complete `Boot`, then `Brai
 - **crops** `<required crop planning method>`
 - **mutations** `<mutation execution rule>`
 - **path root** `<what path distance is measured from>`
-- **prefabs** `<prefab naming rule>`
+- **prefabs** `<prefab naming rule -- include the lookup requirement>`
 - **power** `<power routing rule>`
 - **errors** `<error format rule>`
 - **remote** `<remote connection rule>`
@@ -195,7 +195,16 @@ Each district is self-contained: population, resources, housing, employment, wel
 
 Timberborn has two factions: **Folktails** and **Iron Teeth**. Every prefab except `Path` and the reserve storage buildings requires a faction suffix (`.Folktails` or `.IronTeeth`). Never use a bare name like `GathererFlag`; it must be `GathererFlag.Folktails` or `GathererFlag.IronTeeth`.
 
-Use `brain` or summary output to confirm the current faction before planning buildings. If you need exact prefab spellings, use `prefabs` and the [API Reference](api-reference.md).
+Use `brain` or summary output to confirm the current faction before planning buildings.
+
+ALWAYS run `timberbot.py prefabs | grep -i <keyword>` before placing any building you have not already placed this session. NEVER guess a prefab name by swapping faction suffixes. Names are inconsistent across factions:
+
+- Folktails `SmallPile` -> Iron Teeth `SmallIndustrialPile` (not SmallPile)
+- Folktails `LumberMill` -> Iron Teeth `IndustrialLumberMill` (not LumberMill)
+- Folktails `EfficientFarmHouse` -> Iron Teeth `FarmHouse` (reversed)
+- Folktails `SmallWarehouse` -> Iron Teeth `MediumWarehouse` (different size prefix)
+
+A wrong prefab name causes `not_found` on every placement attempt. If `find_placement` returns `not_found`, check the prefab name FIRST.
 
 ### Folktails key buildings
 
@@ -247,7 +256,18 @@ Use `brain` or summary output to confirm the current faction before planning bui
 | Water | DeepWaterPump.IronTeeth | 3x2, must straddle land/water edge |
 | Power | LargePowerWheel.IronTeeth | 300hp hamster wheel |
 | Power | SteamEngine.IronTeeth | science unlock |
-| Wood | IndustrialLumberMill.IronTeeth | logs to planks |
+| Wood | LumberjackFlag.IronTeeth | chops trees |
+| Wood | IndustrialLumberMill.IronTeeth | logs to planks (NOT LumberMill) |
+| Wood | Forester.IronTeeth | plants trees |
+| Storage | SmallIndustrialPile.IronTeeth | starter log pile (NOT SmallPile) |
+| Storage | SmallTank.IronTeeth | starter water storage |
+| Storage | MediumWarehouse.IronTeeth | starter warehouse (NOT SmallWarehouse) |
+| Science | Inventor.IronTeeth | science generation |
+| Leisure | Campfire.IronTeeth | SocialLife +1 |
+| Wellbeing | Scratcher.IronTeeth | Fun +1 |
+| Infrastructure | HaulingPost.IronTeeth | hauler workplace |
+| Infrastructure | GathererFlag.IronTeeth | gathers berries |
+| Infrastructure | ScavengerFlag.IronTeeth | collects scrap metal |
 
 ### Shared buildings
 
