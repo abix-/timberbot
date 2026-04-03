@@ -715,7 +715,33 @@ class Timberbot:
         with open(bpath, "w") as f:
             _t.dump(brain_data, f)
 
-        return {"summary": summary, "goal": current_goal, "tasks": tasks, "locations": locations}
+        # compact clusters: "135,115,z2 37/69 Pine" instead of nested dicts
+        def _compact_clusters(clusters):
+            out = []
+            for c in (clusters or []):
+                sp = ",".join(c.get("species", {}).keys())
+                out.append(f'{c["x"]},{c["y"]},z{c.get("z",0)} {c.get("grown",0)}/{c.get("total",0)} {sp}')
+            return out
+
+        if isinstance(summary, dict):
+            if "treeClusters" in summary:
+                summary["treeClusters"] = _compact_clusters(summary["treeClusters"])
+            if "foodClusters" in summary:
+                summary["foodClusters"] = _compact_clusters(summary["foodClusters"])
+
+        # compact locations: "dc:124,143,z2" instead of nested dicts
+        compact_locs = {}
+        for name, loc in locations.items():
+            sp = ",".join(loc.get("species", [])) if "species" in loc else ""
+            note = loc.get("note", "")
+            val = f'{loc["x"]},{loc["y"]},z{loc.get("z",0)}'
+            if sp:
+                val += " " + sp
+            if note:
+                val += " " + note
+            compact_locs[name] = val
+
+        return {"summary": summary, "goal": current_goal, "tasks": tasks, "locations": compact_locs}
 
     def set_location(self, name, x, y, z=0, note=""):
         """Save a named location. Persists across sessions."""
