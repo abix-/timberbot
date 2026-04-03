@@ -298,6 +298,8 @@ Common footprints:
 - There is almost always something productive to do: mark trees, place a building, assign workers, adjust priorities, plant crops, expand roads.
 - Inaction compounds. A 2-day gap with no actions can mean 2 fewer days of crop growth, 2 fewer days of resource hauling, and 2 fewer days of construction progress.
 - When in doubt, check `alerts` for unstaffed/unpowered/unreachable buildings, or `resources` for low stocks.
+- Pausing (speed 0) is available for planning, but the game only progresses when unpaused. A paused game produces no food, no water, no construction progress. Unpause to play.
+- Speed 0 for extended periods means nothing happens -- beavers stand still, crops don't grow, drought timer is frozen. Use speed 1-3 to keep the colony alive.
 
 ### Food
 
