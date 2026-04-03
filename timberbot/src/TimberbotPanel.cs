@@ -259,18 +259,37 @@ namespace Timberbot
 
             _settingsContainer.Add(MakeSeparator());
 
-            _binaryField = MakeTextField("claude");
+            // load saved values or use defaults
+            var savedBinary = _service.GetUISetting("agentBinary") ?? "claude";
+            var savedModel = _service.GetUISetting("agentModel");
+            var savedEffort = _service.GetUISetting("agentEffort");
+            var savedGoal = _service.GetUISetting("agentGoal") ?? "reach 50 beavers with 77 well-being";
+
+            _binaryField = MakeTextField(savedBinary);
+            _binaryField.RegisterValueChangedCallback(evt => _service.SaveUISetting("agentBinary", evt.newValue));
             _settingsContainer.Add(MakeFieldRow("Binary:", _binaryField));
 
-            _modelDropdown = MakeNativeDropdown(ModelChoices, "sonnet 4.6 - best value $$$", _modelDisplayToValue);
+            // resolve saved model value to display label
+            string modelDefault = "sonnet 4.6 - best value $$$";
+            if (savedModel != null)
+                foreach (var c in ModelChoices)
+                    if (c[0] == savedModel) { modelDefault = c[1]; break; }
+            _modelDropdown = MakeNativeDropdown(ModelChoices, modelDefault, _modelDisplayToValue);
+            _modelDropdown.ValueChanged += (s, e) => _service.SaveUISetting("agentModel", GetDropdownValue(_modelDropdown, _modelDisplayToValue));
             _settingsContainer.Add(MakeFieldRow("Model:", _modelDropdown));
 
-            _effortDropdown = MakeNativeDropdown(EffortChoices, "high - thorough (default)", _effortDisplayToValue);
+            string effortDefault = "high - thorough (default)";
+            if (savedEffort != null)
+                foreach (var c in EffortChoices)
+                    if (c[0] == savedEffort) { effortDefault = c[1]; break; }
+            _effortDropdown = MakeNativeDropdown(EffortChoices, effortDefault, _effortDisplayToValue);
+            _effortDropdown.ValueChanged += (s, e) => _service.SaveUISetting("agentEffort", GetDropdownValue(_effortDropdown, _effortDisplayToValue));
             _settingsContainer.Add(MakeFieldRow("Effort:", _effortDropdown));
 
-            _goalField = MakeTextField("reach 50 beavers with 77 well-being");
+            _goalField = MakeTextField(savedGoal);
             _goalField.multiline = true;
             _goalField.style.height = 36;
+            _goalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("agentGoal", evt.newValue));
             _settingsContainer.Add(MakeFieldRow("Goal:", _goalField));
 
             _expanded.Add(_settingsContainer);

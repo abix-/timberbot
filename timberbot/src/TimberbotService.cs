@@ -45,6 +45,7 @@ namespace Timberbot
         private int _webhookCircuitBreaker = 30;
         private double _writeBudgetMs = 1.0;
         private string _terminal = "";           // terminal command prefix (e.g. "wezterm start --")
+        private string _settingsPath;            // full path to settings.json
 
         public TimberbotService(
             EventBus eventBus,
@@ -107,6 +108,7 @@ namespace Timberbot
                     System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),
                     "Timberborn", "Mods", "Timberbot");
                 var path = System.IO.Path.Combine(modDir, "settings.json");
+                _settingsPath = path;
                 if (System.IO.File.Exists(path))
                 {
                     var json = Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(path));
@@ -137,6 +139,39 @@ namespace Timberbot
             catch (System.Exception ex)
             {
                 TimberbotLog.Error("settings.json load failed, using defaults", ex);
+            }
+        }
+
+        public string GetUISetting(string key)
+        {
+            try
+            {
+                if (_settingsPath != null && System.IO.File.Exists(_settingsPath))
+                {
+                    var json = Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(_settingsPath));
+                    return json.Value<string>(key);
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        public void SaveUISetting(string key, string value)
+        {
+            try
+            {
+                if (_settingsPath == null) return;
+                Newtonsoft.Json.Linq.JObject json;
+                if (System.IO.File.Exists(_settingsPath))
+                    json = Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(_settingsPath));
+                else
+                    json = new Newtonsoft.Json.Linq.JObject();
+                json[key] = value;
+                System.IO.File.WriteAllText(_settingsPath, json.ToString(Newtonsoft.Json.Formatting.Indented));
+            }
+            catch (System.Exception ex)
+            {
+                TimberbotLog.Error("settings.json save failed", ex);
             }
         }
 
