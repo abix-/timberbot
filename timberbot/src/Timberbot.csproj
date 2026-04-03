@@ -365,6 +365,10 @@
       <HintPath>$(GameManagedDir)\System.Collections.Immutable.dll</HintPath>
     </Reference>
 
+    <!-- UI -->
+    <Reference Include="Timberborn.CoreUI" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.CoreUI.dll</HintPath></Reference>
+    <Reference Include="Timberborn.UILayoutSystem" Publicize="true"><Private>false</Private><HintPath>$(GameManagedDir)\Timberborn.UILayoutSystem.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.UIElementsModule"><Private>false</Private><HintPath>$(GameManagedDir)\UnityEngine.UIElementsModule.dll</HintPath></Reference>
     <!-- Non-publicized -->
     <Reference Include="Newtonsoft.Json">
       <Private>false</Private>

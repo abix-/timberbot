@@ -44,6 +44,7 @@ namespace Timberbot
         private float _webhookBatchSeconds = 0.2f;
         private int _webhookCircuitBreaker = 30;
         private double _writeBudgetMs = 1.0;
+        private string _terminal = "";           // terminal command prefix (e.g. "wezterm start --")
 
         public TimberbotService(
             EventBus eventBus,
@@ -93,7 +94,7 @@ namespace Timberbot
             Placement.DetectFaction();          // detect faction suffix -- must run before BuildAllIndexes
             Registry.BuildAllIndexes();        // populate indexes from existing entities
             ReadV2.BuildAll();          // populate v2 building trackers from existing entities
-            Agent = new TimberbotAgent();
+            Agent = new TimberbotAgent(_terminal);
             _server = new TimberbotHttpServer(_httpPort, this, _debugEnabled);
             TimberbotLog.Info($"HTTP server started on port {_httpPort}");
         }
@@ -129,6 +130,8 @@ namespace Timberbot
                         double budget = json.Value<double>("writeBudgetMs");
                         _writeBudgetMs = budget > 0 ? budget : 1.0;
                     }
+                    if (json["terminal"] != null)
+                        _terminal = json.Value<string>("terminal") ?? "";
                 }
             }
             catch (System.Exception ex)

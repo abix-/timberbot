@@ -26,6 +26,7 @@ namespace Timberbot
             Bind<TimberbotPlacement>().AsSingleton();
             Bind<TimberbotDebug>().AsSingleton();
             Bind<TimberbotService>().AsSingleton();
+            Bind<TimberbotPanel>().AsSingleton();
         }
     }
 }
