@@ -32,8 +32,7 @@ namespace Timberbot
         private Dropdown _modelDropdown;
         private Dropdown _effortDropdown;
         private TextField _goalField;
-        private NineSliceButton _startBtn;
-        private NineSliceButton _stopBtn;
+        private NineSliceButton _toggleBtn;
 
         private float _lastUpdate;
         private bool _isExpanded;
@@ -111,8 +110,7 @@ namespace Timberbot
 
             bool running = status == AgentStatus.GatheringState ||
                            status == AgentStatus.Interactive;
-            _startBtn.SetEnabled(!running);
-            _stopBtn.SetEnabled(running);
+            _toggleBtn.text = running ? "Stop" : "Start";
         }
 
         private void BuildCollapsedBar()
@@ -203,21 +201,11 @@ namespace Timberbot
             _goalField.style.height = 36;
             _expanded.Add(MakeFieldRow("Goal:", _goalField));
 
-            // button row
-            var btnRow = new VisualElement();
-            btnRow.style.flexDirection = FlexDirection.Row;
-            btnRow.style.justifyContent = Justify.Center;
-            btnRow.style.marginTop = 6;
-
-            _startBtn = MakeGameButton("Start", OnStartClicked);
-            _startBtn.style.marginRight = 6;
-            btnRow.Add(_startBtn);
-
-            _stopBtn = MakeGameButton("Stop", OnStopClicked);
-            _stopBtn.SetEnabled(false);
-            btnRow.Add(_stopBtn);
-
-            _expanded.Add(btnRow);
+            // toggle button
+            _toggleBtn = MakeGameButton("Start", OnToggleClicked);
+            _toggleBtn.style.marginTop = 6;
+            _toggleBtn.style.alignSelf = Align.Center;
+            _expanded.Add(_toggleBtn);
         }
 
         private Dropdown MakeNativeDropdown(string[][] choices, string defaultDisplay, Dictionary<string, string> displayToValue)
@@ -257,26 +245,31 @@ namespace Timberbot
             _expanded.ToggleDisplayStyle(_isExpanded);
         }
 
-        private void OnStartClicked()
+        private void OnToggleClicked()
         {
             var agent = _service.Agent;
             if (agent == null) return;
 
-            string binary = _binaryField.value;
-            if (string.IsNullOrWhiteSpace(binary)) binary = "claude";
+            var status = agent.CurrentStatus;
+            bool running = status == AgentStatus.GatheringState || status == AgentStatus.Interactive;
 
-            string model = GetDropdownValue(_modelDropdown, _modelDisplayToValue);
-            string effort = GetDropdownValue(_effortDropdown, _effortDisplayToValue);
-            string goal = _goalField.value;
+            if (running)
+            {
+                agent.Stop();
+                TimberbotLog.Info("panel: stopped agent");
+            }
+            else
+            {
+                string binary = _binaryField.value;
+                if (string.IsNullOrWhiteSpace(binary)) binary = "claude";
 
-            agent.Start(binary, model, effort, 120, goal);
-            TimberbotLog.Info($"panel: started agent binary={binary} model={model ?? "default"} effort={effort ?? "default"}");
-        }
+                string model = GetDropdownValue(_modelDropdown, _modelDisplayToValue);
+                string effort = GetDropdownValue(_effortDropdown, _effortDisplayToValue);
+                string goal = _goalField.value;
 
-        private void OnStopClicked()
-        {
-            _service.Agent?.Stop();
-            TimberbotLog.Info("panel: stopped agent");
+                agent.Start(binary, model, effort, 120, goal);
+                TimberbotLog.Info($"panel: started agent binary={binary} model={model ?? "default"} effort={effort ?? "default"}");
+            }
         }
 
         // --- IDropdownProvider implementation ---
