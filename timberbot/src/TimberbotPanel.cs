@@ -1,9 +1,8 @@
 // TimberbotPanel.cs -- In-game UI for agent start/stop/status.
 
 using System.Collections.Generic;
-using Timberborn.BlockSystem;
+using System.Globalization;
 using Timberborn.CoreUI;
-using Timberborn.SelectionSystem;
 using Timberborn.SingletonSystem;
 using Timberborn.UILayoutSystem;
 using UnityEngine;
@@ -16,7 +15,6 @@ namespace Timberbot
         private readonly UILayout _layout;
         private readonly TimberbotService _service;
         private readonly VisualElementInitializer _veInit;
-        private readonly EntitySelectionService _selectionService;
 
         private VisualElement _widget;
         private Label _statusBarLabel;
@@ -27,7 +25,6 @@ namespace Timberbot
         private VisualElement _modalOverlay;
         private VisualElement _modalPanel;
         private Label _statusLabel;
-        private Label _selectionLabel;
         private VisualElement _settingsContainer;
 
         private TextField _binaryField;
@@ -50,6 +47,13 @@ namespace Timberbot
         private VisualElement _presetPopup;
         private ScrollView _presetScroll;
         private VisualElement _presetPopupAnchor;
+        private VisualElement _tooltipPopup;
+        private Label _tooltipLabel;
+        private VisualElement _tooltipAnchor;
+        private string _pendingTooltipText;
+        private VisualElement _pendingTooltipAnchor;
+        private Vector2 _tooltipPointerPosition;
+        private int _tooltipRequestId;
 
         private bool _isWidgetDragging;
         private int _dragPointerId;
@@ -110,12 +114,26 @@ namespace Timberbot
             new[] { "false", "false" },
         };
 
-        public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit, EntitySelectionService selectionService)
+        private static readonly Dictionary<string, string> SettingTooltips = new Dictionary<string, string>
+        {
+            ["Binary:"] = "Which CLI executable Timberbot launches for the agent session. Presets are convenience values; you can type a custom binary name.",
+            ["Model:"] = "Model name passed to the agent with --model. Preset choices change based on the selected binary, but you can type any model manually.",
+            ["Effort:"] = "Reasoning effort passed to the agent with --effort. Preset choices change based on the selected binary, but you can type any effort value manually.",
+            ["Goal:"] = "Initial task sent to the agent after it prints the boot report. The system prompt also includes the guide and current colony state.",
+            ["debugEndpointEnabled:"] = "Enables debug and benchmark endpoints such as /api/debug and /api/benchmark. Applied on load; reload the save/mod to fully apply.",
+            ["httpPort:"] = "HTTP server port Timberbot listens on. The Python client reads this by default from settings.json. Applied on load; reload the save/mod to fully apply.",
+            ["webhooksEnabled:"] = "Turns outgoing webhook event delivery on or off. Applied on load; reload the save/mod to fully apply.",
+            ["webhookBatchMs:"] = "Webhook batching window in milliseconds. Use 0 for immediate delivery instead of batching. Applied on load; reload the save/mod to fully apply.",
+            ["webhookCircuitBreaker:"] = "Number of consecutive webhook delivery failures before Timberbot disables webhook sending. Applied on load; reload the save/mod to fully apply.",
+            ["writeBudgetMs:"] = "Per-frame main-thread time budget for queued write jobs. Higher values process writes faster but use more frame time. Applied on load; reload the save/mod to fully apply.",
+            ["terminal:"] = "Optional terminal command prefix used to launch the agent, with {cwd} supported as the working-directory placeholder. Applied on load; reload the save/mod to fully apply.",
+        };
+
+        public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit)
         {
             _layout = layout;
             _service = service;
             _veInit = veInit;
-            _selectionService = selectionService;
         }
 
         public void Load()
@@ -157,43 +175,6 @@ namespace Timberbot
             _statusLabel.text = "Timberbot API - " + statusText;
             _widgetStartBtn.SetEnabled(!running);
             _widgetStopBtn.SetEnabled(running);
-
-            try
-            {
-                var selected = _selectionService.SelectedObject;
-                if (selected != null)
-                {
-                    var goProp = selected.GetType().GetProperty("gameObject") ?? selected.GetType().GetProperty("GameObject");
-                    var goField = goProp == null ? selected.GetType().GetField("_gameObject", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance) : null;
-                    var go = goProp != null ? goProp.GetValue(selected) as GameObject : goField?.GetValue(selected) as GameObject;
-                    if (go != null)
-                    {
-                        var block = go.GetComponent<BlockObject>();
-                        if (block != null)
-                        {
-                            var coords = block.Coordinates;
-                            _selectionLabel.text = TimberbotEntityRegistry.CanonicalName(go.name) + " x:" + coords.x + " y:" + coords.y + " z:" + coords.z;
-                        }
-                        else
-                        {
-                            _selectionLabel.text = TimberbotEntityRegistry.CanonicalName(go.name);
-                        }
-                    }
-                    else
-                    {
-                        _selectionLabel.text = selected.ToString();
-                    }
-                    _selectionLabel.ToggleDisplayStyle(true);
-                }
-                else
-                {
-                    _selectionLabel.ToggleDisplayStyle(false);
-                }
-            }
-            catch
-            {
-                _selectionLabel.ToggleDisplayStyle(false);
-            }
         }
 
         private void BuildWidget()
@@ -257,7 +238,7 @@ namespace Timberbot
 
             _modalPanel = new NineSliceVisualElement();
             _modalPanel.AddToClassList("bg-sub-box--green");
-            _modalPanel.style.width = 520;
+            _modalPanel.style.width = 420;
             _modalPanel.style.maxHeight = 620;
             _modalPanel.style.paddingTop = 8;
             _modalPanel.style.paddingBottom = 8;
@@ -295,11 +276,6 @@ namespace Timberbot
 
             _statusLabel = MakeLabel("Timberbot API - Idle");
             content.Add(_statusLabel);
-
-            _selectionLabel = MakeLabel("");
-            _selectionLabel.AddToClassList("text--green");
-            _selectionLabel.ToggleDisplayStyle(false);
-            content.Add(_selectionLabel);
 
             content.Add(MakeSeparator());
 
@@ -364,7 +340,7 @@ namespace Timberbot
                 _service.SaveBoolSetting("debugEndpointEnabled", value == "true");
             });
             _debugEndpointPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_debugEndpointPresetBtn, _debugEndpointField, BoolChoices));
-            _settingsContainer.Add(MakePresetFieldRow("Debug:", _debugEndpointField, _debugEndpointPresetBtn));
+            _settingsContainer.Add(MakePresetFieldRow("debugEndpointEnabled:", _debugEndpointField, _debugEndpointPresetBtn));
 
             _httpPortField = MakeTextField(savedHttpPort);
             _httpPortField.RegisterValueChangedCallback(evt =>
@@ -373,7 +349,7 @@ namespace Timberbot
                 _httpPortField.SetValueWithoutNotify(value);
                 _service.SaveIntSetting("httpPort", int.Parse(value));
             });
-            _settingsContainer.Add(MakeFieldRow("Port:", _httpPortField));
+            _settingsContainer.Add(MakeFieldRow("httpPort:", _httpPortField));
 
             _webhooksEnabledField = MakeTextField(savedWebhooksEnabled);
             _webhooksEnabledField.RegisterValueChangedCallback(evt =>
@@ -383,7 +359,7 @@ namespace Timberbot
                 _service.SaveBoolSetting("webhooksEnabled", value == "true");
             });
             _webhooksEnabledPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_webhooksEnabledPresetBtn, _webhooksEnabledField, BoolChoices));
-            _settingsContainer.Add(MakePresetFieldRow("Hooks:", _webhooksEnabledField, _webhooksEnabledPresetBtn));
+            _settingsContainer.Add(MakePresetFieldRow("webhooksEnabled:", _webhooksEnabledField, _webhooksEnabledPresetBtn));
 
             _webhookBatchMsField = MakeTextField(savedWebhookBatchMs);
             _webhookBatchMsField.RegisterValueChangedCallback(evt =>
@@ -392,7 +368,7 @@ namespace Timberbot
                 _webhookBatchMsField.SetValueWithoutNotify(value);
                 _service.SaveIntSetting("webhookBatchMs", int.Parse(value));
             });
-            _settingsContainer.Add(MakeFieldRow("Batch:", _webhookBatchMsField));
+            _settingsContainer.Add(MakeFieldRow("webhookBatchMs:", _webhookBatchMsField));
 
             _webhookCircuitBreakerField = MakeTextField(savedWebhookCircuitBreaker);
             _webhookCircuitBreakerField.RegisterValueChangedCallback(evt =>
@@ -401,7 +377,7 @@ namespace Timberbot
                 _webhookCircuitBreakerField.SetValueWithoutNotify(value);
                 _service.SaveIntSetting("webhookCircuitBreaker", int.Parse(value));
             });
-            _settingsContainer.Add(MakeFieldRow("Breaker:", _webhookCircuitBreakerField));
+            _settingsContainer.Add(MakeFieldRow("webhookCircuitBreaker:", _webhookCircuitBreakerField));
 
             _writeBudgetMsField = MakeTextField(savedWriteBudgetMs);
             _writeBudgetMsField.RegisterValueChangedCallback(evt =>
@@ -410,11 +386,11 @@ namespace Timberbot
                 _writeBudgetMsField.SetValueWithoutNotify(value);
                 _service.SaveDoubleSetting("writeBudgetMs", double.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
             });
-            _settingsContainer.Add(MakeFieldRow("Budget:", _writeBudgetMsField));
+            _settingsContainer.Add(MakeFieldRow("writeBudgetMs:", _writeBudgetMsField));
 
             _terminalField = MakeTextField(savedTerminal);
             _terminalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("terminal", evt.newValue ?? ""));
-            _settingsContainer.Add(MakeFieldRow("Terminal:", _terminalField));
+            _settingsContainer.Add(MakeFieldRow("terminal:", _terminalField));
 
             _presetPopup = new NineSliceVisualElement();
             _presetPopup.AddToClassList("bg-sub-box--green");
@@ -432,6 +408,25 @@ namespace Timberbot
             _presetScroll.style.minWidth = 172;
             _presetScroll.style.flexGrow = 1;
             _presetPopup.Add(_presetScroll);
+
+            _tooltipPopup = new NineSliceVisualElement();
+            _tooltipPopup.AddToClassList("bg-sub-box--green");
+            _tooltipPopup.style.position = Position.Absolute;
+            _tooltipPopup.style.maxWidth = 320;
+            _tooltipPopup.style.paddingTop = 6;
+            _tooltipPopup.style.paddingBottom = 6;
+            _tooltipPopup.style.paddingLeft = 8;
+            _tooltipPopup.style.paddingRight = 8;
+            _tooltipPopup.pickingMode = PickingMode.Ignore;
+            _tooltipPopup.ToggleDisplayStyle(false);
+            _modalOverlay.Add(_tooltipPopup);
+
+            _tooltipLabel = new NineSliceLabel();
+            _tooltipLabel.AddToClassList("text--yellow");
+            _tooltipLabel.AddToClassList("game-text-normal");
+            _tooltipLabel.style.whiteSpace = WhiteSpace.Normal;
+            _tooltipLabel.style.maxWidth = 304;
+            _tooltipPopup.Add(_tooltipLabel);
         }
 
         private void ApplySavedWidgetPosition()
@@ -530,6 +525,7 @@ namespace Timberbot
         private void HideModal()
         {
             HidePresetMenu();
+            HideTooltip();
             _modalOverlay.ToggleDisplayStyle(false);
         }
 
@@ -568,6 +564,7 @@ namespace Timberbot
 
         private void ShowPresetMenu(VisualElement anchor, TextField targetField, string[][] choices)
         {
+            HideTooltip();
             _presetScroll.Clear();
             _presetPopupAnchor = anchor;
 
@@ -618,6 +615,102 @@ namespace Timberbot
             _presetScroll.Clear();
             _presetPopup.ToggleDisplayStyle(false);
             _presetPopupAnchor = null;
+        }
+
+        private void QueueTooltip(VisualElement anchor, string text, Vector2 pointerPosition)
+        {
+            if (_tooltipPopup == null || string.IsNullOrWhiteSpace(text))
+                return;
+
+            _pendingTooltipAnchor = anchor;
+            _pendingTooltipText = text;
+            _tooltipPointerPosition = pointerPosition;
+            var requestId = ++_tooltipRequestId;
+            _modalOverlay.schedule.Execute(() =>
+            {
+                if (requestId != _tooltipRequestId || _pendingTooltipAnchor == null || string.IsNullOrWhiteSpace(_pendingTooltipText))
+                    return;
+
+                ShowTooltip(_pendingTooltipAnchor, _pendingTooltipText);
+            }).StartingIn(200);
+        }
+
+        private void ShowTooltip(VisualElement anchor, string text)
+        {
+            if (_tooltipPopup == null || _tooltipLabel == null || anchor == null || string.IsNullOrWhiteSpace(text))
+                return;
+
+            _tooltipAnchor = anchor;
+            _tooltipLabel.text = text;
+            _tooltipPopup.ToggleDisplayStyle(true);
+            _tooltipPopup.BringToFront();
+            PositionTooltip(anchor);
+        }
+
+        private void PositionTooltip(VisualElement anchor)
+        {
+            if (_tooltipPopup == null || anchor == null)
+                return;
+
+            var overlayBounds = _modalOverlay.worldBound;
+            var anchorBounds = anchor.worldBound;
+            var pointerX = _tooltipPointerPosition.x;
+            var pointerY = _tooltipPointerPosition.y;
+            if (pointerX <= 0f && pointerY <= 0f)
+            {
+                pointerX = anchorBounds.xMax;
+                pointerY = anchorBounds.center.y;
+            }
+
+            const float offset = 12f;
+            const float margin = 12f;
+            var width = Mathf.Max(180f, _tooltipPopup.resolvedStyle.width);
+            var height = Mathf.Max(40f, _tooltipPopup.resolvedStyle.height);
+
+            var left = pointerX - overlayBounds.xMin + offset;
+            var top = pointerY - overlayBounds.yMin - (height * 0.5f);
+
+            if (left + width > overlayBounds.width - margin)
+                left = anchorBounds.xMin - overlayBounds.xMin - width - offset;
+            if (left < margin)
+                left = margin;
+
+            if (top + height > overlayBounds.height - margin)
+                top = overlayBounds.height - height - margin;
+            if (top < margin)
+                top = margin;
+
+            _tooltipPopup.style.left = left;
+            _tooltipPopup.style.top = top;
+        }
+
+        private void HideTooltip()
+        {
+            _tooltipRequestId++;
+            _pendingTooltipAnchor = null;
+            _pendingTooltipText = null;
+            _tooltipAnchor = null;
+            if (_tooltipPopup != null)
+                _tooltipPopup.ToggleDisplayStyle(false);
+        }
+
+        private void RegisterTooltipHandlers(VisualElement row, string tooltipText)
+        {
+            if (string.IsNullOrWhiteSpace(tooltipText))
+                return;
+
+            row.RegisterCallback<MouseEnterEvent>(evt =>
+            {
+                var pointer = new Vector2(evt.mousePosition.x, evt.mousePosition.y);
+                QueueTooltip(row, tooltipText, pointer);
+            });
+            row.RegisterCallback<MouseLeaveEvent>(evt => HideTooltip());
+            row.RegisterCallback<PointerMoveEvent>(evt =>
+            {
+                _tooltipPointerPosition = new Vector2(evt.position.x, evt.position.y);
+                if (_tooltipAnchor == row && _tooltipPopup != null && _tooltipPopup.resolvedStyle.display != DisplayStyle.None)
+                    PositionTooltip(row);
+            });
         }
 
         private static string[][] GetModelChoices(string binary)
@@ -691,10 +784,10 @@ namespace Timberbot
 
         private static string NormalizeDoubleString(string value, double fallback, double minValue)
         {
-            if (double.TryParse(NormalizeValue(value, fallback.ToString(System.Globalization.CultureInfo.InvariantCulture)), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed) && parsed >= minValue)
-                return parsed.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (double.TryParse(NormalizeValue(value, fallback.ToString(CultureInfo.InvariantCulture)), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) && parsed >= minValue)
+                return parsed.ToString(CultureInfo.InvariantCulture);
 
-            return fallback.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return fallback.ToString(CultureInfo.InvariantCulture);
         }
 
         private static string FormatStatus(TimberbotAgent agent)
@@ -801,7 +894,7 @@ namespace Timberbot
             return btn;
         }
 
-        private static VisualElement MakeFieldRow(string labelText, VisualElement field)
+        private VisualElement MakeFieldRow(string labelText, VisualElement field)
         {
             var row = new VisualElement();
             row.style.flexDirection = FlexDirection.Row;
@@ -811,15 +904,17 @@ namespace Timberbot
             var lbl = new NineSliceLabel { text = labelText };
             lbl.AddToClassList("text--yellow");
             lbl.AddToClassList("game-text-normal");
-            lbl.style.width = 68;
+            lbl.style.width = 150;
             row.Add(lbl);
 
             field.style.flexGrow = 1;
             row.Add(field);
+            if (SettingTooltips.TryGetValue(labelText, out var tooltipText))
+                RegisterTooltipHandlers(row, tooltipText);
             return row;
         }
 
-        private static VisualElement MakePresetFieldRow(string labelText, TextField field, NineSliceButton button)
+        private VisualElement MakePresetFieldRow(string labelText, TextField field, NineSliceButton button)
         {
             var row = MakeFieldRow(labelText, field);
             button.style.marginLeft = 4;
