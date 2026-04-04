@@ -23,11 +23,30 @@ Failed tests (all path routing / map verification):
 
 Release blocked at step 3 (tests). Did not commit, tag, or publish.
 
+## Gameplay Session (2026-04-03) -- Colony: Potato Tomato (IronTeeth)
+Goal: reach 50 beavers with 77 well-being. Day 331, drought arriving in ~6 days (5d duration).
+
+Actions taken:
+- Unpaused DeepWaterPump at (109,130,z5) -- was silently paused, losing water production
+- Placed SmallWarehouse at (141,138,z2) set to obtain:Kohlrabi for drought food stockpile
+- Placed SmallWarehouse at (140,152,z4) set to obtain:FermentedSoybean for processed food stockpile
+- Note: command renamed from timberbot.py to tbot
+
+State at session end:
+- Water: 625 available / good for drought (tanks mostly full)
+- Food: 404 stored + 233 ready in fields (borderline for drought, harvesting needed)
+- Wellbeing: 17/77 -- critical. Nutrition 2.9/17 is the main drag (need FermentedSoybean output)
+- FoodFactory idle (no Corn/Eggplant/Algae inputs, Corn takes 10d to grow)
+- Fermenter running on Soybean -- key for nutrition improvement
+- Game was STILL PAUSED at session end (speed:0) -- player needs to unpause
+
 ## Next Steps
 - Diagnose path routing test failures (likely in A* pathfinding or path placement logic in the mod)
 - Fix failures and re-run full test suite
 - Resume release from step 3 onward (test, commit, push, release, notes, Steam Workshop reminder)
+- Gameplay: unpause game, monitor food harvest and fermenter output before drought
 
 ## Open Questions
 - Are path routing failures a regression from recent changes or a pre-existing issue with map/game state?
 - Is the `verify demolish via map` failure related to the path routing issues or independent?
+- Why is nutrition 2.9/17 when food is available? Possible: beavers not reaching food, or processed food stock is zero
