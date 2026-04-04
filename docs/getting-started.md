@@ -105,6 +105,17 @@ timberbot.py summary
 timberbot.py map x1:110 y1:130 x2:130 y2:150
 ```
 
+!!! tip "Short alias: `tbot`"
+    Create a shell alias or wrapper so AI agents (and you) can type `tbot` instead of `timberbot.py`:
+
+    ```bash
+    # ~/.bashrc or ~/bin/tbot (make executable)
+    #!/usr/bin/env bash
+    exec timberbot.py "$@"
+    ```
+
+    The AI skill docs reference `tbot` to avoid typos. `timberbot.py` still works everywhere.
+
 !!! note "Shebang for Git Bash / WSL"
     The script includes `#!/usr/bin/env python` so it runs correctly in Unix-style shells (Git Bash, WSL) when the file is on PATH.
 
