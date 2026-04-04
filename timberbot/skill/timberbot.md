@@ -1,17 +1,17 @@
-Play Timberborn via `timberbot.py`.
+Play Timberborn via `tbot`.
 
 ## Rules
 
-- Run `timberbot.py <command> key:value` directly. Never use `python`, `cd`, or full paths.
+- Run `tbot <command> key:value` directly. Never use `python`, `cd`, or full paths.
 - Never run mutating calls in parallel.
 - Always use `find_placement` for building placement. Never guess coordinates.
-- Before placing a building for the first time this session, run `timberbot.py prefabs | grep -i <keyword>`.
+- Before placing a building for the first time this session, run `tbot prefabs | grep -i <keyword>`.
 - Prefabs require the faction suffix, e.g. `LumberjackFlag.Folktails`.
 - After each mutation batch, re-read the relevant state before planning the next step.
 
 ## Boot
 
-- If `## CURRENT COLONY STATE` is present in context, use it. Otherwise run `timberbot.py brain goal:"<goal>"`.
+- If `## CURRENT COLONY STATE` is present in context, use it. Otherwise run `tbot brain goal:"<goal>"`.
 - Print the boot report first with: settlement/faction, day/speed/weather, population/beds/workers, food/water/logs/planks, wellbeing, and urgent alerts.
 
 ## Priorities
