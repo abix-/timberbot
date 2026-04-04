@@ -1,12 +1,14 @@
 # Timberbot API
 
-**Status: active -- mod works, still adding features**
+**Status: active. mod works, still adding features**
+
+[Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3689670088) | [Getting Started](docs/getting-started.md) | [API Reference](docs/api-reference.md)
 
 C# mod + Python client that lets AI agents read and control a running Timberborn game over HTTP.
 
 ```
 Timberborn (Unity)
-  |-- Timberbot API mod (port 8085)   read + write game state
+  |-- Timberbot API mod (port 8085)   read and write game state
 
 Python client
   |-- timberbot.py                   single-file API client + CLI + dashboard
