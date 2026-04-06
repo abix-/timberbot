@@ -462,6 +462,12 @@ namespace Timberbot
             _goalField.multiline = true;
             _goalField.style.height = 80;
             _goalField.style.flexShrink = 1;
+            _goalField.style.maxWidth = 240;
+            _goalField.style.whiteSpace = WhiteSpace.Normal;
+            // ensure inner text element wraps too
+            var goalInput = _goalField.Q("unity-text-input");
+            if (goalInput != null)
+                goalInput.style.whiteSpace = WhiteSpace.Normal;
             _goalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("agentGoal", evt.newValue));
             _agentSettingsContainer.Add(MakeFieldRow("Goal:", _goalField));
 
