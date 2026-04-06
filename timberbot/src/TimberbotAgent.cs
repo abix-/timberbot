@@ -27,6 +27,8 @@ namespace Timberbot
     {
         private readonly string _terminal;
         private readonly string _pythonCommand;
+        private readonly bool _allowlistEnabled;
+        private readonly HashSet<string> _allowedBinaries;
         private string _binary;
         private string _model;
         private string _effort;
@@ -45,10 +47,12 @@ namespace Timberbot
         private volatile Process _activeProcess;
         private string _activeSessionPidPath;
 
-        public TimberbotAgent(string terminal, string pythonCommand)
+        public TimberbotAgent(string terminal, string pythonCommand, bool allowlistEnabled = true, HashSet<string> allowedBinaries = null)
         {
             _terminal = terminal ?? "";
             _pythonCommand = pythonCommand ?? "";
+            _allowlistEnabled = allowlistEnabled;
+            _allowedBinaries = allowedBinaries;
         }
 
         public AgentStatus CurrentStatus => _status;
@@ -66,11 +70,16 @@ namespace Timberbot
             if (_status != AgentStatus.Idle && _status != AgentStatus.Done && _status != AgentStatus.Error)
                 return _jw.Error("agent_busy", ("status", _status.ToString().ToLowerInvariant()));
 
-            _binary = binary ?? "claude";
+            var resolvedBinary = binary ?? "claude";
+            if (_allowlistEnabled && !TimberbotPure.IsAllowedBinary(resolvedBinary, _allowedBinaries))
+                return _jw.Error("agent_binary_blocked: " + resolvedBinary + " is not in the allowlist. add it to agentAllowedBinaries in settings.json or set agentAllowlistEnabled=false");
+
+            _binary = resolvedBinary;
             _model = model;
             _effort = effort;
             _commandTemplate = string.IsNullOrWhiteSpace(command) ? null : command;
-            _terminalOverride = terminal;  // null = use constructor default
+            // terminal override from HTTP is ignored for security. only settings.json value is used.
+            _terminalOverride = null;
             _processTimeoutSeconds = timeout > 0 ? timeout : 120;
             _goal = string.IsNullOrEmpty(goal) ? DEFAULT_GOAL : goal;
             _lastError = null;

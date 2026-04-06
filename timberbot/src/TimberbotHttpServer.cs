@@ -42,6 +42,8 @@ namespace Timberbot
         private long _nextRequestId;
         // volatile: read by main thread, written by Stop(). No lock needed for bool.
         private volatile bool _running;
+        private readonly string _corsOrigin;
+        private readonly int _maxBodyBytes;
         private readonly bool _debugEnabled;
         // separate JW for HTTP-layer errors (thread-safe: not shared with read/write paths)
         private readonly TimberbotJw _jw = new TimberbotJw(512);
@@ -75,27 +77,46 @@ namespace Timberbot
             public PostRouteDescriptor PostRoute;
         }
 
-        public TimberbotHttpServer(int port, TimberbotService service, bool debugEnabled = false)
+        public TimberbotHttpServer(int port, TimberbotService service, bool debugEnabled = false, string listenAddress = "localhost", string corsOrigin = null, int maxBodyBytes = 1048576)
         {
             _service = service;
             _debugEnabled = debugEnabled;
+            _maxBodyBytes = maxBodyBytes;
             _postRoutes = BuildPostRoutes();
             _listener = new HttpListener();
 
-            // Try wildcard binding first (http://+:port/) which accepts connections
-            // from any interface (LAN, WSL, etc). Requires admin/URL reservation on Windows.
-            // Falls back to localhost-only if that fails (no admin needed).
-            try
+            // Determine listen address. Default is localhost (safe).
+            // Set listenAddress to "+" or "0.0.0.0" or "*" in settings.json for LAN access.
+            var addr = string.IsNullOrWhiteSpace(listenAddress) ? "localhost" : listenAddress.Trim();
+            bool wantWildcard = addr == "+" || addr == "0.0.0.0" || addr == "*";
+
+            // Build CORS origin: explicit setting wins, otherwise derive from listen address
+            if (!string.IsNullOrEmpty(corsOrigin))
+                _corsOrigin = corsOrigin;
+            else
+                _corsOrigin = $"http://localhost:{port}";
+
+            if (wantWildcard)
             {
-                _listener.Prefixes.Add($"http://+:{port}/");
-                _listener.Start();
+                try
+                {
+                    _listener.Prefixes.Add($"http://+:{port}/");
+                    _listener.Start();
+                    TimberbotLog.Info($"listening on +:{port} (all interfaces)");
+                }
+                catch (HttpListenerException)
+                {
+                    TimberbotLog.Info($"port +:{port} failed, falling back to localhost");
+                    _listener = new HttpListener();
+                    _listener.Prefixes.Add($"http://localhost:{port}/");
+                    _listener.Start();
+                }
             }
-            catch (HttpListenerException)
+            else
             {
-                TimberbotLog.Info($"port +:{port} failed, falling back to localhost");
-                _listener = new HttpListener();
-                _listener.Prefixes.Add($"http://localhost:{port}/");
+                _listener.Prefixes.Add($"http://{addr}:{port}/");
                 _listener.Start();
+                TimberbotLog.Info($"listening on {addr}:{port}");
             }
 
             _running = true;
@@ -218,6 +239,15 @@ namespace Timberbot
                 var method = ctx.Request.HttpMethod.ToUpperInvariant();
                 if (_debugEnabled) TimberbotLog.Info($"listen.accepted path={path} method={method} {ThreadPoolState()}");
 
+                // CORS preflight
+                if (method == "OPTIONS")
+                {
+                    ctx.Response.StatusCode = 204;
+                    AddCorsHeaders(ctx.Response);
+                    ctx.Response.OutputStream.Close();
+                    continue;
+                }
+
                 if (path == "/api/ping")
                 {
                     Respond(ctx, 200, "{\"status\":\"ok\",\"ready\":true}");
@@ -279,7 +309,25 @@ namespace Timberbot
                         if (_debugEnabled) TimberbotLog.Info($"listen.body.read path={path}");
                         using (var reader = new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding))
                         {
-                            var raw = reader.ReadToEnd();
+                            string raw;
+                            if (_maxBodyBytes > 0)
+                            {
+                                var buf = new char[_maxBodyBytes + 1];
+                                int totalRead = 0;
+                                int read;
+                                while (totalRead <= _maxBodyBytes && (read = reader.Read(buf, totalRead, buf.Length - totalRead)) > 0)
+                                    totalRead += read;
+                                if (totalRead > _maxBodyBytes)
+                                {
+                                    Respond(ctx, 413, _jw.Error($"body_too_large: max {_maxBodyBytes} bytes. set maxBodyBytes in settings.json to increase"));
+                                    continue;
+                                }
+                                raw = new string(buf, 0, totalRead);
+                            }
+                            else
+                            {
+                                raw = reader.ReadToEnd();
+                            }
                             body = JObject.Parse(raw);
                         }
                         if (_debugEnabled) TimberbotLog.Info($"listen.body.done path={path}");
@@ -461,7 +509,8 @@ namespace Timberbot
                 Queued("/api/path/place", req => _service.Placement.CreateRoutePathJob(req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Body?.Value<string>("style") ?? "direct", req.Body?.Value<int>("sections") ?? 0, req.Body?.Value<bool?>("timings") ?? false, req.QueuedAtTicks, req.QueuedAtFrame)),
                 Queued("/api/placement/find", req => _service.Placement.CreateFindPlacementJob(req.Body?.Value<string>("prefab") ?? "", req.Body?.Value<int>("x1") ?? 0, req.Body?.Value<int>("y1") ?? 0, req.Body?.Value<int>("x2") ?? 0, req.Body?.Value<int>("y2") ?? 0, req.Format)),
                 Queued("/api/building/place", req => new LambdaWriteJob(req.Route, () => _service.Placement.PlaceBuilding(req.Body?.Value<string>("prefab") ?? "", req.Body?.Value<int>("x") ?? 0, req.Body?.Value<int>("y") ?? 0, req.Body?.Value<int>("z") ?? 0, req.Body?.Value<string>("orientation") ?? "south").ToJson(_service.Placement.Jw))),
-                Queued("/api/agent/start", req => new LambdaWriteJob(req.Route, () => _service.Agent.Start(req.Body?.Value<string>("binary") ?? "claude", req.Body?.Value<string>("model"), req.Body?.Value<string>("effort"), req.Body?.Value<int>("timeout") ?? 120, req.Body?.Value<string>("goal"), req.Body?.Value<string>("command"), req.Body?.Value<string>("terminal")))),
+                // terminal param intentionally not passed from HTTP requests (security: settings-only)
+                Queued("/api/agent/start", req => new LambdaWriteJob(req.Route, () => _service.Agent.Start(req.Body?.Value<string>("binary") ?? "claude", req.Body?.Value<string>("model"), req.Body?.Value<string>("effort"), req.Body?.Value<int>("timeout") ?? 120, req.Body?.Value<string>("goal"), req.Body?.Value<string>("command")))),
                 Queued("/api/agent/stop", req => new LambdaWriteJob(req.Route, () => _service.Agent.Stop())),
             };
 
@@ -508,7 +557,7 @@ namespace Timberbot
                 var json = data is string s ? s : JsonConvert.SerializeObject(data);
                 ctx.Response.StatusCode = statusCode;
                 ctx.Response.ContentType = "application/json";
-                ctx.Response.Headers.Add("Access-Control-Allow-Origin", "*");
+                AddCorsHeaders(ctx.Response);
                 // write directly to output stream. avoids intermediate byte[] allocation
                 // UTF8Encoding(false) = no BOM prefix (JSON parsers reject BOM)
                 using (var sw = new StreamWriter(ctx.Response.OutputStream, new UTF8Encoding(false)))
@@ -521,6 +570,13 @@ namespace Timberbot
                 TimberbotLog.Info($"resp.fail id={requestId} route={route ?? ""} status={statusCode} ex={ex.GetType().Name}:{ex.Message} {ThreadPoolState()}");
                 TimberbotLog.Error("response", ex);
             }
+        }
+
+        private void AddCorsHeaders(HttpListenerResponse response)
+        {
+            response.Headers.Add("Access-Control-Allow-Origin", _corsOrigin);
+            response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            response.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
         }
 
         private static string ThreadPoolState()

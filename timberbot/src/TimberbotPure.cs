@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 
@@ -45,6 +46,69 @@ namespace Timberbot
             if (value == null)
                 value = "";
             return "'" + value.Replace("'", "'\"'\"'") + "'";
+        }
+
+        // --- security helpers ---
+
+        private static readonly HashSet<string> BuiltinAllowedBinaries = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "claude", "codex"
+        };
+
+        public static bool IsAllowedBinary(string binary, HashSet<string> extraAllowed)
+        {
+            if (string.IsNullOrWhiteSpace(binary))
+                return false;
+
+            string name;
+            try
+            {
+                name = Path.GetFileNameWithoutExtension(binary.Trim());
+            }
+            catch
+            {
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(name))
+                return false;
+
+            if (BuiltinAllowedBinaries.Contains(name))
+                return true;
+
+            return extraAllowed != null && extraAllowed.Contains(name);
+        }
+
+        public static bool ValidateWebhookUrlFormat(string url, out string error)
+        {
+            error = null;
+
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                error = "invalid_webhook_url: url is empty";
+                return false;
+            }
+
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
+                error = "invalid_webhook_url: malformed url";
+                return false;
+            }
+
+            var scheme = uri.Scheme.ToLowerInvariant();
+            if (scheme != "http" && scheme != "https")
+            {
+                error = "invalid_webhook_url: scheme must be http or https, got " + scheme;
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(uri.Host))
+            {
+                error = "invalid_webhook_url: no host in url";
+                return false;
+            }
+
+            return true;
         }
 
         // --- from TimberbotPlacement ---

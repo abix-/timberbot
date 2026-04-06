@@ -33,6 +33,7 @@ namespace Timberbot
         public float BatchSeconds = 0.2f;
         public int CircuitBreakerThreshold = 30;
         public int MaxPendingEvents = 1000;
+        public bool ValidateUrls = true;
 
         private class WebhookRegistration
         {
@@ -86,6 +87,28 @@ namespace Timberbot
         public object RegisterWebhook(string url, List<string> events)
         {
             if (!Enabled) return _jw.Error("disabled: webhooks disabled in settings.json");
+
+            if (ValidateUrls)
+            {
+                if (!TimberbotPure.ValidateWebhookUrlFormat(url, out var formatError))
+                    return _jw.Error(formatError + ". set webhookValidateUrls=false in settings.json to disable");
+
+                var uri = new System.Uri(url);
+                try
+                {
+                    var addresses = System.Net.Dns.GetHostAddresses(uri.Host);
+                    foreach (var addr in addresses)
+                    {
+                        if (IsPrivateAddress(addr))
+                            return _jw.Error("invalid_webhook_url: host resolves to private/reserved address (" + addr + "). set webhookValidateUrls=false in settings.json to disable");
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    return _jw.Error("invalid_webhook_url: DNS resolution failed for " + uri.Host + " (" + ex.Message + ")");
+                }
+            }
+
             var id = $"wh_{System.Threading.Interlocked.Increment(ref _webhookIdCounter)}";
             var reg = new WebhookRegistration { Id = id, Url = url, Events = events != null && events.Count > 0 ? new HashSet<string>(events) : null };
             lock (_webhooksLock)
@@ -287,6 +310,35 @@ namespace Timberbot
                     wh.PendingPayloads.Add(payload);
                 }
             }
+        }
+
+        private static bool IsPrivateAddress(System.Net.IPAddress addr)
+        {
+            var bytes = addr.GetAddressBytes();
+            if (addr.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && bytes.Length == 4)
+            {
+                // 127.0.0.0/8 loopback
+                if (bytes[0] == 127) return true;
+                // 10.0.0.0/8
+                if (bytes[0] == 10) return true;
+                // 172.16.0.0/12
+                if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
+                // 192.168.0.0/16
+                if (bytes[0] == 192 && bytes[1] == 168) return true;
+                // 169.254.0.0/16 link-local (includes cloud metadata 169.254.169.254)
+                if (bytes[0] == 169 && bytes[1] == 254) return true;
+                return false;
+            }
+            if (addr.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+            {
+                if (System.Net.IPAddress.IsLoopback(addr)) return true;
+                // fc00::/7 unique local
+                if (bytes.Length >= 1 && (bytes[0] & 0xFE) == 0xFC) return true;
+                // fe80::/10 link-local
+                if (bytes.Length >= 2 && bytes[0] == 0xFE && (bytes[1] & 0xC0) == 0x80) return true;
+                return false;
+            }
+            return false;
         }
 
         private int PendingEventCount() => PendingEventCount(SnapshotWebhooks());

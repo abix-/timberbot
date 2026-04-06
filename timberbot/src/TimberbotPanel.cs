@@ -33,8 +33,10 @@ namespace Timberbot
         private VisualElement _settingsContainer;
         private VisualElement _agentSettingsContainer;
         private VisualElement _runtimeSettingsContainer;
+        private VisualElement _securitySettingsContainer;
         private NineSliceButton _agentTabBtn;
         private NineSliceButton _startupTabBtn;
+        private NineSliceButton _securityTabBtn;
 
         private TextField _binaryField;
         private NineSliceButton _binaryPresetBtn;
@@ -58,6 +60,18 @@ namespace Timberbot
         private NineSliceButton _terminalPresetBtn;
         private Label _terminalStatusLabel;
         private TextField _pythonCommandField;
+
+        // security tab fields
+        private TextField _listenAddressField;
+        private NineSliceButton _listenAddressPresetBtn;
+        private TextField _corsOriginField;
+        private NineSliceButton _corsOriginPresetBtn;
+        private TextField _agentAllowlistEnabledField;
+        private NineSliceButton _agentAllowlistEnabledPresetBtn;
+        private TextField _agentAllowedBinariesField;
+        private TextField _webhookValidateUrlsField;
+        private NineSliceButton _webhookValidateUrlsPresetBtn;
+        private TextField _maxBodyBytesField;
 
         private VisualElement _presetPopup;
         private ScrollView _presetScroll;
@@ -139,6 +153,18 @@ namespace Timberbot
             new[] { "WezTerm", "wezterm start --cwd {cwd} --" },
         };
 
+        private static readonly string[][] ListenAddressChoices = new[]
+        {
+            new[] { "localhost", "localhost" },
+            new[] { "+ (all interfaces)", "+" },
+        };
+
+        private static readonly string[][] CorsOriginChoices = new[]
+        {
+            new[] { "(auto: localhost)", "" },
+            new[] { "* (any origin)", "*" },
+        };
+
         private const string DefaultBinary = "claude";
         private const string DefaultClaudeModel = "claude-sonnet-4-6";
         private const string DefaultClaudeEffort = "medium";
@@ -161,6 +187,12 @@ namespace Timberbot
             ["writeBudgetMs:"] = "Per-frame main-thread time budget for queued write jobs. Higher values process writes faster but use more frame time. Reload save to apply.",
             ["terminal:"] = "Optional terminal launch template. Supports {cwd} and {command}. If {command} is omitted, Timberbot appends the launch command for backwards compatibility. Leave empty to use the built-in OS default. Reload save to apply.",
             ["pythonCommand:"] = "Optional Python 3 command used to run timberbot.py for brain/startup work. Leave blank for OS auto-detect (`py -3` on Windows, common python3 locations on macOS). Reload save to apply.",
+            ["listenAddress:"] = "Network address the HTTP server binds to. 'localhost' (default) = local only. '+' = all interfaces (LAN access). Reload save to apply.",
+            ["corsOrigin:"] = "Allowed CORS origin for browser requests. Empty = auto (localhost only). '*' = any origin (less secure). Reload save to apply.",
+            ["agentAllowlistEnabled:"] = "When true, only claude, codex, and binaries listed in agentAllowedBinaries can be launched via /api/agent/start. Set false to allow any binary. Reload save to apply.",
+            ["agentAllowedBinaries:"] = "Comma-separated list of additional binary names allowed for the agent (e.g. 'mybot,custom-cli'). Only used when agentAllowlistEnabled is true. Reload save to apply.",
+            ["webhookValidateUrls:"] = "When true, webhook URLs are validated: must be http/https and must not resolve to private/internal IP addresses. Set false to allow any URL. Reload save to apply.",
+            ["maxBodyBytes:"] = "Maximum POST request body size in bytes. 0 = unlimited. Default 1048576 (1MB). Reload save to apply.",
         };
 
         public TimberbotPanel(UILayout layout, TimberbotService service, VisualElementInitializer veInit)
@@ -350,7 +382,12 @@ namespace Timberbot
 
             _startupTabBtn = MakeGameButton("Startup", ShowRuntimeTab);
             _startupTabBtn.style.width = 92;
+            _startupTabBtn.style.marginRight = 4;
             tabRow.Add(_startupTabBtn);
+
+            _securityTabBtn = MakeGameButton("Security", ShowSecurityTab);
+            _securityTabBtn.style.width = 92;
+            tabRow.Add(_securityTabBtn);
 
             _agentSettingsContainer = new VisualElement();
             _agentSettingsContainer.style.flexDirection = FlexDirection.Column;
@@ -359,6 +396,10 @@ namespace Timberbot
             _runtimeSettingsContainer = new VisualElement();
             _runtimeSettingsContainer.style.flexDirection = FlexDirection.Column;
             _settingsContainer.Add(_runtimeSettingsContainer);
+
+            _securitySettingsContainer = new VisualElement();
+            _securitySettingsContainer.style.flexDirection = FlexDirection.Column;
+            _settingsContainer.Add(_securitySettingsContainer);
 
             var savedBinary = NormalizeValue(_service.GetUISetting("agentBinary"), DefaultBinary);
             var savedCommandTemplate = _service.GetUISetting("agentCommandTemplate") ?? "";
@@ -420,6 +461,7 @@ namespace Timberbot
             _goalField = MakeTextField(savedGoal);
             _goalField.multiline = true;
             _goalField.style.height = 80;
+            _goalField.style.flexShrink = 1;
             _goalField.RegisterValueChangedCallback(evt => _service.SaveUISetting("agentGoal", evt.newValue));
             _agentSettingsContainer.Add(MakeFieldRow("Goal:", _goalField));
 
@@ -520,6 +562,63 @@ namespace Timberbot
             _pythonCommandField = MakeTextField(savedPythonCommand);
             _pythonCommandField.RegisterValueChangedCallback(evt => _service.SaveUISetting("pythonCommand", evt.newValue ?? ""));
             _runtimeSettingsContainer.Add(MakeFieldRow("pythonCommand:", _pythonCommandField));
+
+            // --- Security tab ---
+            _securitySettingsContainer.Add(MakeHintLabel("Controls network exposure and input validation. Reload save to apply."));
+
+            var savedListenAddress = NormalizeValue(_service.GetUISetting("listenAddress"), "localhost");
+            _listenAddressField = MakeTextField(savedListenAddress);
+            _listenAddressField.RegisterValueChangedCallback(evt =>
+            {
+                var value = NormalizeValue(evt.newValue, "localhost");
+                _listenAddressField.SetValueWithoutNotify(value);
+                _service.SaveUISetting("listenAddress", value);
+            });
+            _listenAddressPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_listenAddressPresetBtn, _listenAddressField, ListenAddressChoices));
+            _securitySettingsContainer.Add(MakePresetFieldRow("listenAddress:", _listenAddressField, _listenAddressPresetBtn));
+
+            var savedCorsOrigin = _service.GetUISetting("corsOrigin") ?? "";
+            _corsOriginField = MakeTextField(savedCorsOrigin);
+            _corsOriginField.RegisterValueChangedCallback(evt => _service.SaveUISetting("corsOrigin", evt.newValue ?? ""));
+            _corsOriginPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_corsOriginPresetBtn, _corsOriginField, CorsOriginChoices));
+            _securitySettingsContainer.Add(MakePresetFieldRow("corsOrigin:", _corsOriginField, _corsOriginPresetBtn));
+
+            var savedAgentAllowlist = NormalizeBoolString(_service.GetUISetting("agentAllowlistEnabled"), true);
+            _agentAllowlistEnabledField = MakeTextField(savedAgentAllowlist);
+            _agentAllowlistEnabledField.RegisterValueChangedCallback(evt =>
+            {
+                var value = NormalizeBoolString(evt.newValue, true);
+                _agentAllowlistEnabledField.SetValueWithoutNotify(value);
+                _service.SaveBoolSetting("agentAllowlistEnabled", value == "true");
+            });
+            _agentAllowlistEnabledPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_agentAllowlistEnabledPresetBtn, _agentAllowlistEnabledField, BoolChoices));
+            _securitySettingsContainer.Add(MakePresetFieldRow("agentAllowlistEnabled:", _agentAllowlistEnabledField, _agentAllowlistEnabledPresetBtn));
+
+            var savedAllowedBinaries = _service.GetUISetting("agentAllowedBinaries") ?? "";
+            _agentAllowedBinariesField = MakeTextField(savedAllowedBinaries);
+            _agentAllowedBinariesField.RegisterValueChangedCallback(evt => _service.SaveUISetting("agentAllowedBinaries", evt.newValue ?? ""));
+            _securitySettingsContainer.Add(MakeFieldRow("agentAllowedBinaries:", _agentAllowedBinariesField));
+
+            var savedWebhookValidate = NormalizeBoolString(_service.GetUISetting("webhookValidateUrls"), true);
+            _webhookValidateUrlsField = MakeTextField(savedWebhookValidate);
+            _webhookValidateUrlsField.RegisterValueChangedCallback(evt =>
+            {
+                var value = NormalizeBoolString(evt.newValue, true);
+                _webhookValidateUrlsField.SetValueWithoutNotify(value);
+                _service.SaveBoolSetting("webhookValidateUrls", value == "true");
+            });
+            _webhookValidateUrlsPresetBtn = MakePresetButton("v", () => TogglePresetMenu(_webhookValidateUrlsPresetBtn, _webhookValidateUrlsField, BoolChoices));
+            _securitySettingsContainer.Add(MakePresetFieldRow("webhookValidateUrls:", _webhookValidateUrlsField, _webhookValidateUrlsPresetBtn));
+
+            var savedMaxBody = NormalizeIntString(_service.GetUISetting("maxBodyBytes"), 1048576, 0);
+            _maxBodyBytesField = MakeTextField(savedMaxBody);
+            _maxBodyBytesField.RegisterValueChangedCallback(evt =>
+            {
+                var value = NormalizeIntString(evt.newValue, 1048576, 0);
+                _maxBodyBytesField.SetValueWithoutNotify(value);
+                _service.SaveIntSetting("maxBodyBytes", int.Parse(value));
+            });
+            _securitySettingsContainer.Add(MakeFieldRow("maxBodyBytes:", _maxBodyBytesField));
 
             _presetPopup = new NineSliceVisualElement();
             _presetPopup.AddToClassList("bg-sub-box--green");
@@ -671,19 +770,28 @@ namespace Timberbot
             SetSettingsTab("runtime");
         }
 
+        private void ShowSecurityTab()
+        {
+            SetSettingsTab("security");
+        }
+
         private void SetSettingsTab(string tab)
         {
-            _activeSettingsTab = tab == "runtime" ? "runtime" : "agent";
+            _activeSettingsTab = tab == "runtime" ? "runtime" : tab == "security" ? "security" : "agent";
 
             if (_agentSettingsContainer != null)
                 _agentSettingsContainer.ToggleDisplayStyle(_activeSettingsTab == "agent");
             if (_runtimeSettingsContainer != null)
                 _runtimeSettingsContainer.ToggleDisplayStyle(_activeSettingsTab == "runtime");
+            if (_securitySettingsContainer != null)
+                _securitySettingsContainer.ToggleDisplayStyle(_activeSettingsTab == "security");
 
             if (_agentTabBtn != null)
                 _agentTabBtn.SetEnabled(_activeSettingsTab != "agent");
             if (_startupTabBtn != null)
                 _startupTabBtn.SetEnabled(_activeSettingsTab != "runtime");
+            if (_securityTabBtn != null)
+                _securityTabBtn.SetEnabled(_activeSettingsTab != "security");
 
             HidePresetMenu();
             HideTooltip();

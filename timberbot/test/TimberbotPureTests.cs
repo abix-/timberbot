@@ -341,6 +341,84 @@ namespace Timberbot.Tests
         public void NotANumber_ReturnsFallback() => Assert.Equal("10", TimberbotPure.NormalizeIntString("abc", 10, 0));
     }
 
+    public class IsAllowedBinaryTests
+    {
+        [Theory]
+        [InlineData("claude", true)]
+        [InlineData("Claude", true)]
+        [InlineData("CLAUDE", true)]
+        [InlineData("claude.exe", true)]
+        [InlineData("codex", true)]
+        [InlineData("codex.exe", true)]
+        [InlineData("notepad", false)]
+        [InlineData("cmd", false)]
+        [InlineData("powershell", false)]
+        [InlineData("", false)]
+        [InlineData(null, false)]
+        [InlineData("  claude  ", true)]
+        public void BuiltinBinaries(string binary, bool expected) =>
+            Assert.Equal(expected, TimberbotPure.IsAllowedBinary(binary, null));
+
+        [Fact]
+        public void CustomAllowlist_Allowed()
+        {
+            var extra = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase) { "mybot" };
+            Assert.True(TimberbotPure.IsAllowedBinary("mybot", extra));
+            Assert.True(TimberbotPure.IsAllowedBinary("mybot.exe", extra));
+        }
+
+        [Fact]
+        public void CustomAllowlist_StillBlocksOthers()
+        {
+            var extra = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase) { "mybot" };
+            Assert.False(TimberbotPure.IsAllowedBinary("notepad", extra));
+        }
+    }
+
+    public class ValidateWebhookUrlFormatTests
+    {
+        [Fact]
+        public void HttpValid() => Assert.True(TimberbotPure.ValidateWebhookUrlFormat("http://example.com/hook", out _));
+
+        [Fact]
+        public void HttpsValid() => Assert.True(TimberbotPure.ValidateWebhookUrlFormat("https://example.com/hook", out _));
+
+        [Fact]
+        public void FtpRejected()
+        {
+            Assert.False(TimberbotPure.ValidateWebhookUrlFormat("ftp://example.com", out var err));
+            Assert.Contains("scheme", err);
+        }
+
+        [Fact]
+        public void FileRejected()
+        {
+            Assert.False(TimberbotPure.ValidateWebhookUrlFormat("file:///etc/passwd", out var err));
+            Assert.Contains("scheme", err);
+        }
+
+        [Fact]
+        public void EmptyRejected()
+        {
+            Assert.False(TimberbotPure.ValidateWebhookUrlFormat("", out var err));
+            Assert.Contains("empty", err);
+        }
+
+        [Fact]
+        public void NullRejected()
+        {
+            Assert.False(TimberbotPure.ValidateWebhookUrlFormat(null, out var err));
+            Assert.Contains("empty", err);
+        }
+
+        [Fact]
+        public void MalformedRejected()
+        {
+            Assert.False(TimberbotPure.ValidateWebhookUrlFormat("not a url", out var err));
+            Assert.Contains("malformed", err);
+        }
+    }
+
     public class NormalizeDoubleStringTests
     {
         [Fact]

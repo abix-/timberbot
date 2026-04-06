@@ -15,3 +15,4 @@ skills/
 site/
 .test-baselines/
 docs/reachability-investigation.md
+.claude/
